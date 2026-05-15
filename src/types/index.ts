@@ -1,0 +1,95 @@
+export type LeadStatus = 'new' | 'contacted' | 'in_progress' | 'published' | 'not_relevant'
+export type LeadSource = 'backoffice' | 'whatsapp' | 'social' | 'outreach' | 'manual'
+export type LeadTemperature = 'hot' | 'medium' | 'cold'
+export type ActivityType = 'call' | 'whatsapp' | 'note' | 'status_change'
+export type UserRole = 'admin' | 'sales'
+
+export interface Profile {
+  id: string
+  full_name: string
+  role: UserRole
+  created_at: string
+}
+
+export interface Lead {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  phone: string | null
+  email: string | null
+  source: LeadSource
+  status: LeadStatus
+  temperature: LeadTemperature
+  assigned_to: string | null
+  notes: string | null
+  campaign_name: string | null
+  company_name: string | null
+  clinic_count: number | null
+  discount_percent: number | null
+  next_followup: string | null
+  last_contacted: string | null
+  profile?: Profile
+}
+
+export interface LeadActivity {
+  id: string
+  created_at: string
+  lead_id: string
+  user_id: string
+  type: ActivityType
+  action: string
+  details: string | null
+  outcome: string | null
+  profile?: Profile
+}
+
+export const STATUS_LABELS: Record<LeadStatus, string> = {
+  new: 'חדש',
+  contacted: 'ביצירת קשר',
+  in_progress: 'בתהליך',
+  published: 'פורסם',
+  not_relevant: 'לא רלוונטי',
+}
+
+export const SOURCE_LABELS: Record<LeadSource, string> = {
+  backoffice: 'בקאופיס',
+  whatsapp: 'וואטסאפ',
+  social: 'רשתות חברתיות',
+  outreach: 'פנייה יזומה',
+  manual: 'ידני',
+}
+
+export const TEMP_CONFIG = {
+  hot:    { label: 'חם',    emoji: '🔴', bg: 'bg-red-500/15',    text: 'text-red-300',    dot: 'bg-red-500' },
+  medium: { label: 'בינוני', emoji: '🟡', bg: 'bg-amber-500/15',  text: 'text-amber-300',  dot: 'bg-amber-400' },
+  cold:   { label: 'קר',    emoji: '🔵', bg: 'bg-blue-500/15',   text: 'text-blue-300',   dot: 'bg-blue-500' },
+}
+
+export const STATUS_CONFIG: Record<LeadStatus, { label: string; bg: string; text: string }> = {
+  new:          { label: 'חדש',          bg: 'bg-violet-500/15',  text: 'text-violet-300' },
+  contacted:    { label: 'ביצירת קשר',  bg: 'bg-amber-500/15',   text: 'text-amber-300' },
+  in_progress:  { label: 'בתהליך',      bg: 'bg-blue-500/15',    text: 'text-blue-300' },
+  published:    { label: 'פורסם',       bg: 'bg-emerald-500/15', text: 'text-emerald-300' },
+  not_relevant: { label: 'לא רלוונטי', bg: 'bg-white/5',         text: 'text-purple-400/60' },
+}
+
+export function getPriorityScore(lead: Lead): number {
+  let score = 0
+  if (lead.temperature === 'hot') score += 100
+  else if (lead.temperature === 'medium') score += 40
+  else score += 5
+
+  if (lead.next_followup) {
+    const daysOverdue = Math.floor((Date.now() - new Date(lead.next_followup).getTime()) / 86400000)
+    if (daysOverdue > 0) score += daysOverdue * 15
+  }
+
+  if (!lead.last_contacted) score += 30
+  else {
+    const daysSince = Math.floor((Date.now() - new Date(lead.last_contacted).getTime()) / 86400000)
+    score += daysSince * 5
+  }
+
+  return score
+}
