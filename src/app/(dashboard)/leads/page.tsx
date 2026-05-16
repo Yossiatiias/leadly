@@ -184,7 +184,7 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   {/* Phone */}
-                  <td className="px-3 py-4 text-sm text-gray-500 font-mono" dir="ltr">{lead.phone || '—'}</td>
+                  <td className="px-3 py-4 text-sm text-gray-500 font-mono text-center" dir="ltr">{lead.phone || '—'}</td>
                   {/* Source */}
                   <td className="px-3 py-4">
                     <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
