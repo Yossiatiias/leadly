@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, FileBarChart, LogOut, Plus } from 'lucide-react'
+import { LayoutDashboard, Users, FileBarChart, LogOut, Plus, MessageSquare } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
+import { useEffect, useState } from 'react'
 
 const SIDEBAR_WIDTH = 240
 
@@ -12,12 +13,43 @@ const navItems = [
   { href: '/', label: 'התחל כאן', icon: LayoutDashboard, desc: 'סדר עדיפויות' },
   { href: '/leads', label: 'כל הלידים', icon: Users, desc: 'ניהול וחיפוש' },
   { href: '/reports', label: 'דוחות', icon: FileBarChart, desc: 'נתונים וייצוא' },
+  { href: '/messages', label: 'הודעות', icon: MessageSquare, desc: 'תקשורת פנימית' },
 ]
 
 export default function Sidebar({ profile }: { profile: Profile | null }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [totalUnread, setTotalUnread] = useState(0)
+
+  useEffect(() => {
+    if (!profile?.id) return
+
+    async function loadUnread() {
+      const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', profile!.id)
+        .is('read_at', null)
+      setTotalUnread(count || 0)
+    }
+
+    loadUnread()
+
+    const channel = supabase
+      .channel('sidebar-unread')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        if ((payload.new as { receiver_id: string }).receiver_id === profile!.id) {
+          setTotalUnread(prev => prev + 1)
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => {
+        loadUnread()
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [profile?.id])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -77,7 +109,8 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
       {/* Nav */}
       <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {navItems.map(({ href, label, desc, icon: Icon }) => {
-          const active = pathname === href
+          const active = pathname === href || (href === '/messages' && pathname.startsWith('/messages'))
+          const showBadge = href === '/messages' && totalUnread > 0 && !active
           return (
             <Link key={href} href={href} style={{
               display: 'flex',
@@ -96,8 +129,21 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
                 width: '34px', height: '34px', borderRadius: '9px', display: 'flex',
                 alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 background: active ? '#3FA9DC' : 'rgba(255,255,255,0.1)',
+                position: 'relative',
               }}>
                 <Icon size={16} style={{ color: 'white' }} />
+                {showBadge && (
+                  <div style={{
+                    position: 'absolute', top: '-4px', left: '-4px',
+                    background: '#F87171', color: 'white', borderRadius: '99px',
+                    minWidth: '16px', height: '16px', padding: '0 4px',
+                    fontSize: '10px', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '2px solid #226F94',
+                  }}>
+                    {totalUnread > 9 ? '9+' : totalUnread}
+                  </div>
+                )}
               </div>
               <div>
                 <p style={{ fontWeight: 700, color: 'white', fontSize: '13px', lineHeight: 1.3 }}>{label}</p>
