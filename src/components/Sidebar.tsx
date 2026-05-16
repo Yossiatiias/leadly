@@ -33,7 +33,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
       top: 0,
       bottom: 0,
       width: `${SIDEBAR_WIDTH}px`,
-      background: '#3730A3',
+      background: '#226F94',
       display: 'flex',
       flexDirection: 'column',
       zIndex: 20,
@@ -62,12 +62,12 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         <Link href="/leads/new" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           padding: '11px', borderRadius: '10px', textDecoration: 'none',
-          background: '#2563EB', color: 'white', fontWeight: 700, fontSize: '14px',
-          boxShadow: '0 2px 8px rgba(37,99,235,0.4)',
+          background: '#8DCB3F', color: 'white', fontWeight: 700, fontSize: '14px',
+          boxShadow: '0 2px 8px rgba(141,203,63,0.4)',
           transition: 'all 0.15s',
         }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#1D4ED8' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#2563EB' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#6FA82E' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#8DCB3F' }}
         >
           <Plus size={15} />
           ליד חדש
@@ -95,7 +95,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
               <div style={{
                 width: '34px', height: '34px', borderRadius: '9px', display: 'flex',
                 alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                background: active ? '#2563EB' : 'rgba(255,255,255,0.1)',
+                background: active ? '#3FA9DC' : 'rgba(255,255,255,0.1)',
               }}>
                 <Icon size={16} style={{ color: 'white' }} />
               </div>
@@ -113,7 +113,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)' }}>
           <div style={{
             width: '34px', height: '34px', borderRadius: '9px',
-            background: '#14B8A6',
+            background: '#3FA9DC',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'white', fontWeight: 800, fontSize: '12px', flexShrink: 0,
           }}>

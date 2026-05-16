@@ -101,19 +101,19 @@ export default async function DashboardPage() {
   const convRate = leads.length ? Math.round((published / leads.length) * 100) : 0
 
   const statusData = [
-    { label: 'חדש', value: leads.filter(l => l.status === 'new').length, color: '#3730A3' },
-    { label: 'ביצירת קשר', value: leads.filter(l => l.status === 'contacted').length, color: '#F59E0B' },
-    { label: 'בתהליך', value: leads.filter(l => l.status === 'in_progress').length, color: '#14B8A6' },
-    { label: 'פורסם', value: leads.filter(l => l.status === 'published').length, color: '#15803D' },
-    { label: 'לא רלוונטי', value: leads.filter(l => l.status === 'not_relevant').length, color: '#D1D5DB' },
+    { label: 'חדש',         value: leads.filter(l => l.status === 'new').length,          color: '#3FA9DC' },
+    { label: 'ביצירת קשר', value: leads.filter(l => l.status === 'contacted').length,     color: '#E89B17' },
+    { label: 'בתהליך',     value: leads.filter(l => l.status === 'in_progress').length,   color: '#8DCB3F' },
+    { label: 'פורסם',      value: leads.filter(l => l.status === 'published').length,     color: '#547F23' },
+    { label: 'לא רלוונטי', value: leads.filter(l => l.status === 'not_relevant').length,  color: '#B5BDC8' },
   ]
 
   const sourceData = [
-    { label: 'בקאופיס', value: leads.filter(l => l.source === 'backoffice').length, color: '#2563EB' },
-    { label: 'וואטסאפ', value: leads.filter(l => l.source === 'whatsapp').length, color: '#14B8A6' },
-    { label: 'רשתות', value: leads.filter(l => l.source === 'social').length, color: '#8B5CF6' },
-    { label: 'יזום', value: leads.filter(l => l.source === 'outreach').length, color: '#F59E0B' },
-    { label: 'ידני', value: leads.filter(l => l.source === 'manual').length, color: '#9CA3AF' },
+    { label: 'בקאופיס', value: leads.filter(l => l.source === 'backoffice').length, color: '#3FA9DC' },
+    { label: 'וואטסאפ', value: leads.filter(l => l.source === 'whatsapp').length,   color: '#8DCB3F' },
+    { label: 'רשתות',   value: leads.filter(l => l.source === 'social').length,     color: '#226F94' },
+    { label: 'יזום',    value: leads.filter(l => l.source === 'outreach').length,   color: '#E89B17' },
+    { label: 'ידני',    value: leads.filter(l => l.source === 'manual').length,     color: '#B5BDC8' },
   ]
 
   const bySalesperson = (profiles || []).map(p => ({
@@ -145,10 +145,10 @@ export default async function DashboardPage() {
 
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '20px' }}>
-        <KpiCard label="לידים פעילים" value={active.length} sub={`מתוך ${leads.length} סה״כ`} color="#3730A3" bg="#EEF2FF" />
-        <KpiCard label="לידים חמים" value={hot} sub={hot > 0 ? 'דורשים מענה מיידי' : 'אין כרגע'} color="#EF4444" bg="#FEF2F2" />
-        <KpiCard label="ממתינים לטיפול" value={overdueCount} sub={overdueCount > 0 ? 'עבר מועד follow-up' : 'הכל מעודכן'} color="#F59E0B" bg="#FFFBEB" />
-        <KpiCard label="אחוז המרה" value={`${convRate}%`} sub={`${published} פרסמו מתוך ${leads.length}`} color="#15803D" bg="#F0FDF4" />
+        <KpiCard label="לידים פעילים" value={active.length} sub={`מתוך ${leads.length} סה״כ`} color="#226F94" bg="#EAF6FC" />
+        <KpiCard label="לידים חמים" value={hot} sub={hot > 0 ? 'דורשים מענה מיידי' : 'אין כרגע'} color="#B83434" bg="#FEECEC" />
+        <KpiCard label="ממתינים לטיפול" value={overdueCount} sub={overdueCount > 0 ? 'עבר מועד follow-up' : 'הכל מעודכן'} color="#B87A0E" bg="#FFF6E5" />
+        <KpiCard label="אחוז המרה" value={`${convRate}%`} sub={`${published} פרסמו מתוך ${leads.length}`} color="#547F23" bg="#ECFAE5" />
       </div>
 
       {newToday > 0 && (

@@ -32,7 +32,7 @@ export default function LoginPage() {
       <div style={{
         display: 'none',
         width: '45%',
-        background: 'linear-gradient(160deg, #3730A3 0%, #2563EB 60%, #14B8A6 100%)',
+        background: 'linear-gradient(160deg, #226F94 0%, #3FA9DC 60%, #8DCB3F 100%)',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
@@ -154,7 +154,7 @@ export default function LoginPage() {
                 disabled={loading}
                 style={{
                   width: '100%', padding: '12px',
-                  background: loading ? '#9CA3AF' : 'linear-gradient(135deg, #3730A3, #2563EB)',
+                  background: loading ? '#B5BDC8' : 'linear-gradient(135deg, #226F94, #3FA9DC)',
                   color: 'white', fontWeight: 700, fontSize: '15px',
                   borderRadius: '10px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
                   fontFamily: 'inherit', marginTop: '4px',
