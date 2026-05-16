@@ -9,7 +9,7 @@ import type { Profile } from '@/types'
 const SIDEBAR_WIDTH = 240
 
 const navItems = [
-  { href: '/', label: 'תתחיל מכאן', icon: LayoutDashboard, desc: 'סדר עדיפויות' },
+  { href: '/', label: 'התחל כאן', icon: LayoutDashboard, desc: 'סדר עדיפויות' },
   { href: '/leads', label: 'כל הלידים', icon: Users, desc: 'ניהול וחיפוש' },
   { href: '/reports', label: 'דוחות', icon: FileBarChart, desc: 'נתונים וייצוא' },
 ]
@@ -41,19 +41,21 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
     }}>
       {/* Logo */}
       <div style={{ padding: '28px 20px 20px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{
-            width: '72px', height: '72px', borderRadius: '18px',
+            width: '44px', height: '44px', borderRadius: '12px',
             background: 'white',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden', padding: '8px', marginBottom: '12px',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+            overflow: 'hidden', padding: '5px', flexShrink: 0,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="Sesya" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
-          <p style={{ fontWeight: 800, fontSize: '20px', color: 'white', lineHeight: 1.2 }}>Sesya</p>
-          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: 500, letterSpacing: '0.05em', marginTop: '2px' }}>Lead Management</p>
+          <div>
+            <p style={{ fontWeight: 800, fontSize: '17px', color: 'white', lineHeight: 1.2 }}>Sesya</p>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: 500, letterSpacing: '0.04em', marginTop: '1px' }}>Lead Management</p>
+          </div>
         </div>
 
         {/* New lead button */}

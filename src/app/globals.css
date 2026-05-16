@@ -1,11 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { direction: rtl; }
 
 body {
-  font-family: 'Assistant', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Heebo', 'Segoe UI', 'Assistant', system-ui, sans-serif;
   background: #F7F8FA;
   color: #111827;
   -webkit-font-smoothing: antialiased;
@@ -33,7 +33,7 @@ body {
   border: 1.5px solid #E5E7EB;
   border-radius: 10px;
   font-size: 14px;
-  font-family: 'Assistant', sans-serif;
+  font-family: 'Heebo', sans-serif;
   background: #F7F8FA;
   color: #111827;
   transition: all 0.15s;
@@ -58,7 +58,7 @@ body {
   border-radius: 10px;
   border: none;
   cursor: pointer;
-  font-family: 'Assistant', sans-serif;
+  font-family: 'Heebo', sans-serif;
   font-size: 14px;
   transition: all 0.15s;
   box-shadow: 0 2px 10px rgba(55,48,163,0.25);
@@ -75,7 +75,7 @@ body {
   border-radius: 10px;
   border: 1.5px solid #E5E7EB;
   cursor: pointer;
-  font-family: 'Assistant', sans-serif;
+  font-family: 'Heebo', sans-serif;
   font-size: 14px;
   transition: all 0.15s;
 }
