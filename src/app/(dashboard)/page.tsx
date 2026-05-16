@@ -1,13 +1,48 @@
 import { createClient } from '@/lib/supabase/server'
 import { getPriorityScore, TEMP_CONFIG, STATUS_CONFIG, SOURCE_LABELS } from '@/types'
 import Link from 'next/link'
-import { Phone, MessageCircle, ChevronLeft, Flame, Clock, Star, TrendingUp, CheckCircle2, Users } from 'lucide-react'
+import { Phone, MessageCircle, ChevronLeft, Flame, Clock, TrendingUp, CheckCircle2, Users } from 'lucide-react'
 
 function getGreeting() {
   const h = new Date().getHours()
   if (h < 12) return 'בוקר טוב'
   if (h < 17) return 'צהריים טובים'
   return 'ערב טוב'
+}
+
+function DonutChart({ value, total, color }: { value: number; total: number; color: string }) {
+  const pct = total ? Math.round((value / total) * 100) : 0
+  const r = 36
+  const circ = 2 * Math.PI * r
+  const dash = (pct / 100) * circ
+  return (
+    <div style={{ position: 'relative', width: '96px', height: '96px' }}>
+      <svg width="96" height="96" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="48" cy="48" r={r} fill="none" stroke="#E2E8F0" strokeWidth="8" />
+        <circle cx="48" cy="48" r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: '20px', fontWeight: 800, color: '#1E293B', lineHeight: 1 }}>{pct}%</span>
+      </div>
+    </div>
+  )
+}
+
+function BarRow({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max ? Math.round((value / max) * 100) : 0
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{label}</span>
+        <span style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>{value}</span>
+      </div>
+      <div style={{ height: '6px', background: '#F1F5F9', borderRadius: '99px', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+      </div>
+    </div>
+  )
 }
 
 export default async function DashboardPage() {
@@ -32,6 +67,14 @@ export default async function DashboardPage() {
   const overdueCount = active.filter(l => l.next_followup && new Date(l.next_followup) < new Date()).length
   const newToday = leads.filter(l => new Date(l.created_at) >= today).length
   const published = leads.filter(l => l.status === 'published').length
+  const convRate = leads.length ? Math.round((published / leads.length) * 100) : 0
+
+  const byStatus = [
+    { label: 'חדש', value: leads.filter(l => l.status === 'new').length, color: '#3B82F6' },
+    { label: 'ביצירת קשר', value: leads.filter(l => l.status === 'contacted').length, color: '#F59E0B' },
+    { label: 'בתהליך', value: leads.filter(l => l.status === 'in_progress').length, color: '#0D9488' },
+    { label: 'פורסם', value: leads.filter(l => l.status === 'published').length, color: '#16A34A' },
+  ]
 
   const bySalesperson = (profiles || []).map(p => ({
     name: p.full_name,
@@ -44,67 +87,67 @@ export default async function DashboardPage() {
   const dateStr = new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-7">
+    <div style={{ padding: '28px 32px', maxWidth: '1200px', margin: '0 auto' }}>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div style={{ paddingRight: '8px' }}>
-          <p className="text-sm font-semibold mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{getGreeting()}, {profile?.full_name?.split(' ')[0]} 👋</p>
-          <h1 className="text-3xl font-extrabold text-white">תתחיל מכאן</h1>
+          <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>{getGreeting()}, {profile?.full_name?.split(' ')[0]} 👋</p>
+          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#1E293B' }}>תתחיל מכאן</h1>
         </div>
         <div style={{ textAlign: 'left', paddingLeft: '8px' }}>
-          <p className="text-white font-bold text-lg">{dateStr}</p>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <p style={{ fontWeight: 700, color: '#1E293B', fontSize: '15px' }}>{dateStr}</p>
+          <p style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
             {active.length === 0 ? '✅ כל הלידים מטופלים' : `${active.length} לידים פעילים`}
           </p>
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-4">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px', marginBottom: '24px' }}>
         {[
-          { label: 'לידים פעילים', value: active.length, icon: TrendingUp, color: '#a78bfa', bg: 'rgba(139,92,246,0.15)' },
-          { label: 'לידים חמים',   value: hot,           icon: Flame,      color: '#fca5a5', bg: 'rgba(239,68,68,0.15)' },
-          { label: 'ממתינים לטיפול', value: overdueCount, icon: Clock,    color: '#fcd34d', bg: 'rgba(245,158,11,0.15)' },
-          { label: 'פרסמו',        value: published,     icon: CheckCircle2, color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)' },
+          { label: 'לידים פעילים', value: active.length, icon: TrendingUp, color: '#256D85', bg: '#EFF6FF' },
+          { label: 'לידים חמים',   value: hot,           icon: Flame,      color: '#DC2626', bg: '#FEF2F2' },
+          { label: 'דורשים טיפול', value: overdueCount,  icon: Clock,      color: '#D97706', bg: '#FFFBEB' },
+          { label: 'פרסמו',        value: published,     icon: CheckCircle2, color: '#16A34A', bg: '#F0FDF4' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="card p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: bg }}>
-              <Icon size={22} style={{ color }} />
+          <div key={label} className="card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon size={20} style={{ color }} />
             </div>
             <div>
-              <p className="text-3xl font-extrabold text-white">{value}</p>
-              <p className="text-xs font-semibold mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</p>
+              <p style={{ fontSize: '28px', fontWeight: 800, color, lineHeight: 1 }}>{value}</p>
+              <p style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, marginTop: '3px' }}>{label}</p>
             </div>
           </div>
         ))}
       </div>
 
       {newToday > 0 && (
-        <div className="rounded-2xl px-5 py-3 flex items-center gap-3" style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)' }}>
-          <Star size={16} className="text-purple-300 shrink-0" />
-          <p className="text-purple-200 font-semibold text-sm">{newToday} לידים חדשים הגיעו היום</p>
+        <div style={{ borderRadius: '12px', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+          <span style={{ fontSize: '16px' }}>✨</span>
+          <p style={{ color: '#1D4ED8', fontWeight: 600, fontSize: '14px' }}>{newToday} לידים חדשים הגיעו היום</p>
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '20px' }}>
         {/* Priority queue */}
-        <div className="col-span-2 card overflow-hidden">
-          <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9' }}>
             <div>
-              <h2 className="font-extrabold text-white text-base">סדר עדיפויות</h2>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>מדורגים לפי דחיפות אוטומטית</p>
+              <h2 style={{ fontWeight: 800, color: '#1E293B', fontSize: '15px' }}>סדר עדיפויות</h2>
+              <p style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>מדורגים לפי דחיפות אוטומטית</p>
             </div>
-            <Link href="/leads" className="text-xs font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors">
+            <Link href="/leads" style={{ fontSize: '12px', fontWeight: 700, color: '#256D85', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}>
               כל הלידים <ChevronLeft size={12} />
             </Link>
           </div>
 
-          <div className="divide-y" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
+          <div>
             {priorities.length === 0 ? (
-              <div className="py-16 text-center">
-                <CheckCircle2 size={40} className="mx-auto mb-3 text-purple-500/30" />
-                <p className="font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>אין לידים פעילים כרגע</p>
+              <div style={{ padding: '48px', textAlign: 'center' }}>
+                <CheckCircle2 size={36} style={{ color: '#CBD5E1', margin: '0 auto 12px' }} />
+                <p style={{ color: '#94A3B8', fontWeight: 600 }}>אין לידים פעילים כרגע</p>
               </div>
             ) : priorities.map((lead, i) => {
               const temp = TEMP_CONFIG[lead.temperature as keyof typeof TEMP_CONFIG] || TEMP_CONFIG.medium
@@ -113,55 +156,54 @@ export default async function DashboardPage() {
               const daysOverdue = isOverdue ? Math.floor((Date.now() - new Date(lead.next_followup!).getTime()) / 86400000) : 0
 
               return (
-                <div key={lead.id} className="px-6 py-4 transition-colors group" style={{ borderColor: 'rgba(255,255,255,0.04)' }}
+                <div key={lead.id} style={{ padding: '14px 22px', borderBottom: i < priorities.length - 1 ? '1px solid #F8FAFC' : 'none', display: 'flex', alignItems: 'center', gap: '14px' }}
                   onMouseEnter={undefined}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0 ${i === 0 ? 'sesya-gradient text-white' : ''}`}
-                      style={i !== 0 ? { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' } : undefined}>
-                      {i + 1}
-                    </div>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '12px', fontWeight: 800,
+                    background: i === 0 ? 'linear-gradient(135deg,#256D85,#2F9BC1)' : '#F1F5F9',
+                    color: i === 0 ? 'white' : '#64748B',
+                  }}>
+                    {i + 1}
+                  </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Link href={`/leads/${lead.id}`} className="font-bold text-white hover:text-purple-300 transition-colors">
-                          {lead.name}
-                        </Link>
-                        {lead.company_name && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>· {lead.company_name}</span>}
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${temp.bg} ${temp.text}`}>
-                          {temp.emoji} {temp.label}
-                        </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.bg} ${status.text}`}>
-                          {status.label}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}</span>
-                        {isOverdue && daysOverdue > 0 && (
-                          <span className="text-xs font-bold text-red-400">⚠ {daysOverdue} ימים ללא טיפול</span>
-                        )}
-                        {lead.notes && <span className="text-xs truncate max-w-40" style={{ color: 'rgba(255,255,255,0.3)' }}>{lead.notes}</span>}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {lead.phone && (
-                        <a href={`tel:${lead.phone}`} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                          style={{ background: 'rgba(16,185,129,0.15)' }} title="התקשר">
-                          <Phone size={13} className="text-emerald-400" />
-                        </a>
-                      )}
-                      {lead.phone && (
-                        <a href={`https://wa.me/972${lead.phone.replace(/^0/, '').replace(/-/g, '')}`} target="_blank"
-                          className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                          style={{ background: 'rgba(16,185,129,0.1)' }} title="וואטסאפ">
-                          <MessageCircle size={13} className="text-emerald-300" />
-                        </a>
-                      )}
-                      <Link href={`/leads/${lead.id}`} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                        style={{ background: 'rgba(255,255,255,0.07)' }}>
-                        <ChevronLeft size={13} style={{ color: 'rgba(255,255,255,0.5)' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <Link href={`/leads/${lead.id}`} style={{ fontWeight: 700, color: '#1E293B', textDecoration: 'none', fontSize: '14px' }}>
+                        {lead.name}
                       </Link>
+                      {lead.company_name && <span style={{ fontSize: '12px', color: '#94A3B8' }}>· {lead.company_name}</span>}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${temp.bg} ${temp.text}`}>
+                        {temp.emoji} {temp.label}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.bg} ${status.text}`}>
+                        {status.label}
+                      </span>
                     </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '3px' }}>
+                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>{SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}</span>
+                      {isOverdue && daysOverdue > 0 && (
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#DC2626' }}>⚠ {daysOverdue} ימים ללא טיפול</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {lead.phone && (
+                      <a href={`tel:${lead.phone}`} style={{ width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0FDF4', textDecoration: 'none' }} title="התקשר">
+                        <Phone size={13} style={{ color: '#16A34A' }} />
+                      </a>
+                    )}
+                    {lead.phone && (
+                      <a href={`https://wa.me/972${lead.phone.replace(/^0/, '').replace(/-/g, '')}`} target="_blank"
+                        style={{ width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0FDF4', textDecoration: 'none' }} title="וואטסאפ">
+                        <MessageCircle size={13} style={{ color: '#16A34A' }} />
+                      </a>
+                    )}
+                    <Link href={`/leads/${lead.id}`} style={{ width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', textDecoration: 'none' }}>
+                      <ChevronLeft size={13} style={{ color: '#64748B' }} />
+                    </Link>
                   </div>
                 </div>
               )
@@ -170,27 +212,27 @@ export default async function DashboardPage() {
         </div>
 
         {/* Side panels */}
-        <div className="space-y-5" style={{ paddingLeft: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingLeft: '12px' }}>
           {/* Team */}
-          <div className="card p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <Users size={15} className="text-purple-400" />
-              <h3 className="font-extrabold text-white text-sm">הצוות</h3>
+          <div className="card" style={{ padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              <Users size={14} style={{ color: '#256D85' }} />
+              <h3 style={{ fontWeight: 800, color: '#1E293B', fontSize: '14px' }}>הצוות</h3>
             </div>
-            <div className="space-y-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {bySalesperson.length === 0 ? (
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>אין נציגים</p>
+                <p style={{ fontSize: '13px', color: '#94A3B8' }}>אין נציגים</p>
               ) : bySalesperson.map(({ name, initials, hot, active, published }) => (
-                <div key={name} className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl sesya-gradient flex items-center justify-center text-white text-xs font-bold shrink-0">
+                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '34px', height: '34px', borderRadius: '9px', background: 'linear-gradient(135deg,#256D85,#2F9BC1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 800, flexShrink: 0 }}>
                     {initials}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-white text-sm truncate">{name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{active} פעילים</span>
-                      {hot > 0 && <span className="text-[11px] text-red-400 font-bold">🔴 {hot} חמים</span>}
-                      {published > 0 && <span className="text-[11px] text-emerald-400 font-bold">✅ {published}</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 700, color: '#1E293B', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>{active} פעילים</span>
+                      {hot > 0 && <span style={{ fontSize: '11px', color: '#DC2626', fontWeight: 700 }}>🔴 {hot}</span>}
+                      {published > 0 && <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 700 }}>✅ {published}</span>}
                     </div>
                   </div>
                 </div>
@@ -199,22 +241,47 @@ export default async function DashboardPage() {
           </div>
 
           {/* Quick stats */}
-          <div className="card p-6">
-            <h3 className="font-extrabold text-white text-sm mb-5">סיכום מהיר</h3>
-            <div className="space-y-3">
+          <div className="card" style={{ padding: '20px' }}>
+            <h3 style={{ fontWeight: 800, color: '#1E293B', fontSize: '14px', marginBottom: '16px' }}>סיכום מהיר</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {[
-                { label: 'לידים פעילים', value: active.length, color: 'text-purple-300' },
-                { label: 'לידים חמים', value: hot, color: 'text-red-300' },
-                { label: 'דורשים טיפול', value: overdueCount, color: 'text-amber-300' },
-                { label: 'פרסמו', value: published, color: 'text-emerald-300' },
-                { label: 'סה"כ לידים', value: leads.length, color: 'text-blue-300' },
+                { label: 'לידים פעילים', value: active.length, color: '#256D85' },
+                { label: 'לידים חמים', value: hot, color: '#DC2626' },
+                { label: 'דורשים טיפול', value: overdueCount, color: '#D97706' },
+                { label: 'פרסמו', value: published, color: '#16A34A' },
+                { label: 'סה"כ לידים', value: leads.length, color: '#2F9BC1' },
               ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between py-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <span className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</span>
-                  <span className={`text-xl font-extrabold ${color}`}>{value}</span>
+                <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #F8FAFC' }}>
+                  <span style={{ fontSize: '13px', color: '#64748B' }}>{label}</span>
+                  <span style={{ fontSize: '20px', fontWeight: 800, color }}>{value}</span>
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Infographic row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        {/* Conversion donut */}
+        <div className="card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '28px' }}>
+          <DonutChart value={published} total={leads.length} color="#16A34A" />
+          <div>
+            <h3 style={{ fontWeight: 800, color: '#1E293B', fontSize: '15px', marginBottom: '6px' }}>אחוז המרה</h3>
+            <p style={{ fontSize: '13px', color: '#64748B' }}>{published} מתוך {leads.length} לידים פרסמו</p>
+            <p style={{ fontSize: '13px', color: '#64748B', marginTop: '8px' }}>
+              <span style={{ fontWeight: 800, color: '#256D85', fontSize: '18px' }}>{convRate}%</span> הצלחה
+            </p>
+          </div>
+        </div>
+
+        {/* Status breakdown bars */}
+        <div className="card" style={{ padding: '24px' }}>
+          <h3 style={{ fontWeight: 800, color: '#1E293B', fontSize: '15px', marginBottom: '18px' }}>פילוח לפי סטטוס</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {byStatus.map(({ label, value, color }) => (
+              <BarRow key={label} label={label} value={value} max={leads.length || 1} color={color} />
+            ))}
           </div>
         </div>
       </div>

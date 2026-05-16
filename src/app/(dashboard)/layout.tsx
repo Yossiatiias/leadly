@@ -15,9 +15,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .single()
 
   return (
-    <div style={{ background: '#0f0e1a', minHeight: '100vh' }}>
+    <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
       <Sidebar profile={profile} />
-      <main style={{ marginRight: '280px', minHeight: '100vh', overflowY: 'auto', overflowX: 'hidden' }}>
+      <main style={{ marginRight: '260px', minHeight: '100vh', overflowY: 'auto', overflowX: 'hidden' }}>
         {children}
       </main>
     </div>

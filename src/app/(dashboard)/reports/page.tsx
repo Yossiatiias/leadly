@@ -84,7 +84,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-800">דוחות וייצוא</h1>
+          <h1 className="text-2xl font-extrabold" style={{ color: '#1E293B' }}>דוחות וייצוא</h1>
           <p className="text-gray-400 text-sm mt-0.5">{leads.length} לידים{hasFilters && ' (מסוננים)'}</p>
         </div>
         <div className="flex gap-2">
@@ -102,10 +102,10 @@ export default function ReportsPage() {
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-4 mb-5">
         {[
-          { label: 'סה"כ לידים', value: leads.length, icon: Users, color: 'text-[#7DC242]', bg: 'bg-green-50' },
-          { label: 'פעילים', value: active, icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-50' },
+          { label: 'סה"כ לידים', value: leads.length, icon: Users, color: 'text-[#256D85]', bg: 'bg-blue-50' },
+          { label: 'פעילים', value: active, icon: TrendingUp, color: 'text-[#2F9BC1]', bg: 'bg-sky-50' },
           { label: 'חמים', value: hot, icon: Flame, color: 'text-red-500', bg: 'bg-red-50' },
-          { label: 'פרסמו', value: published, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+          { label: 'פרסמו', value: published, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="card p-4 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
@@ -164,10 +164,10 @@ export default function ReportsPage() {
       <div className="card overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#1e1c38' }}>
+            <tr style={{ borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
               {['שם', 'חברה', 'טלפון', 'מקור', 'טמפ׳', 'סטטוס', 'איש מכירות', 'תאריך יצירה'].map((h, i) => (
-                <th key={h} className="text-right text-[11px] font-extrabold text-gray-400 uppercase tracking-wider py-3 whitespace-nowrap"
-                  style={{ paddingRight: '20px', paddingLeft: i === 0 ? '40px' : '20px' }}>{h}</th>
+                <th key={h} className="text-right text-[11px] font-extrabold uppercase tracking-wider py-3 whitespace-nowrap"
+                  style={{ paddingRight: '20px', paddingLeft: i === 0 ? '40px' : '20px', color: '#64748B' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -187,15 +187,17 @@ export default function ReportsPage() {
               const temp = TEMP_CONFIG[lead.temperature as keyof typeof TEMP_CONFIG] || TEMP_CONFIG.medium
               const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG]
               return (
-                <tr key={lead.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="py-3 text-sm font-bold text-white whitespace-nowrap" style={{ paddingRight: '20px', paddingLeft: '40px' }}>{lead.name}</td>
-                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                <tr key={lead.id} style={{ borderBottom: '1px solid #F8FAFC', transition: 'background 0.1s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F8FAFC'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                  <td className="py-3 text-sm font-bold whitespace-nowrap" style={{ paddingRight: '20px', paddingLeft: '40px', color: '#1E293B' }}>{lead.name}</td>
+                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: '#64748B' }}>
                     {lead.company_name || '—'}
                     {lead.clinic_count && <span className="text-xs opacity-60"> · {lead.clinic_count}</span>}
                   </td>
-                  <td className="px-5 py-3 text-sm font-mono whitespace-nowrap text-center" dir="ltr" style={{ color: 'rgba(255,255,255,0.5)', minWidth: '140px' }}>{lead.phone || '—'}</td>
+                  <td className="px-5 py-3 text-sm font-mono whitespace-nowrap text-center" dir="ltr" style={{ color: '#64748B', minWidth: '140px' }}>{lead.phone || '—'}</td>
                   <td className="px-8 py-3 whitespace-nowrap">
-                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}>
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: '#F1F5F9', color: '#475569' }}>
                       {SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}
                     </span>
                   </td>
@@ -209,8 +211,8 @@ export default function ReportsPage() {
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.5)' }}>{lead.profile?.full_name || '—'}</td>
-                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.35)' }}>{new Date(lead.created_at).toLocaleDateString('he-IL')}</td>
+                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: '#64748B' }}>{lead.profile?.full_name || '—'}</td>
+                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: '#94A3B8' }}>{new Date(lead.created_at).toLocaleDateString('he-IL')}</td>
                 </tr>
               )
             })}
@@ -219,7 +221,7 @@ export default function ReportsPage() {
       </div>
 
       {leads.length > 0 && (
-        <p className="text-center text-xs text-gray-300 mt-4">
+        <p className="text-center text-xs mt-4" style={{ color: '#94A3B8' }}>
           אחוז המרה: {convRate}% ({published} מתוך {leads.length} לידים פרסמו)
         </p>
       )}

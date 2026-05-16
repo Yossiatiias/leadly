@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -28,80 +27,124 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'linear-gradient(135deg, #f0f9e8 0%, #e8f4fb 100%)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', background: '#F8FAFC' }}>
       {/* Left panel - branding */}
-      <div className="hidden lg:flex w-1/2 flex-col justify-center items-center p-16 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5" style={{
-          backgroundImage: 'radial-gradient(circle at 2px 2px, #7DC242 1px, transparent 0)',
-          backgroundSize: '40px 40px'
+      <div style={{
+        display: 'none',
+        width: '45%',
+        background: 'linear-gradient(160deg, #256D85 0%, #2F9BC1 60%, #8FB9A8 100%)',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '48px',
+        position: 'relative',
+        overflow: 'hidden',
+      }} className="lg-panel">
+        <style>{`@media(min-width:1024px){.lg-panel{display:flex!important}}`}</style>
+
+        {/* Pattern */}
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.07,
+          backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
+          backgroundSize: '36px 36px',
         }} />
-        <div className="relative z-10 text-center">
-          <div className="flex justify-center mb-8">
-            <div className="relative w-32 h-24">
-              <Image src="/logo.png" alt="Sesya" fill className="object-contain" />
-            </div>
-          </div>
-          <h2 className="text-4xl font-bold text-[#3C3C3C] mb-4">Sesya Leads</h2>
-          <p className="text-gray-500 text-lg max-w-xs">מערכת ניהול לידים חכמה לצוות המכירות של ססיה</p>
-          <div className="mt-12 grid grid-cols-2 gap-4 text-right">
+
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', width: '100%' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Sesya" style={{ height: '56px', width: 'auto', objectFit: 'contain', marginBottom: '24px', filter: 'brightness(0) invert(1)' }} />
+          <h2 style={{ fontSize: '28px', fontWeight: 800, color: 'white', marginBottom: '10px' }}>Sesya Leads</h2>
+          <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '15px', maxWidth: '260px', margin: '0 auto 40px' }}>
+            מערכת ניהול לידים חכמה לצוות המכירות של ססיה
+          </p>
+
+          {/* Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', maxWidth: '300px', margin: '0 auto' }}>
             {[
-              { n: '100%', l: 'לידים מטופלים' },
-              { n: '4', l: 'אנשי צוות' },
-              { n: '3', l: 'ימי follow-up' },
+              { n: 'AI', l: 'סקריפטים חכמים' },
+              { n: '100%', l: 'מעקב לידים' },
+              { n: 'Live', l: 'דוחות בזמן אמת' },
               { n: '∞', l: 'פוטנציאל גדילה' },
             ].map(({ n, l }) => (
-              <div key={l} className="bg-white/70 backdrop-blur rounded-2xl p-4 shadow-sm">
-                <p className="text-2xl font-bold text-[#7DC242]">{n}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{l}</p>
+              <div key={l} style={{
+                background: 'rgba(255,255,255,0.15)',
+                backdropFilter: 'blur(10px)',
+                borderRadius: '14px',
+                padding: '16px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                textAlign: 'right',
+              }}>
+                <p style={{ fontSize: '22px', fontWeight: 800, color: 'white' }}>{n}</p>
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginTop: '3px' }}>{l}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Right panel - login form */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-sm">
-          <div className="lg:hidden flex justify-center mb-8">
-            <div className="relative w-24 h-16">
-              <Image src="/logo.png" alt="Sesya" fill className="object-contain" />
-            </div>
+      {/* Right panel - form */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px' }}>
+        <div style={{ width: '100%', maxWidth: '380px' }}>
+          {/* Mobile logo */}
+          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Sesya" style={{ height: '48px', width: 'auto', objectFit: 'contain' }} />
           </div>
 
-          <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8">
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-[#3C3C3C]">ברוך הבא</h1>
-              <p className="text-gray-400 text-sm mt-1">התחבר כדי לנהל את הלידים שלך</p>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            border: '1px solid #E2E8F0',
+            boxShadow: '0 4px 24px rgba(30,41,59,0.08)',
+            padding: '36px',
+          }}>
+            <div style={{ marginBottom: '28px' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#1E293B' }}>ברוך הבא</h1>
+              <p style={{ fontSize: '14px', color: '#64748B', marginTop: '4px' }}>התחבר כדי לנהל את הלידים שלך</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">אימייל</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>אימייל</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#7DC242]/40 focus:border-[#7DC242] transition-all bg-gray-50 focus:bg-white"
                   placeholder="your@email.com"
                   dir="ltr"
+                  style={{
+                    width: '100%', padding: '11px 14px',
+                    border: '1.5px solid #E2E8F0', borderRadius: '10px',
+                    fontSize: '14px', color: '#1E293B', background: '#F8FAFC',
+                    outline: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#2F9BC1'; e.target.style.boxShadow = '0 0 0 3px rgba(47,155,193,0.12)'; e.target.style.background = 'white' }}
+                  onBlur={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F8FAFC' }}
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">סיסמה</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>סיסמה</label>
                 <input
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#7DC242]/40 focus:border-[#7DC242] transition-all bg-gray-50 focus:bg-white"
                   placeholder="••••••••"
                   dir="ltr"
+                  style={{
+                    width: '100%', padding: '11px 14px',
+                    border: '1.5px solid #E2E8F0', borderRadius: '10px',
+                    fontSize: '14px', color: '#1E293B', background: '#F8FAFC',
+                    outline: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#2F9BC1'; e.target.style.boxShadow = '0 0 0 3px rgba(47,155,193,0.12)'; e.target.style.background = 'white' }}
+                  onBlur={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F8FAFC' }}
                 />
               </div>
 
               {error && (
-                <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl border border-red-100">
+                <div style={{ background: '#FEF2F2', color: '#DC2626', fontSize: '13px', padding: '10px 14px', borderRadius: '10px', border: '1px solid #FECACA' }}>
                   {error}
                 </div>
               )}
@@ -109,15 +152,24 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50 mt-2"
-                style={{ background: 'linear-gradient(135deg, #7DC242, #5BB8E4)' }}
+                style={{
+                  width: '100%', padding: '12px',
+                  background: loading ? '#94A3B8' : 'linear-gradient(135deg, #256D85, #2F9BC1)',
+                  color: 'white', fontWeight: 700, fontSize: '15px',
+                  borderRadius: '10px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit', marginTop: '4px',
+                  boxShadow: loading ? 'none' : '0 2px 10px rgba(37,109,133,0.3)',
+                  transition: 'all 0.15s',
+                }}
               >
                 {loading ? 'מתחבר...' : 'כניסה למערכת'}
               </button>
             </form>
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-6">Sesya Lead Management System © 2026</p>
+          <p style={{ textAlign: 'center', fontSize: '12px', color: '#94A3B8', marginTop: '20px' }}>
+            Sesya Lead Management System © 2026
+          </p>
         </div>
       </div>
     </div>
