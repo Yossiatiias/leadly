@@ -32,7 +32,7 @@ export default function LoginPage() {
       <div style={{
         display: 'none',
         width: '45%',
-        background: 'linear-gradient(160deg, #256D85 0%, #2F9BC1 60%, #8FB9A8 100%)',
+        background: 'linear-gradient(160deg, #3730A3 0%, #2563EB 60%, #14B8A6 100%)',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
@@ -118,8 +118,8 @@ export default function LoginPage() {
                     fontSize: '14px', color: '#1E293B', background: '#F8FAFC',
                     outline: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#2F9BC1'; e.target.style.boxShadow = '0 0 0 3px rgba(47,155,193,0.12)'; e.target.style.background = 'white' }}
-                  onBlur={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F8FAFC' }}
+                  onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)'; e.target.style.background = 'white' }}
+                  onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F7F8FA' }}
                 />
               </div>
 
@@ -134,12 +134,12 @@ export default function LoginPage() {
                   dir="ltr"
                   style={{
                     width: '100%', padding: '11px 14px',
-                    border: '1.5px solid #E2E8F0', borderRadius: '10px',
-                    fontSize: '14px', color: '#1E293B', background: '#F8FAFC',
+                    border: '1.5px solid #E5E7EB', borderRadius: '10px',
+                    fontSize: '14px', color: '#111827', background: '#F7F8FA',
                     outline: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#2F9BC1'; e.target.style.boxShadow = '0 0 0 3px rgba(47,155,193,0.12)'; e.target.style.background = 'white' }}
-                  onBlur={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F8FAFC' }}
+                  onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)'; e.target.style.background = 'white' }}
+                  onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F7F8FA' }}
                 />
               </div>
 
@@ -154,7 +154,7 @@ export default function LoginPage() {
                 disabled={loading}
                 style={{
                   width: '100%', padding: '12px',
-                  background: loading ? '#94A3B8' : 'linear-gradient(135deg, #256D85, #2F9BC1)',
+                  background: loading ? '#9CA3AF' : 'linear-gradient(135deg, #3730A3, #2563EB)',
                   color: 'white', fontWeight: 700, fontSize: '15px',
                   borderRadius: '10px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
                   fontFamily: 'inherit', marginTop: '4px',

@@ -63,15 +63,15 @@ export const SOURCE_LABELS: Record<LeadSource, string> = {
 export const TEMP_CONFIG = {
   hot:    { label: 'חם',    emoji: '🔴', bg: 'bg-red-50',    text: 'text-red-600',    dot: 'bg-red-500' },
   medium: { label: 'בינוני', emoji: '🟡', bg: 'bg-amber-50',  text: 'text-amber-600',  dot: 'bg-amber-400' },
-  cold:   { label: 'קר',    emoji: '🔵', bg: 'bg-blue-50',   text: 'text-blue-600',   dot: 'bg-blue-500' },
+  cold:   { label: 'קר',    emoji: '🔵', bg: 'bg-blue-50',   text: 'text-blue-700',   dot: 'bg-blue-600' },
 }
 
 export const STATUS_CONFIG: Record<LeadStatus, { label: string; bg: string; text: string }> = {
-  new:          { label: 'חדש',          bg: 'bg-blue-50',    text: 'text-blue-700' },
+  new:          { label: 'חדש',          bg: 'bg-indigo-50',  text: 'text-indigo-700' },
   contacted:    { label: 'ביצירת קשר',  bg: 'bg-amber-50',   text: 'text-amber-700' },
   in_progress:  { label: 'בתהליך',      bg: 'bg-teal-50',    text: 'text-teal-700' },
   published:    { label: 'פורסם',       bg: 'bg-green-50',   text: 'text-green-700' },
-  not_relevant: { label: 'לא רלוונטי', bg: 'bg-slate-100',  text: 'text-slate-400' },
+  not_relevant: { label: 'לא רלוונטי', bg: 'bg-gray-100',   text: 'text-gray-400' },
 }
 
 export function getPriorityScore(lead: Lead): number {
