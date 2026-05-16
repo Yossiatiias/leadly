@@ -62,7 +62,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         <img
           src="/logo.png"
           alt="Sesya"
-          style={{ width: '100%', maxWidth: '160px', height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto' }}
+          style={{ width: '100%', maxWidth: '160px', height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto', mixBlendMode: 'multiply' }}
         />
         <p style={{ textAlign: 'center', fontSize: '11px', color: '#5B8FA8', fontWeight: 500, marginTop: '8px', letterSpacing: '0.04em' }}>
           מערכת ניהול לידים
