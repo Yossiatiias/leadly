@@ -41,21 +41,19 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
     }}>
       {/* Logo */}
       <div style={{ padding: '28px 20px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{
-            width: '42px', height: '42px', borderRadius: '12px',
+            width: '72px', height: '72px', borderRadius: '18px',
             background: 'white',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, overflow: 'hidden',
-            padding: '4px',
+            overflow: 'hidden', padding: '8px', marginBottom: '12px',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="Sesya" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
-          <div>
-            <p style={{ fontWeight: 800, fontSize: '16px', color: 'white', lineHeight: 1.1 }}>Sesya</p>
-            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: 500, letterSpacing: '0.04em' }}>Lead Management</p>
-          </div>
+          <p style={{ fontWeight: 800, fontSize: '20px', color: 'white', lineHeight: 1.2 }}>Sesya</p>
+          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: 500, letterSpacing: '0.05em', marginTop: '2px' }}>Lead Management</p>
         </div>
 
         {/* New lead button */}

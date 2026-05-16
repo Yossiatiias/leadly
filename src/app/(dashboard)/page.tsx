@@ -35,6 +35,37 @@ function HBarChart({ data }: { data: { label: string; value: number; color: stri
   )
 }
 
+function DonutChart({ slices, size = 120 }: { slices: { value: number; color: string; label: string }[]; size?: number }) {
+  const total = slices.reduce((s, d) => s + d.value, 0) || 1
+  const r = size / 2 - 14
+  const cx = size / 2, cy = size / 2
+  let angle = -Math.PI / 2
+  const paths = slices.map(({ value, color, label }) => {
+    const pct = value / total
+    const startAngle = angle
+    angle += pct * 2 * Math.PI
+    if (pct === 0) return null
+    const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle)
+    const x2 = cx + r * Math.cos(angle), y2 = cy + r * Math.sin(angle)
+    const large = pct > 0.5 ? 1 : 0
+    return (
+      <path key={label}
+        d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
+        fill={color} opacity={0.9}
+      />
+    )
+  })
+  return (
+    <svg width={size} height={size}>
+      <circle cx={cx} cy={cy} r={r + 6} fill="#F3F4F6" />
+      {paths}
+      <circle cx={cx} cy={cy} r={r - 16} fill="white" />
+      <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontSize: '16px', fontWeight: 800, fill: '#111827', fontFamily: 'Assistant, sans-serif' }}>{total}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle" style={{ fontSize: '9px', fill: '#6B7280', fontFamily: 'Assistant, sans-serif' }}>לידים</text>
+    </svg>
+  )
+}
+
 function KpiCard({ label, value, sub, color, bg }: { label: string; value: number | string; sub?: string; color: string; bg: string }) {
   return (
     <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #E5E7EB', padding: '18px 20px', boxShadow: '0 1px 4px rgba(17,24,39,0.04)' }}>
@@ -102,7 +133,7 @@ export default async function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
         <div>
           <p style={{ fontSize: '13px', fontWeight: 600, color: '#6B7280', marginBottom: '3px' }}>{getGreeting()}, {profile?.full_name?.split(' ')[0]} 👋</p>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827' }}>תתחיל מכאן</h1>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827' }}>התחל כאן</h1>
         </div>
         <div style={{ textAlign: 'left' }}>
           <p style={{ fontWeight: 700, color: '#111827', fontSize: '14px' }}>{dateStr}</p>
@@ -220,12 +251,13 @@ export default async function DashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {bySalesperson.map(({ name, initials, hot, active, published }) => (
                 <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: '#14B8A6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '11px', fontWeight: 800, flexShrink: 0 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#14B8A6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 800, flexShrink: 0 }}>
                     {initials}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, color: '#111827', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
-                    <div style={{ display: 'flex', gap: '7px', marginTop: '1px' }}>
+                    <p style={{ fontWeight: 800, color: '#111827', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
+                    <p style={{ fontSize: '11px', color: '#3730A3', fontWeight: 700, marginBottom: '2px' }}>נציג מכירות</p>
+                    <div style={{ display: 'flex', gap: '7px' }}>
                       <span style={{ fontSize: '10px', color: '#6B7280' }}>{active} פעילים</span>
                       {hot > 0 && <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700 }}>🔴 {hot}</span>}
                       {published > 0 && <span style={{ fontSize: '10px', color: '#15803D', fontWeight: 700 }}>✅ {published}</span>}
@@ -240,13 +272,38 @@ export default async function DashboardPage() {
 
       {/* Infographic row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        {/* Donut - by status */}
         <div className="card" style={{ padding: '20px' }}>
           <h3 style={{ fontWeight: 800, color: '#111827', fontSize: '13px', marginBottom: '16px' }}>פילוח לפי סטטוס</h3>
-          <HBarChart data={statusData} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <DonutChart slices={statusData} size={130} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {statusData.filter(d => d.value > 0).map(({ label, value, color }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '12px', color: '#6B7280', flex: 1 }}>{label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#111827' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+
+        {/* Donut - by source */}
         <div className="card" style={{ padding: '20px' }}>
           <h3 style={{ fontWeight: 800, color: '#111827', fontSize: '13px', marginBottom: '16px' }}>פילוח לפי מקור</h3>
-          <HBarChart data={sourceData} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <DonutChart slices={sourceData} size={130} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {sourceData.filter(d => d.value > 0).map(({ label, value, color }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '12px', color: '#6B7280', flex: 1 }}>{label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#111827' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
