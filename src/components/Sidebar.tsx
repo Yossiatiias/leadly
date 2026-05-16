@@ -122,7 +122,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
           <div style={{ minWidth: 0 }}>
             <p style={{ fontWeight: 700, color: 'white', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.full_name || 'משתמש'}</p>
             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', marginTop: '1px' }}>
-              {profile?.role === 'admin' ? '👑 מנהל' : '💼 נציג'}
+              {profile?.role === 'admin' ? '👑 מנהל' : '💼 נציג מכירות'}
             </p>
           </div>
         </div>
