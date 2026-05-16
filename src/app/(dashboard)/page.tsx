@@ -66,12 +66,12 @@ function DonutChart({ slices, size = 120 }: { slices: { value: number; color: st
   )
 }
 
-function KpiCard({ label, value, sub, color, bg }: { label: string; value: number | string; sub?: string; color: string; bg: string }) {
+function KpiCard({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color: string; bg: string }) {
   return (
-    <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #E5E7EB', padding: '18px 20px', boxShadow: '0 1px 4px rgba(17,24,39,0.04)' }}>
-      <p style={{ fontSize: '11px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{label}</p>
-      <p style={{ fontSize: '32px', fontWeight: 800, color, lineHeight: 1 }}>{value}</p>
-      {sub && <p style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>{sub}</p>}
+    <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E5E7EB', padding: '20px 22px', boxShadow: '0 1px 3px rgba(17,24,39,0.05)' }}>
+      <p style={{ fontSize: '12px', fontWeight: 500, color: '#9CA3AF', marginBottom: '10px' }}>{label}</p>
+      <p style={{ fontSize: '28px', fontWeight: 400, color, lineHeight: 1 }}>{value}</p>
+      {sub && <p style={{ fontSize: '11px', color: '#C4C9D4', marginTop: '8px', fontWeight: 400 }}>{sub}</p>}
     </div>
   )
 }
@@ -133,7 +133,7 @@ export default async function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
         <div>
           <p style={{ fontSize: '13px', fontWeight: 600, color: '#6B7280', marginBottom: '3px' }}>{getGreeting()}, {profile?.full_name?.split(' ')[0]} 👋</p>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827' }}>התחל כאן</h1>
+          <h1 style={{ fontSize: '22px', fontWeight: 500, color: '#374151' }}>התחל כאן</h1>
         </div>
         <div style={{ textAlign: 'left' }}>
           <p style={{ fontWeight: 700, color: '#111827', fontSize: '14px' }}>{dateStr}</p>
@@ -163,8 +163,8 @@ export default async function DashboardPage() {
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F3F4F6' }}>
             <div>
-              <h2 style={{ fontWeight: 800, color: '#111827', fontSize: '14px' }}>סדר עדיפויות</h2>
-              <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>מדורגים לפי דחיפות אוטומטית</p>
+              <h2 style={{ fontWeight: 500, color: '#374151', fontSize: '14px' }}>סדר עדיפויות</h2>
+              <p style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '2px' }}>מדורגים לפי דחיפות אוטומטית</p>
             </div>
             <Link href="/leads" style={{ fontSize: '12px', fontWeight: 700, color: '#3730A3', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}>
               כל הלידים <ChevronLeft size={12} />
@@ -244,23 +244,19 @@ export default async function DashboardPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Team */}
           <div className="card" style={{ padding: '18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '14px' }}>
-              <Users size={13} style={{ color: '#3730A3' }} />
-              <h3 style={{ fontWeight: 800, color: '#111827', fontSize: '13px' }}>הצוות</h3>
-            </div>
+            <h3 style={{ fontWeight: 500, color: '#374151', fontSize: '13px', marginBottom: '14px' }}>הצוות</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {bySalesperson.map(({ name, initials, hot, active, published }) => (
                 <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#14B8A6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 800, flexShrink: 0 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#D6EDF8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1A4F6E', fontSize: '12px', fontWeight: 600, flexShrink: 0 }}>
                     {initials}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 800, color: '#111827', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
-                    <p style={{ fontSize: '11px', color: '#3730A3', fontWeight: 700, marginBottom: '2px' }}>נציג מכירות</p>
-                    <div style={{ display: 'flex', gap: '7px' }}>
-                      <span style={{ fontSize: '10px', color: '#6B7280' }}>{active} פעילים</span>
-                      {hot > 0 && <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700 }}>🔴 {hot}</span>}
-                      {published > 0 && <span style={{ fontSize: '10px', color: '#15803D', fontWeight: 700 }}>✅ {published}</span>}
+                    <p style={{ fontWeight: 500, color: '#374151', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
+                      <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{active} פעילים</span>
+                      {hot > 0 && <span style={{ fontSize: '11px', color: '#EF4444' }}>🔴 {hot}</span>}
+                      {published > 0 && <span style={{ fontSize: '11px', color: '#15803D' }}>✅ {published}</span>}
                     </div>
                   </div>
                 </div>
@@ -274,7 +270,7 @@ export default async function DashboardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         {/* Donut - by status */}
         <div className="card" style={{ padding: '20px' }}>
-          <h3 style={{ fontWeight: 800, color: '#111827', fontSize: '13px', marginBottom: '16px' }}>פילוח לפי סטטוס</h3>
+          <h3 style={{ fontWeight: 500, color: '#374151', fontSize: '13px', marginBottom: '16px' }}>פילוח לפי סטטוס</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <DonutChart slices={statusData} size={130} />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -291,7 +287,7 @@ export default async function DashboardPage() {
 
         {/* Donut - by source */}
         <div className="card" style={{ padding: '20px' }}>
-          <h3 style={{ fontWeight: 800, color: '#111827', fontSize: '13px', marginBottom: '16px' }}>פילוח לפי מקור</h3>
+          <h3 style={{ fontWeight: 500, color: '#374151', fontSize: '13px', marginBottom: '16px' }}>פילוח לפי מקור</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <DonutChart slices={sourceData} size={130} />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>

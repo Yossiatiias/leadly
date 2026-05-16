@@ -2,22 +2,42 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, FileBarChart, LogOut, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
-
-const SIDEBAR_WIDTH = 240
+import { useEffect, useState } from 'react'
 
 const navItems = [
-  { href: '/', label: 'התחל כאן', icon: LayoutDashboard, desc: 'סדר עדיפויות' },
-  { href: '/leads', label: 'כל הלידים', icon: Users, desc: 'ניהול וחיפוש' },
-  { href: '/reports', label: 'דוחות', icon: FileBarChart, desc: 'נתונים וייצוא' },
+  { href: '/',         label: 'התחל כאן'  },
+  { href: '/leads',    label: 'כל הלידים' },
+  { href: '/reports',  label: 'דוחות'     },
+  { href: '/messages', label: 'הודעות'    },
 ]
 
 export default function Sidebar({ profile }: { profile: Profile | null }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [unread, setUnread] = useState(0)
+
+  useEffect(() => {
+    if (!profile?.id) return
+    async function loadUnread() {
+      const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', profile!.id)
+        .is('read_at', null)
+      setUnread(count || 0)
+    }
+    loadUnread()
+    const ch = supabase.channel('sb-unread')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (p) => {
+        if ((p.new as any).receiver_id === profile!.id) setUnread(n => n + 1)
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => loadUnread())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [profile?.id])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -28,114 +48,108 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
 
   return (
     <aside style={{
-      position: 'fixed',
-      right: 0,
-      top: 0,
-      bottom: 0,
-      width: `${SIDEBAR_WIDTH}px`,
-      background: '#226F94',
-      display: 'flex',
-      flexDirection: 'column',
+      position: 'fixed', right: 0, top: 0, bottom: 0,
+      width: '240px',
+      background: '#EBF5FA',
+      borderLeft: '1px solid #C8E3F0',
+      display: 'flex', flexDirection: 'column',
       zIndex: 20,
-      overflow: 'hidden',
     }}>
-      {/* Logo */}
-      <div style={{ padding: '28px 20px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{
-            width: '44px', height: '44px', borderRadius: '12px',
-            background: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden', padding: '5px', flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-          }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Sesya" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
-          <div>
-            <p style={{ fontWeight: 800, fontSize: '17px', color: 'white', lineHeight: 1.2 }}>Sesya</p>
-            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: 500, letterSpacing: '0.04em', marginTop: '1px' }}>Lead Management</p>
-          </div>
-        </div>
 
-        {/* New lead button */}
+      {/* Logo */}
+      <div style={{ padding: '24px 20px 16px', borderBottom: '1px solid #C8E3F0' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.png"
+          alt="Sesya"
+          style={{ width: '100%', maxWidth: '160px', height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto' }}
+        />
+        <p style={{ textAlign: 'center', fontSize: '11px', color: '#5B8FA8', fontWeight: 500, marginTop: '8px', letterSpacing: '0.04em' }}>
+          מערכת ניהול לידים
+        </p>
+      </div>
+
+      {/* New lead button */}
+      <div style={{ padding: '14px 16px 10px' }}>
         <Link href="/leads/new" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-          padding: '11px', borderRadius: '10px', textDecoration: 'none',
-          background: '#8DCB3F', color: 'white', fontWeight: 700, fontSize: '14px',
-          boxShadow: '0 2px 8px rgba(141,203,63,0.4)',
-          transition: 'all 0.15s',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          padding: '10px', borderRadius: '10px', textDecoration: 'none',
+          background: '#8DCB3F', color: 'white', fontWeight: 600, fontSize: '13px',
+          boxShadow: '0 2px 6px rgba(141,203,63,0.35)', transition: 'all 0.15s',
         }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#6FA82E' }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#8DCB3F' }}
         >
-          <Plus size={15} />
-          ליד חדש
+          + ליד חדש
         </Link>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {navItems.map(({ href, label, desc, icon: Icon }) => {
-          const active = pathname === href
+      <nav style={{ flex: 1, padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {navItems.map(({ href, label }) => {
+          const active = href === '/messages'
+            ? pathname.startsWith('/messages')
+            : pathname === href
+          const showBadge = href === '/messages' && unread > 0 && !active
+
           return (
             <Link key={href} href={href} style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '11px 14px',
-              borderRadius: '10px',
-              textDecoration: 'none',
-              background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
-              transition: 'background 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 14px', borderRadius: '10px', textDecoration: 'none',
+              background: active ? '#C8E3F0' : 'transparent',
+              color: active ? '#1A4F6E' : '#3B6F8A',
+              fontWeight: active ? 700 : 500,
+              fontSize: '14px',
+              transition: 'all 0.12s',
             }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)' }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = '#D6EDF8' }}
               onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
             >
-              <div style={{
-                width: '34px', height: '34px', borderRadius: '9px', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                background: active ? '#3FA9DC' : 'rgba(255,255,255,0.1)',
-              }}>
-                <Icon size={16} style={{ color: 'white' }} />
-              </div>
-              <div>
-                <p style={{ fontWeight: 700, color: 'white', fontSize: '13px', lineHeight: 1.3 }}>{label}</p>
-                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '1px' }}>{desc}</p>
-              </div>
+              {label}
+              {showBadge && (
+                <span style={{
+                  background: '#3FA9DC', color: 'white', borderRadius: '99px',
+                  minWidth: '18px', height: '18px', padding: '0 5px',
+                  fontSize: '10px', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
             </Link>
           )
         })}
       </nav>
 
       {/* User + Logout */}
-      <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)' }}>
+      <div style={{ padding: '12px 16px', borderTop: '1px solid #C8E3F0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px', padding: '9px 10px', borderRadius: '10px', background: '#D6EDF8' }}>
           <div style={{
-            width: '34px', height: '34px', borderRadius: '9px',
-            background: '#3FA9DC',
+            width: '32px', height: '32px', borderRadius: '50%',
+            background: '#3FA9DC', color: 'white',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 800, fontSize: '12px', flexShrink: 0,
+            fontWeight: 700, fontSize: '11px', flexShrink: 0,
           }}>
             {initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontWeight: 700, color: 'white', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.full_name || 'משתמש'}</p>
-            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', marginTop: '1px' }}>
-              {profile?.role === 'admin' ? '👑 מנהל' : '💼 נציג מכירות'}
+            <p style={{ fontWeight: 600, color: '#1A4F6E', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.full_name || 'משתמש'}
+            </p>
+            <p style={{ fontSize: '10px', color: '#5B8FA8', marginTop: '1px' }}>
+              {profile?.role === 'admin' ? 'מנהל' : 'נציג מכירות'}
             </p>
           </div>
         </div>
         <button onClick={handleLogout} style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          padding: '8px 12px', borderRadius: '8px', fontSize: '12px',
-          width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'rgba(255,255,255,0.4)', transition: 'all 0.15s', fontFamily: 'inherit', fontWeight: 600,
+          width: '100%', padding: '7px 10px', borderRadius: '8px', fontSize: '12px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: '#7AAEC4', fontFamily: 'inherit', fontWeight: 500,
+          textAlign: 'right', transition: 'all 0.12s',
         }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.15)'; (e.currentTarget as HTMLElement).style.color = '#FCA5A5' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.4)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#C0392B'; (e.currentTarget as HTMLElement).style.background = '#FEF2F2' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#7AAEC4'; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
         >
-          <LogOut size={14} />
           התנתקות
         </button>
       </div>
