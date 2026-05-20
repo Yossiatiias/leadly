@@ -80,10 +80,15 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const [{ data: allLeads }, { data: profile }, { data: profiles }] = await Promise.all([
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user!.id)
+    .single()
+
+  const [{ data: allLeads }, { data: profiles }] = await Promise.all([
     supabase.from('leads').select('*, profile:profiles!leads_assigned_to_fkey(full_name)'),
-    supabase.from('profiles').select('*').eq('id', user!.id).single(),
-    supabase.from('profiles').select('*'),
+    supabase.from('profiles').select('id, full_name'),
   ])
 
   const leads = allLeads || []
