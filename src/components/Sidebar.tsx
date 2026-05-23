@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
 import { useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 
 const navItems = [
   { href: '/',             label: 'בית'              },
@@ -21,6 +22,23 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
   const router = useRouter()
   const supabase = createClient()
   const [unread, setUnread] = useState(0)
+  const [dark, setDark] = useState(false)
+
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains('dark'))
+  }, [])
+
+  function toggleTheme() {
+    const next = !dark
+    setDark(next)
+    if (next) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('leadly-theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('leadly-theme', 'light')
+    }
+  }
 
   useEffect(() => {
     if (!profile?.id) return
@@ -53,22 +71,28 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
     <aside style={{
       position: 'fixed', right: 0, top: 0, bottom: 0,
       width: '240px',
-      background: '#EBF5FA',
-      borderLeft: '1px solid #C8E3F0',
+      background: 'var(--sidebar-bg)',
+      borderLeft: '1px solid var(--sidebar-border)',
       display: 'flex', flexDirection: 'column',
       zIndex: 20,
+      transition: 'background 0.2s, border-color 0.2s',
     }}>
 
-      {/* Logo */}
-      <div style={{ padding: '24px 20px 16px', borderBottom: '1px solid #C8E3F0' }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo.png"
-          alt="Sesya"
-          style={{ width: '100%', maxWidth: '160px', height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto', mixBlendMode: 'multiply' }}
-        />
-        <p style={{ textAlign: 'center', fontSize: '11px', color: '#5B8FA8', fontWeight: 500, marginTop: '8px', letterSpacing: '0.04em' }}>
-          מערכת ניהול לידים
+      {/* Logo + theme toggle */}
+      <div style={{ padding: '20px 16px 14px', borderBottom: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={dark ? '/logo-dark.png' : '/logo-light.png'}
+            alt="Leadly"
+            style={{ height: '36px', width: 'auto', objectFit: 'contain', transition: 'opacity 0.2s' }}
+          />
+          <button onClick={toggleTheme} className="theme-toggle" title={dark ? 'מצב בהיר' : 'מצב כהה'}>
+            {dark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+        </div>
+        <p style={{ fontSize: '11px', color: 'var(--sidebar-subtitle)', fontWeight: 500, letterSpacing: '0.04em' }}>
+          AI Lead Management
         </p>
       </div>
 
@@ -77,11 +101,11 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         <Link href="/leads/new" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
           padding: '10px', borderRadius: '10px', textDecoration: 'none',
-          background: '#8DCB3F', color: 'white', fontWeight: 600, fontSize: '13px',
-          boxShadow: '0 2px 6px rgba(141,203,63,0.35)', transition: 'all 0.15s',
+          background: 'var(--sidebar-new-btn)', color: 'white', fontWeight: 600, fontSize: '13px',
+          boxShadow: '0 2px 6px rgba(141,203,63,0.25)', transition: 'all 0.15s',
         }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#6FA82E' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#8DCB3F' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-new-btn-hover)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-new-btn)' }}
         >
           + ליד חדש
         </Link>
@@ -94,22 +118,15 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
           const showBadge = href === '/conversations' && unread > 0 && !active
 
           return (
-            <Link key={href} href={href} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 14px', borderRadius: '10px', textDecoration: 'none',
-              background: active ? '#C8E3F0' : 'transparent',
-              color: active ? '#1A4F6E' : '#3B6F8A',
-              fontWeight: active ? 700 : 500,
-              fontSize: '14px',
-              transition: 'all 0.12s',
-            }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = '#D6EDF8' }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+            <Link
+              key={href}
+              href={href}
+              className={`sidebar-link${active ? ' active' : ''}`}
             >
               {label}
               {showBadge && (
                 <span style={{
-                  background: '#3FA9DC', color: 'white', borderRadius: '99px',
+                  background: 'var(--sidebar-badge-bg)', color: 'white', borderRadius: '99px',
                   minWidth: '18px', height: '18px', padding: '0 5px',
                   fontSize: '10px', fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -118,26 +135,27 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
                 </span>
               )}
             </Link>
+
           )
         })}
       </nav>
 
       {/* User + Logout */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid #C8E3F0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px', padding: '9px 10px', borderRadius: '10px', background: '#D6EDF8' }}>
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px', padding: '9px 10px', borderRadius: '10px', background: 'var(--sidebar-user-bg)' }}>
           <div style={{
             width: '32px', height: '32px', borderRadius: '50%',
-            background: '#3FA9DC', color: 'white',
+            background: 'var(--brand)', color: 'white',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 700, fontSize: '11px', flexShrink: 0,
           }}>
             {initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontWeight: 600, color: '#1A4F6E', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontWeight: 600, color: 'var(--sidebar-user-fg)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.full_name || 'משתמש'}
             </p>
-            <p style={{ fontSize: '10px', color: '#5B8FA8', marginTop: '1px' }}>
+            <p style={{ fontSize: '10px', color: 'var(--sidebar-user-role)', marginTop: '1px' }}>
               {profile?.role === 'admin' ? 'מנהל' : 'נציג מכירות'}
             </p>
           </div>
@@ -145,11 +163,11 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         <button onClick={handleLogout} style={{
           width: '100%', padding: '7px 10px', borderRadius: '8px', fontSize: '12px',
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: '#7AAEC4', fontFamily: 'inherit', fontWeight: 500,
+          color: 'var(--sidebar-logout-fg)', fontFamily: 'inherit', fontWeight: 500,
           textAlign: 'right', transition: 'all 0.12s',
         }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#C0392B'; (e.currentTarget as HTMLElement).style.background = '#FEF2F2' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#7AAEC4'; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#EF4444'; (e.currentTarget as HTMLElement).style.background = dark ? '#2D1B1B' : '#FEF2F2' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-logout-fg)'; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
         >
           התנתקות
         </button>

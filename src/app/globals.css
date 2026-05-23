@@ -52,6 +52,51 @@
   --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
 
   --layout-sidebar-w: 240px;
+
+  /* Sidebar tokens */
+  --sidebar-bg:              #EBF5FA;
+  --sidebar-border:          #C8E3F0;
+  --sidebar-subtitle:        #5B8FA8;
+  --sidebar-nav-fg:          #3B6F8A;
+  --sidebar-nav-active-bg:   #C8E3F0;
+  --sidebar-nav-active-fg:   #1A4F6E;
+  --sidebar-nav-hover-bg:    #D6EDF8;
+  --sidebar-badge-bg:        #3FA9DC;
+  --sidebar-user-bg:         #D6EDF8;
+  --sidebar-user-fg:         #1A4F6E;
+  --sidebar-user-role:       #5B8FA8;
+  --sidebar-logout-fg:       #7AAEC4;
+  --sidebar-new-btn:         #8DCB3F;
+  --sidebar-new-btn-hover:   #6FA82E;
+}
+
+/* ─── Dark theme ──────────────────────────────────────────── */
+html.dark {
+  --bg-canvas:   #0D1117;
+  --bg-surface:  #161B22;
+  --bg-sunken:   #0D1117;
+  --bg-hover:    #21262D;
+  --fg-1:        #E6EDF3;
+  --fg-2:        #C9D1D9;
+  --fg-3:        #8B949E;
+  --fg-4:        #6E7681;
+  --border-subtle:  #21262D;
+  --border-default: #30363D;
+
+  --sidebar-bg:              #111827;
+  --sidebar-border:          #1F2937;
+  --sidebar-subtitle:        #6B7280;
+  --sidebar-nav-fg:          #9CA3AF;
+  --sidebar-nav-active-bg:   #1E3A5F;
+  --sidebar-nav-active-fg:   #93C5FD;
+  --sidebar-nav-hover-bg:    #1F2937;
+  --sidebar-badge-bg:        #2563EB;
+  --sidebar-user-bg:         #1F2937;
+  --sidebar-user-fg:         #E5E7EB;
+  --sidebar-user-role:       #9CA3AF;
+  --sidebar-logout-fg:       #6B7280;
+  --sidebar-new-btn:         #166534;
+  --sidebar-new-btn-hover:   #14532D;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,6 +109,30 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* ─── Sidebar nav links ───────────────────────────────────── */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--sidebar-nav-fg);
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.12s;
+}
+.sidebar-link:hover {
+  background: var(--sidebar-nav-hover-bg);
+  color: var(--sidebar-nav-active-fg);
+}
+.sidebar-link.active {
+  background: var(--sidebar-nav-active-bg);
+  color: var(--sidebar-nav-active-fg);
+  font-weight: 700;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -162,3 +231,51 @@ body {
   50% { opacity: 0.5; }
 }
 .animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+
+/* ─── Dark mode overrides ─────────────────────────────────── */
+html.dark .card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+html.dark .input-base {
+  color: var(--fg-1);
+  background: var(--bg-sunken);
+  border-color: var(--border-default);
+}
+html.dark .input-base option { background: #1F2937; color: var(--fg-1); }
+html.dark .input-base:focus { background: var(--bg-surface); }
+
+html.dark .btn-ghost {
+  background: var(--bg-sunken);
+  border-color: var(--border-default);
+  color: var(--fg-2);
+}
+html.dark .btn-ghost:hover { background: var(--bg-hover); color: var(--fg-1); }
+
+/* Dark badges */
+html.dark .temp-hot    { background: #3B1010; color: #FCA5A5; border-color: #7F1D1D; }
+html.dark .temp-medium { background: #3B2800; color: #FCD34D; border-color: #78350F; }
+html.dark .temp-cold   { background: #0C2A3A; color: #7DD3FC; border-color: #164E63; }
+
+html.dark .status-new          { background: #0C2A3A; color: #7DD3FC; border-color: #164E63; }
+html.dark .status-contacted    { background: #3B2800; color: #FCD34D; border-color: #78350F; }
+html.dark .status-in_progress  { background: #0F2E0A; color: #86EFAC; border-color: #14532D; }
+html.dark .status-published    { background: #0A2E12; color: #4ADE80; border-color: #14532D; }
+html.dark .status-not_relevant { background: #1F2937; color: #6B7280; border-color: #374151; }
+
+/* Dark theme toggle button */
+.theme-toggle {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: 1.5px solid var(--sidebar-border);
+  background: transparent;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sidebar-subtitle);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.theme-toggle:hover {
+  background: var(--sidebar-nav-hover-bg);
+  color: var(--sidebar-nav-active-fg);
+}

@@ -51,10 +51,10 @@ export default function LoginPage() {
 
         <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', width: '100%' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Sesya" style={{ height: '56px', width: 'auto', objectFit: 'contain', marginBottom: '24px', filter: 'brightness(0) invert(1)' }} />
-          <h2 style={{ fontSize: '28px', fontWeight: 800, color: 'white', marginBottom: '10px' }}>Sesya Leads</h2>
+          <img src="/logo-dark.png" alt="Leadly" style={{ height: '56px', width: 'auto', objectFit: 'contain', marginBottom: '24px' }} />
+          <h2 style={{ fontSize: '28px', fontWeight: 800, color: 'white', marginBottom: '10px' }}>Leadly</h2>
           <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '15px', maxWidth: '260px', margin: '0 auto 40px' }}>
-            מערכת ניהול לידים חכמה לצוות המכירות של ססיה
+            מערכת ניהול לידים חכמה מבוססת AI לעסקים
           </p>
 
           {/* Stats */}
@@ -87,7 +87,7 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Sesya" style={{ height: '48px', width: 'auto', objectFit: 'contain' }} />
+            <img src="/logo-light.png" alt="Leadly" style={{ height: '48px', width: 'auto', objectFit: 'contain' }} />
           </div>
 
           <div style={{
@@ -168,7 +168,7 @@ export default function LoginPage() {
           </div>
 
           <p style={{ textAlign: 'center', fontSize: '12px', color: '#94A3B8', marginTop: '20px' }}>
-            Sesya Lead Management System © 2026
+            Leadly © 2026 — AI Lead Management
           </p>
         </div>
       </div>
