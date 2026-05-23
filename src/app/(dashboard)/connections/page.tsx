@@ -119,31 +119,31 @@ export default function ConnectionsPage() {
     setTesting(false)
   }
 
-  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#5B8FA8' }}>טוען...</div>
+  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fg-3)' }}>טוען...</div>
 
   return (
     <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto', direction: 'rtl' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#1A4F6E', margin: 0 }}>חיבורים</h1>
-        <p style={{ fontSize: '13px', color: '#5B8FA8', marginTop: '4px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>חיבורים</h1>
+        <p style={{ fontSize: '13px', color: 'var(--fg-3)', marginTop: '4px' }}>
           חבר את חשבון הוואטסאפ שלך כדי שהסוכן יוכל לקבל ולשלוח הודעות
         </p>
       </div>
 
       {/* Webhook info box */}
       <div style={{
-        background: '#EBF5FA', borderRadius: '12px', padding: '16px 20px',
-        border: '1px solid #C8E3F0', marginBottom: '24px',
+        background: 'var(--bg-hover)', borderRadius: '12px', padding: '16px 20px',
+        border: '1px solid var(--border-default)', marginBottom: '24px',
       }}>
-        <p style={{ fontWeight: 700, color: '#1A4F6E', fontSize: '13px', margin: '0 0 6px' }}>
+        <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '13px', margin: '0 0 6px' }}>
           🔗 כתובת Webhook להגדרה ב-Green API:
         </p>
-        <code style={{ fontSize: '12px', color: '#3B6F8A', background: 'white', padding: '6px 10px', borderRadius: '6px', display: 'block' }}>
+        <code style={{ fontSize: '12px', color: 'var(--fg-2)', background: 'var(--bg-surface)', padding: '6px 10px', borderRadius: '6px', display: 'block' }}>
           {typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/whatsapp/webhook
         </code>
-        <p style={{ fontSize: '11px', color: '#7AAEC4', margin: '8px 0 0' }}>
+        <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '8px 0 0' }}>
           ב-Green API: הגדרות Instance → Notifications → כתוב את הכתובת לעיל
         </p>
       </div>
@@ -151,8 +151,8 @@ export default function ConnectionsPage() {
       {/* Connection card */}
       {connection && !showForm ? (
         <div style={{
-          background: 'white', borderRadius: '16px', padding: '24px',
-          border: '1px solid #C8E3F0', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px',
+          border: '1px solid var(--border-default)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
           marginBottom: '20px',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
@@ -165,8 +165,8 @@ export default function ConnectionsPage() {
                 📱
               </div>
               <div>
-                <p style={{ fontWeight: 700, color: '#1A4F6E', fontSize: '16px', margin: 0 }}>WhatsApp (Green API)</p>
-                <p style={{ fontSize: '12px', color: '#7AAEC4', margin: '3px 0 0' }}>
+                <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '16px', margin: 0 }}>WhatsApp (Green API)</p>
+                <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '3px 0 0' }}>
                   Instance: {connection.instance_id}
                 </p>
               </div>
@@ -182,11 +182,11 @@ export default function ConnectionsPage() {
           {/* Bot toggle */}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '14px 16px', background: '#F5F9FC', borderRadius: '10px', marginBottom: '16px',
+            padding: '14px 16px', background: 'var(--bg-sunken)', borderRadius: '10px', marginBottom: '16px',
           }}>
             <div>
-              <p style={{ fontWeight: 600, color: '#1A4F6E', fontSize: '14px', margin: 0 }}>סוכן AI אוטומטי</p>
-              <p style={{ fontSize: '12px', color: '#7AAEC4', margin: '3px 0 0' }}>
+              <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>סוכן AI אוטומטי</p>
+              <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '3px 0 0' }}>
                 {connection.bot_enabled ? 'הסוכן מגיב אוטומטית להודעות נכנסות' : 'הסוכן כבוי — הודעות נשמרות בלבד'}
               </p>
             </div>
@@ -222,8 +222,8 @@ export default function ConnectionsPage() {
               disabled={testing}
               style={{
                 flex: 1, padding: '10px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', background: 'white',
-                color: '#3B6F8A', fontFamily: 'inherit', fontWeight: 600,
+                border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
+                color: 'var(--fg-2)', fontFamily: 'inherit', fontWeight: 600,
                 fontSize: '13px', cursor: testing ? 'default' : 'pointer',
               }}
             >
@@ -233,8 +233,8 @@ export default function ConnectionsPage() {
               onClick={() => setShowForm(true)}
               style={{
                 flex: 1, padding: '10px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', background: 'white',
-                color: '#3B6F8A', fontFamily: 'inherit', fontWeight: 600,
+                border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
+                color: 'var(--fg-2)', fontFamily: 'inherit', fontWeight: 600,
                 fontSize: '13px', cursor: 'pointer',
               }}
             >
@@ -248,12 +248,12 @@ export default function ConnectionsPage() {
       {!connection && !showForm && (
         <div style={{
           textAlign: 'center', padding: '60px 20px',
-          background: 'white', borderRadius: '16px', border: '1px solid #E0EEF5',
+          background: 'var(--bg-surface)', borderRadius: '16px', border: '1px solid var(--border-subtle)',
           marginBottom: '20px',
         }}>
           <p style={{ fontSize: '48px', margin: '0 0 12px' }}>📱</p>
-          <p style={{ color: '#3B6F8A', fontSize: '16px', fontWeight: 600 }}>אין חיבור וואטסאפ</p>
-          <p style={{ color: '#7AAEC4', fontSize: '13px', marginBottom: '24px' }}>חבר את חשבון הוואטסאפ שלך כדי להתחיל</p>
+          <p style={{ color: 'var(--fg-2)', fontSize: '16px', fontWeight: 600 }}>אין חיבור וואטסאפ</p>
+          <p style={{ color: 'var(--fg-3)', fontSize: '13px', marginBottom: '24px' }}>חבר את חשבון הוואטסאפ שלך כדי להתחיל</p>
           <button
             onClick={() => setShowForm(true)}
             style={{
@@ -270,16 +270,16 @@ export default function ConnectionsPage() {
       {/* Form */}
       {showForm && (
         <div style={{
-          background: 'white', borderRadius: '16px', padding: '24px',
-          border: '1px solid #C8E3F0', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px',
+          border: '1px solid var(--border-default)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
           marginBottom: '20px',
         }}>
-          <h3 style={{ margin: '0 0 20px', color: '#1A4F6E', fontSize: '16px' }}>
+          <h3 style={{ margin: '0 0 20px', color: 'var(--fg-1)', fontSize: '16px' }}>
             {connection ? 'ערוך חיבור' : 'הוסף חיבור Green API'}
           </h3>
 
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#3B6F8A', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '6px' }}>
               Instance ID
             </label>
             <input
@@ -288,14 +288,14 @@ export default function ConnectionsPage() {
               placeholder="למשל: 7107622341"
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
-                boxSizing: 'border-box',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                background: 'var(--bg-sunken)', color: 'var(--fg-1)', boxSizing: 'border-box',
               }}
             />
           </div>
 
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#3B6F8A', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '6px' }}>
               API Token
             </label>
             <input
@@ -304,14 +304,14 @@ export default function ConnectionsPage() {
               placeholder="הטוקן מ-Green API"
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
-                boxSizing: 'border-box',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                background: 'var(--bg-sunken)', color: 'var(--fg-1)', boxSizing: 'border-box',
               }}
             />
           </div>
 
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#3B6F8A', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '6px' }}>
               API URL
             </label>
             <input
@@ -320,11 +320,11 @@ export default function ConnectionsPage() {
               placeholder="https://7107.api.greenapi.com"
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
-                boxSizing: 'border-box',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                background: 'var(--bg-sunken)', color: 'var(--fg-1)', boxSizing: 'border-box',
               }}
             />
-            <p style={{ fontSize: '11px', color: '#7AAEC4', margin: '5px 0 0' }}>
+            <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '5px 0 0' }}>
               מצא את ה-URL ב-Green API ← הגדרות Instance
             </p>
           </div>
@@ -333,8 +333,8 @@ export default function ConnectionsPage() {
             <button
               onClick={() => setShowForm(false)}
               style={{
-                padding: '9px 18px', borderRadius: '8px', border: '1px solid #C8E3F0',
-                background: 'white', color: '#5B8FA8', fontFamily: 'inherit', cursor: 'pointer', fontSize: '13px',
+                padding: '9px 18px', borderRadius: '8px', border: '1px solid var(--border-default)',
+                background: 'var(--bg-surface)', color: 'var(--fg-3)', fontFamily: 'inherit', cursor: 'pointer', fontSize: '13px',
               }}
             >
               ביטול
@@ -357,10 +357,10 @@ export default function ConnectionsPage() {
 
       {/* Instructions */}
       <div style={{
-        background: 'white', borderRadius: '12px', padding: '20px',
-        border: '1px solid #E0EEF5',
+        background: 'var(--bg-surface)', borderRadius: '12px', padding: '20px',
+        border: '1px solid var(--border-subtle)',
       }}>
-        <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1A4F6E', margin: '0 0 14px' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg-1)', margin: '0 0 14px' }}>
           איך מחברים Green API?
         </h3>
         {[
@@ -377,7 +377,7 @@ export default function ConnectionsPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '11px', fontWeight: 700, flexShrink: 0,
             }}>{num}</span>
-            <p style={{ fontSize: '13px', color: '#3B6F8A', margin: 0, lineHeight: 1.5 }}>{text}</p>
+            <p style={{ fontSize: '13px', color: 'var(--fg-2)', margin: 0, lineHeight: 1.5 }}>{text}</p>
           </div>
         ))}
       </div>

@@ -168,13 +168,13 @@ export default function ConversationsPage() {
       {/* Conversation list */}
       <div style={{
         width: '320px', flexShrink: 0,
-        borderLeft: '1px solid #C8E3F0',
+        borderLeft: '1px solid var(--border-default)',
         display: 'flex', flexDirection: 'column',
-        background: 'white',
+        background: 'var(--bg-surface)',
       }}>
-        <div style={{ padding: '20px 16px', borderBottom: '1px solid #E0EEF5' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1A4F6E', margin: 0 }}>שיחות</h2>
-          <p style={{ fontSize: '12px', color: '#7AAEC4', margin: '4px 0 0' }}>{conversations.length} שיחות</p>
+        <div style={{ padding: '20px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>שיחות</h2>
+          <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '4px 0 0' }}>{conversations.length} שיחות</p>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -191,8 +191,8 @@ export default function ConversationsPage() {
                 style={{
                   padding: '14px 16px',
                   cursor: 'pointer',
-                  borderBottom: '1px solid #F0F7FA',
-                  background: selected?.id === conv.id ? '#EBF5FA' : 'white',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: selected?.id === conv.id ? 'var(--bg-hover)' : 'var(--bg-surface)',
                   transition: 'background 0.1s',
                 }}
               >
@@ -200,22 +200,22 @@ export default function ConversationsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div style={{
                       width: '36px', height: '36px', borderRadius: '50%',
-                      background: '#C8E3F0', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '14px', fontWeight: 700, color: '#1A4F6E', flexShrink: 0,
+                      background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '14px', fontWeight: 700, color: 'var(--fg-1)', flexShrink: 0,
                     }}>
                       {(conv.contact_name || conv.contact_phone)[0]}
                     </div>
                     <div>
-                      <p style={{ fontWeight: 600, color: '#1A4F6E', fontSize: '14px', margin: 0 }}>
+                      <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
                         {conv.contact_name || conv.contact_phone}
                       </p>
                       {conv.contact_name && (
-                        <p style={{ fontSize: '11px', color: '#7AAEC4', margin: '1px 0 0' }}>{conv.contact_phone}</p>
+                        <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '1px 0 0' }}>{conv.contact_phone}</p>
                       )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', color: '#7AAEC4' }}>{formatTime(conv.updated_at)}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatTime(conv.updated_at)}</span>
                     <span style={{
                       fontSize: '10px', padding: '2px 6px', borderRadius: '99px',
                       background: conv.bot_enabled ? '#E8F8EC' : '#FEF2F2',
@@ -233,31 +233,31 @@ export default function ConversationsPage() {
 
       {/* Chat window */}
       {selected ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#F5F9FC' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-canvas)' }}>
 
           {/* Chat header */}
           <div style={{
-            padding: '14px 20px', background: 'white', borderBottom: '1px solid #C8E3F0',
+            padding: '14px 20px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-default)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
                 width: '38px', height: '38px', borderRadius: '50%',
-                background: '#C8E3F0', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '16px', fontWeight: 700, color: '#1A4F6E',
+                background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '16px', fontWeight: 700, color: 'var(--fg-1)',
               }}>
                 {(selected.contact_name || selected.contact_phone)[0]}
               </div>
               <div>
-                <p style={{ fontWeight: 700, color: '#1A4F6E', fontSize: '15px', margin: 0 }}>
+                <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: 0 }}>
                   {selected.contact_name || selected.contact_phone}
                 </p>
-                <p style={{ fontSize: '12px', color: '#7AAEC4', margin: '2px 0 0' }}>{selected.contact_phone}</p>
+                <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '2px 0 0' }}>{selected.contact_phone}</p>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: '#5B8FA8' }}>
+              <span style={{ fontSize: '12px', color: 'var(--fg-3)' }}>
                 {selected.bot_enabled ? 'הבוט מגיב אוטומטית' : 'מצב ידני'}
               </span>
               <button
@@ -298,19 +298,19 @@ export default function ConversationsPage() {
                     : '16px 16px 16px 4px',
                   background: msg.direction === 'inbound'
                     ? '#DCF8C6'
-                    : msg.sender_type === 'ai' ? '#EBF5FA' : 'white',
+                    : msg.sender_type === 'ai' ? 'var(--bg-hover)' : 'var(--bg-surface)',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                  border: msg.sender_type === 'human' ? '1px solid #C8E3F0' : 'none',
+                  border: msg.sender_type === 'human' ? '1px solid var(--border-default)' : 'none',
                 }}>
                   {msg.sender_type !== 'contact' && (
-                    <p style={{ fontSize: '10px', color: '#7AAEC4', margin: '0 0 4px', fontWeight: 600 }}>
+                    <p style={{ fontSize: '10px', color: 'var(--fg-3)', margin: '0 0 4px', fontWeight: 600 }}>
                       {msg.sender_type === 'ai' ? '🤖 AI' : '👤 נציג'}
                     </p>
                   )}
-                  <p style={{ margin: 0, fontSize: '14px', color: '#1A4F6E', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: 'var(--fg-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                     {msg.content}
                   </p>
-                  <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#7AAEC4', textAlign: 'left' }}>
+                  <p style={{ margin: '4px 0 0', fontSize: '10px', color: 'var(--fg-3)', textAlign: 'left' }}>
                     {formatTime(msg.created_at)}
                   </p>
                 </div>
@@ -321,7 +321,7 @@ export default function ConversationsPage() {
 
           {/* Input */}
           <div style={{
-            padding: '14px 20px', background: 'white', borderTop: '1px solid #C8E3F0',
+            padding: '14px 20px', background: 'var(--bg-surface)', borderTop: '1px solid var(--border-default)',
             display: 'flex', gap: '10px', alignItems: 'flex-end',
           }}>
             <textarea
@@ -332,8 +332,8 @@ export default function ConversationsPage() {
               rows={2}
               style={{
                 flex: 1, padding: '10px 14px', borderRadius: '10px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
-                resize: 'none', outline: 'none',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                resize: 'none', outline: 'none', background: 'var(--bg-sunken)', color: 'var(--fg-1)',
               }}
             />
             <button
@@ -350,10 +350,10 @@ export default function ConversationsPage() {
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F5F9FC' }}>
-          <div style={{ textAlign: 'center', color: '#7AAEC4' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-canvas)' }}>
+          <div style={{ textAlign: 'center', color: 'var(--fg-3)' }}>
             <p style={{ fontSize: '48px', margin: '0 0 12px' }}>💬</p>
-            <p style={{ fontSize: '16px', fontWeight: 600, color: '#3B6F8A' }}>בחר שיחה</p>
+            <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--fg-2)' }}>בחר שיחה</p>
             <p style={{ fontSize: '13px' }}>לחץ על שיחה מהרשימה כדי לצפות בה</p>
           </div>
         </div>

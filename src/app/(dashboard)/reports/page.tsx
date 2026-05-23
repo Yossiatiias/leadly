@@ -101,7 +101,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-extrabold" style={{ color: '#1E293B' }}>דוחות וייצוא</h1>
+          <h1 className="text-2xl font-extrabold" style={{ color: 'var(--fg-1)' }}>דוחות וייצוא</h1>
           <p className="text-gray-400 text-sm mt-0.5">{leads.length} לידים{hasFilters && ' (מסוננים)'}</p>
         </div>
         <div className="flex gap-2">
@@ -181,10 +181,10 @@ export default function ReportsPage() {
       <div className="card overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr style={{ borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+            <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
               {['שם', 'חברה', 'טלפון', 'מקור', 'טמפ׳', 'סטטוס', 'איש מכירות', 'תאריך יצירה'].map((h, i) => (
                 <th key={h} className="text-right text-[11px] font-extrabold uppercase tracking-wider py-3 whitespace-nowrap"
-                  style={{ paddingRight: '20px', paddingLeft: i === 0 ? '40px' : '20px', color: '#64748B' }}>{h}</th>
+                  style={{ paddingRight: '20px', paddingLeft: i === 0 ? '40px' : '20px', color: 'var(--fg-3)' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -204,17 +204,17 @@ export default function ReportsPage() {
               const temp = TEMP_CONFIG[lead.temperature as keyof typeof TEMP_CONFIG] || TEMP_CONFIG.medium
               const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG]
               return (
-                <tr key={lead.id} style={{ borderBottom: '1px solid #F8FAFC', transition: 'background 0.1s' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F8FAFC'}
+                <tr key={lead.id} style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.1s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-sunken)'}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                  <td className="py-3 text-sm font-bold whitespace-nowrap" style={{ paddingRight: '20px', paddingLeft: '40px', color: '#1E293B' }}>{lead.name}</td>
-                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: '#64748B' }}>
+                  <td className="py-3 text-sm font-bold whitespace-nowrap" style={{ paddingRight: '20px', paddingLeft: '40px', color: 'var(--fg-1)' }}>{lead.name}</td>
+                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: 'var(--fg-3)' }}>
                     {lead.company_name || '—'}
                     {lead.clinic_count && <span className="text-xs opacity-60"> · {lead.clinic_count}</span>}
                   </td>
-                  <td className="px-5 py-3 text-sm font-mono whitespace-nowrap text-center" dir="ltr" style={{ color: '#64748B', minWidth: '140px' }}>{lead.phone || '—'}</td>
+                  <td className="px-5 py-3 text-sm font-mono whitespace-nowrap text-center" dir="ltr" style={{ color: 'var(--fg-3)', minWidth: '140px' }}>{lead.phone || '—'}</td>
                   <td className="px-8 py-3 whitespace-nowrap">
-                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: '#F1F5F9', color: '#475569' }}>
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'var(--bg-hover)', color: 'var(--fg-2)' }}>
                       {SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}
                     </span>
                   </td>
@@ -228,8 +228,8 @@ export default function ReportsPage() {
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: '#64748B' }}>{lead.profile?.full_name || '—'}</td>
-                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: '#94A3B8' }}>{new Date(lead.created_at).toLocaleDateString('he-IL')}</td>
+                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: 'var(--fg-3)' }}>{lead.profile?.full_name || '—'}</td>
+                  <td className="px-5 py-3 text-sm whitespace-nowrap" style={{ color: 'var(--fg-4)' }}>{new Date(lead.created_at).toLocaleDateString('he-IL')}</td>
                 </tr>
               )
             })}
@@ -238,7 +238,7 @@ export default function ReportsPage() {
       </div>
 
       {leads.length > 0 && (
-        <p className="text-center text-xs mt-4" style={{ color: '#94A3B8' }}>
+        <p className="text-center text-xs mt-4" style={{ color: 'var(--fg-4)' }}>
           אחוז המרה: {convRate}% ({published} מתוך {leads.length} לידים פרסמו)
         </p>
       )}

@@ -230,7 +230,7 @@ export default function LeadDetailPage() {
               </div>
             ) : (
               <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, rgba(125,194,66,0.06), rgba(91,184,228,0.06))', border: '1.5px solid rgba(125,194,66,0.2)' }}>
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{aiScript}</pre>
+                <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed" style={{ color: 'var(--fg-2)' }}>{aiScript}</pre>
                 <button onClick={generateScript} className="mt-3 text-xs text-purple-500 hover:text-purple-700 font-semibold flex items-center gap-1">
                   <RefreshCw size={11} />
                   רענן סקריפט

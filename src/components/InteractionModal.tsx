@@ -92,22 +92,23 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           <div>
-            <h3 className="font-extrabold text-gray-900">תיעוד אינטראקציה</h3>
-            <p className="text-sm text-gray-400 mt-0.5">עם {leadName}</p>
+            <h3 className="font-extrabold" style={{ color: '#E6EDF3' }}>תיעוד אינטראקציה</h3>
+            <p className="text-sm mt-0.5" style={{ color: '#8B949E' }}>עם {leadName}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors">
-            <X size={15} className="text-gray-500" />
+          <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <X size={15} style={{ color: '#8B949E' }} />
           </button>
         </div>
 
         <div className="p-6 space-y-5">
           {/* Type */}
           <div>
-            <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">סוג אינטראקציה</label>
+            <label className="block text-xs font-extrabold uppercase tracking-wider mb-2" style={{ color: '#8B949E' }}>סוג אינטראקציה</label>
             <div className="flex gap-2">
               {TYPES.map(({ value, label, icon: Icon, color }) => (
                 <button key={value} onClick={() => setType(value)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${type === value ? color + ' border-current' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}>
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${type === value ? color + ' border-current' : 'border-gray-700'}`}
+                  style={type !== value ? { background: 'rgba(255,255,255,0.05)', color: '#8B949E' } : {}}>
                   <Icon size={14} />
                   {label}
                 </button>
@@ -117,12 +118,13 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">מה קרה?</label>
+            <label className="block text-xs font-extrabold uppercase tracking-wider mb-2" style={{ color: '#8B949E' }}>מה קרה?</label>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={3}
-              className="input-base resize-none"
+              className="resize-none w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E6EDF3', fontFamily: 'inherit' }}
               placeholder="תאר בקצרה את השיחה, מה אמר, מה ביקש..."
             />
             {notes.length > 10 && (
@@ -145,18 +147,20 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
                 value={aiSummary}
                 onChange={e => setAiSummary(e.target.value)}
                 rows={3}
-                className="w-full text-sm text-gray-700 bg-transparent resize-none outline-none"
+                className="w-full text-sm bg-transparent resize-none outline-none"
+                style={{ color: '#C9D1D9' }}
               />
             </div>
           )}
 
           {/* Outcome */}
           <div>
-            <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">תוצאה</label>
+            <label className="block text-xs font-extrabold uppercase tracking-wider mb-2" style={{ color: '#8B949E' }}>תוצאה</label>
             <div className="flex flex-wrap gap-2">
               {OUTCOMES.map(({ value, label }) => (
                 <button key={value} onClick={() => setOutcome(value)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${outcome === value ? 'sesya-gradient text-white border-transparent' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${outcome === value ? 'sesya-gradient text-white border-transparent' : 'border-gray-700'}`}
+                  style={outcome !== value ? { background: 'rgba(255,255,255,0.05)', color: '#8B949E' } : {}}>
                   {label}
                 </button>
               ))}
@@ -165,8 +169,10 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
 
           {/* Next follow-up */}
           <div>
-            <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">follow-up הבא</label>
-            <input type="date" value={nextFollowup} onChange={e => setNextFollowup(e.target.value)} className="input-base" dir="ltr" />
+            <label className="block text-xs font-extrabold uppercase tracking-wider mb-2" style={{ color: '#8B949E' }}>follow-up הבא</label>
+            <input type="date" value={nextFollowup} onChange={e => setNextFollowup(e.target.value)} dir="ltr"
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E6EDF3', fontFamily: 'inherit' }} />
           </div>
         </div>
 

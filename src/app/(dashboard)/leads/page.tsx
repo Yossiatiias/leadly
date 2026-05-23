@@ -62,7 +62,7 @@ export default function LeadsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 500, color: '#374151' }}>כל הלידים</h1>
+          <h1 style={{ fontSize: '22px', fontWeight: 500, color: 'var(--fg-2)' }}>כל הלידים</h1>
           <p className="text-gray-400 text-sm mt-0.5">
             {filtered.length} מתוך {leads.length} לידים
             {hasFilters && ' (מסונן)'}
@@ -143,9 +143,9 @@ export default function LeadsPage() {
       <div className="card overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr style={{ borderBottom: '1px solid #E5E7EB', background: '#F9FAFB' }}>
+            <tr style={{ borderBottom: '1px solid var(--border-default)', background: 'var(--bg-sunken)' }}>
               {['', 'איש קשר', 'טלפון', 'מקור', 'סטטוס', 'איש מכירות', 'follow-up', ''].map((h, i) => (
-                <th key={i} style={{ textAlign: 'right', fontSize: '11px', fontWeight: 500, color: '#374151', padding: '10px 14px', letterSpacing: '0.03em' }}>{h}</th>
+                <th key={i} style={{ textAlign: 'right', fontSize: '11px', fontWeight: 500, color: 'var(--fg-2)', padding: '10px 14px', letterSpacing: '0.03em' }}>{h}</th>
               ))}
             </tr>
           </thead>

@@ -94,7 +94,7 @@ export default function QAPage() {
     setShowForm(true)
   }
 
-  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#5B8FA8' }}>טוען...</div>
+  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fg-3)' }}>טוען...</div>
 
   const grouped = CATEGORIES.reduce((acc, cat) => {
     acc[cat] = items.filter(i => i.category === cat)
@@ -107,8 +107,8 @@ export default function QAPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#1A4F6E', margin: 0 }}>שאלות ותשובות</h1>
-          <p style={{ fontSize: '13px', color: '#5B8FA8', marginTop: '4px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>שאלות ותשובות</h1>
+          <p style={{ fontSize: '13px', color: 'var(--fg-3)', marginTop: '4px' }}>
             מאגר הידע שממנו הסוכן לוקח מידע כשמתכתב עם לקוחות
           </p>
         </div>
@@ -127,16 +127,16 @@ export default function QAPage() {
       {/* Form */}
       {showForm && (
         <div style={{
-          background: 'white', borderRadius: '14px', padding: '24px',
+          background: 'var(--bg-surface)', borderRadius: '14px', padding: '24px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.08)', marginBottom: '28px',
-          border: '1px solid #E0EEF5',
+          border: '1px solid var(--border-subtle)',
         }}>
-          <h3 style={{ margin: '0 0 16px', color: '#1A4F6E', fontSize: '16px' }}>
+          <h3 style={{ margin: '0 0 16px', color: 'var(--fg-1)', fontSize: '16px' }}>
             {editingId ? 'עריכת שאלה' : 'שאלה חדשה'}
           </h3>
 
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#3B6F8A', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '6px' }}>
               קטגוריה
             </label>
             <select
@@ -144,8 +144,8 @@ export default function QAPage() {
               onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
-                background: 'white', color: '#1A4F6E',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                background: 'var(--bg-surface)', color: 'var(--fg-1)',
               }}
             >
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -153,7 +153,7 @@ export default function QAPage() {
           </div>
 
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#3B6F8A', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '6px' }}>
               שאלה
             </label>
             <input
@@ -162,14 +162,15 @@ export default function QAPage() {
               placeholder="למשל: מה שעות הפעילות שלכם?"
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                background: 'var(--bg-sunken)', color: 'var(--fg-1)',
                 boxSizing: 'border-box',
               }}
             />
           </div>
 
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#3B6F8A', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '6px' }}>
               תשובה
             </label>
             <textarea
@@ -179,7 +180,8 @@ export default function QAPage() {
               rows={4}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: '8px',
-                border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
+                border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+                background: 'var(--bg-sunken)', color: 'var(--fg-1)',
                 resize: 'vertical', boxSizing: 'border-box',
               }}
             />
@@ -189,8 +191,8 @@ export default function QAPage() {
             <button
               onClick={() => { setShowForm(false); setEditingId(null) }}
               style={{
-                padding: '9px 18px', borderRadius: '8px', border: '1px solid #C8E3F0',
-                background: 'white', color: '#5B8FA8', fontFamily: 'inherit', cursor: 'pointer', fontSize: '13px',
+                padding: '9px 18px', borderRadius: '8px', border: '1px solid var(--border-default)',
+                background: 'var(--bg-surface)', color: 'var(--fg-3)', fontFamily: 'inherit', cursor: 'pointer', fontSize: '13px',
               }}
             >
               ביטול
@@ -215,11 +217,11 @@ export default function QAPage() {
       {items.length === 0 ? (
         <div style={{
           textAlign: 'center', padding: '60px 20px',
-          background: 'white', borderRadius: '14px', border: '1px solid #E0EEF5',
+          background: 'var(--bg-surface)', borderRadius: '14px', border: '1px solid var(--border-subtle)',
         }}>
           <p style={{ fontSize: '32px', margin: '0 0 12px' }}>💡</p>
-          <p style={{ color: '#3B6F8A', fontSize: '16px', fontWeight: 600 }}>עדיין אין שאלות</p>
-          <p style={{ color: '#7AAEC4', fontSize: '13px' }}>הוסף שאלות ותשובות כדי שהסוכן יוכל לענות ללקוחות</p>
+          <p style={{ color: 'var(--fg-2)', fontSize: '16px', fontWeight: 600 }}>עדיין אין שאלות</p>
+          <p style={{ color: 'var(--fg-3)', fontSize: '13px' }}>הוסף שאלות ותשובות כדי שהסוכן יוכל לענות ללקוחות</p>
         </div>
       ) : (
         CATEGORIES.map(cat => {
@@ -227,22 +229,22 @@ export default function QAPage() {
           if (catItems.length === 0) return null
           return (
             <div key={cat} style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#5B8FA8', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--fg-3)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {cat} ({catItems.length})
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {catItems.map(item => (
                   <div key={item.id} style={{
-                    background: 'white', borderRadius: '12px', padding: '16px 18px',
-                    border: `1px solid ${item.is_active ? '#C8E3F0' : '#E8E8E8'}`,
+                    background: 'var(--bg-surface)', borderRadius: '12px', padding: '16px 18px',
+                    border: `1px solid ${item.is_active ? 'var(--border-default)' : 'var(--border-subtle)'}`,
                     opacity: item.is_active ? 1 : 0.6,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontWeight: 600, color: '#1A4F6E', fontSize: '14px', margin: '0 0 6px' }}>
+                        <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '14px', margin: '0 0 6px' }}>
                           {item.question}
                         </p>
-                        <p style={{ color: '#5B8FA8', fontSize: '13px', margin: 0, lineHeight: 1.5 }}>
+                        <p style={{ color: 'var(--fg-3)', fontSize: '13px', margin: 0, lineHeight: 1.5 }}>
                           {item.answer}
                         </p>
                       </div>

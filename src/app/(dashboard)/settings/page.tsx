@@ -132,37 +132,38 @@ export default function SettingsPage() {
     setServices(s => s.filter((_, idx) => idx !== i))
   }
 
-  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#5B8FA8' }}>טוען...</div>
+  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fg-3)' }}>טוען...</div>
 
   const inputStyle = {
     width: '100%', padding: '10px 12px', borderRadius: '8px',
-    border: '1px solid #C8E3F0', fontSize: '14px', fontFamily: 'inherit',
-    boxSizing: 'border-box' as const, outline: 'none', color: '#1A4F6E',
+    border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
+    boxSizing: 'border-box' as const, outline: 'none', color: 'var(--fg-1)' as string,
+    background: 'var(--bg-sunken)' as string,
   }
 
   const labelStyle = {
     display: 'block' as const, fontSize: '13px', fontWeight: 600 as const,
-    color: '#3B6F8A', marginBottom: '6px',
+    color: 'var(--fg-2)' as string, marginBottom: '6px',
   }
 
   const sectionStyle = {
-    background: 'white', borderRadius: '16px', padding: '24px',
-    border: '1px solid #C8E3F0', marginBottom: '20px',
+    background: 'var(--bg-surface)' as string, borderRadius: '16px', padding: '24px',
+    border: '1px solid var(--border-default)', marginBottom: '20px',
   }
 
   return (
     <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto', direction: 'rtl' }}>
 
       <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#1A4F6E', margin: 0 }}>הגדרות עסק</h1>
-        <p style={{ fontSize: '13px', color: '#5B8FA8', marginTop: '4px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>הגדרות עסק</h1>
+        <p style={{ fontSize: '13px', color: 'var(--fg-3)', marginTop: '4px' }}>
           המידע הזה מוזן לסוכן ה-AI כדי שיוכל לענות ללקוחות בצורה מדויקת
         </p>
       </div>
 
       {/* Basic Info */}
       <div style={sectionStyle}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1A4F6E', margin: '0 0 20px' }}>פרטי עסק בסיסיים</h3>
+        <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', margin: '0 0 20px' }}>פרטי עסק בסיסיים</h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
           <div>
@@ -193,8 +194,8 @@ export default function SettingsPage() {
 
       {/* AI Settings */}
       <div style={sectionStyle}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1A4F6E', margin: '0 0 6px' }}>🤖 הגדרות סוכן AI</h3>
-        <p style={{ fontSize: '12px', color: '#7AAEC4', margin: '0 0 20px' }}>ככל שתכתוב יותר פרטים — כך ה-AI יענה טוב יותר</p>
+        <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', margin: '0 0 6px' }}>🤖 הגדרות סוכן AI</h3>
+        <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '0 0 20px' }}>ככל שתכתוב יותר פרטים — כך ה-AI יענה טוב יותר</p>
 
         {/* Goal */}
         <div style={{ marginBottom: '16px' }}>
@@ -206,9 +207,9 @@ export default function SettingsPage() {
                 onClick={() => setForm(f => ({ ...f, goal: g.value }))}
                 style={{
                   padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
-                  border: `2px solid ${form.goal === g.value ? '#3FA9DC' : '#C8E3F0'}`,
-                  background: form.goal === g.value ? '#EBF5FA' : 'white',
-                  color: form.goal === g.value ? '#1A4F6E' : '#5B8FA8',
+                  border: `2px solid ${form.goal === g.value ? '#3FA9DC' : 'var(--border-default)'}`,
+                  background: form.goal === g.value ? 'var(--bg-hover)' : 'var(--bg-surface)',
+                  color: form.goal === g.value ? 'var(--fg-1)' : 'var(--fg-3)',
                   fontSize: '13px', fontWeight: form.goal === g.value ? 700 : 500,
                   transition: 'all 0.15s',
                 }}
@@ -265,8 +266,8 @@ export default function SettingsPage() {
       <div style={sectionStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1A4F6E', margin: 0 }}>💼 שירותים ומחירים</h3>
-            <p style={{ fontSize: '12px', color: '#7AAEC4', margin: '4px 0 0' }}>ה-AI ישתמש בזה כדי לענות על שאלות מחיר וזמן</p>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>💼 שירותים ומחירים</h3>
+            <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '4px 0 0' }}>ה-AI ישתמש בזה כדי לענות על שאלות מחיר וזמן</p>
           </div>
           <button onClick={addService} style={{
             padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -277,32 +278,32 @@ export default function SettingsPage() {
         </div>
 
         {services.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '24px', color: '#7AAEC4', fontSize: '13px',
-            background: '#F5F9FC', borderRadius: '10px', border: '1px dashed #C8E3F0' }}>
+          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--fg-3)', fontSize: '13px',
+            background: 'var(--bg-sunken)', borderRadius: '10px', border: '1px dashed var(--border-default)' }}>
             אין שירותים עדיין — לחץ "+ הוסף שירות"
           </div>
         )}
 
         {services.map((svc, i) => (
           <div key={i} style={{
-            background: '#F5F9FC', borderRadius: '10px', padding: '16px',
-            marginBottom: '12px', border: '1px solid #C8E3F0',
+            background: 'var(--bg-sunken)', borderRadius: '10px', padding: '16px',
+            marginBottom: '12px', border: '1px solid var(--border-default)',
           }}>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}>
               <div>
                 <label style={{ ...labelStyle, fontSize: '11px' }}>שם השירות</label>
                 <input value={svc.name} onChange={e => updateService(i, 'name', e.target.value)}
-                  placeholder="למשל: טיפול גב" style={{ ...inputStyle, background: 'white' }} />
+                  placeholder="למשל: טיפול גב" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
               </div>
               <div>
                 <label style={{ ...labelStyle, fontSize: '11px' }}>מחיר (₪)</label>
                 <input value={svc.price} onChange={e => updateService(i, 'price', e.target.value)}
-                  placeholder="250" style={{ ...inputStyle, background: 'white' }} />
+                  placeholder="250" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
               </div>
               <div>
                 <label style={{ ...labelStyle, fontSize: '11px' }}>משך (דקות)</label>
                 <input value={svc.duration} onChange={e => updateService(i, 'duration', e.target.value)}
-                  placeholder="60" style={{ ...inputStyle, background: 'white' }} />
+                  placeholder="60" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
               </div>
               <button onClick={() => removeService(i)} style={{
                 width: '32px', height: '36px', borderRadius: '6px', border: 'none',
@@ -313,7 +314,7 @@ export default function SettingsPage() {
             <div style={{ marginTop: '10px' }}>
               <label style={{ ...labelStyle, fontSize: '11px' }}>תיאור קצר (אופציונלי)</label>
               <input value={svc.description} onChange={e => updateService(i, 'description', e.target.value)}
-                placeholder="תיאור קצר של השירות" style={{ ...inputStyle, background: 'white' }} />
+                placeholder="תיאור קצר של השירות" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
             </div>
           </div>
         ))}
