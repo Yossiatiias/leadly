@@ -7,10 +7,13 @@ import type { Profile } from '@/types'
 import { useEffect, useState } from 'react'
 
 const navItems = [
-  { href: '/',         label: 'התחל כאן'  },
-  { href: '/leads',    label: 'כל הלידים' },
-  { href: '/reports',  label: 'דוחות'     },
-  { href: '/messages', label: 'הודעות'    },
+  { href: '/',             label: 'בית'              },
+  { href: '/conversations', label: 'שיחות'           },
+  { href: '/leads',        label: 'לידים'            },
+  { href: '/qa',           label: 'שאלות ותשובות'   },
+  { href: '/connections',  label: 'חיבורים'          },
+  { href: '/reports',      label: 'דוחות'            },
+  { href: '/settings',     label: 'הגדרות עסק'       },
 ]
 
 export default function Sidebar({ profile }: { profile: Profile | null }) {
@@ -87,10 +90,8 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
       {/* Nav */}
       <nav style={{ flex: 1, padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
         {navItems.map(({ href, label }) => {
-          const active = href === '/messages'
-            ? pathname.startsWith('/messages')
-            : pathname === href
-          const showBadge = href === '/messages' && unread > 0 && !active
+          const active = pathname === href || (href !== '/' && pathname.startsWith(href))
+          const showBadge = href === '/conversations' && unread > 0 && !active
 
           return (
             <Link key={href} href={href} style={{

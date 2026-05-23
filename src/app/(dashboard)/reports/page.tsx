@@ -10,14 +10,31 @@ export default function ReportsPage() {
   const supabase = createClient()
   const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [businessId, setBusinessId] = useState<string | null>(null)
   const [filters, setFilters] = useState({ status: '', source: '', temperature: '', from: '', to: '' })
 
   useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('business_id')
+        .eq('id', user.id)
+        .single()
+      if (profile?.business_id) setBusinessId(profile.business_id)
+    }
+    init()
+  }, [])
+
+  useEffect(() => {
+    if (!businessId) return
     async function load() {
       setLoading(true)
       let query = supabase
         .from('leads')
         .select('*, profile:profiles!leads_assigned_to_fkey(full_name)')
+        .eq('business_id', businessId)
         .order('created_at', { ascending: false })
 
       if (filters.status) query = query.eq('status', filters.status)
@@ -31,7 +48,7 @@ export default function ReportsPage() {
       setLoading(false)
     }
     load()
-  }, [filters])
+  }, [filters, businessId])
 
   function buildRows() {
     return leads.map(l => ({
