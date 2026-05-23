@@ -68,10 +68,10 @@ function DonutChart({ slices, size = 120 }: { slices: { value: number; color: st
 
 function KpiCard({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color: string; bg: string }) {
   return (
-    <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E5E7EB', padding: '20px 22px', boxShadow: '0 1px 3px rgba(17,24,39,0.05)' }}>
-      <p style={{ fontSize: '12px', fontWeight: 500, color: '#9CA3AF', marginBottom: '10px' }}>{label}</p>
+    <div style={{ background: 'var(--bg-surface)', borderRadius: '16px', border: '1px solid var(--border-subtle)', padding: '20px 22px', boxShadow: '0 1px 3px rgba(17,24,39,0.05)' }}>
+      <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fg-4)', marginBottom: '10px' }}>{label}</p>
       <p style={{ fontSize: '28px', fontWeight: 400, color, lineHeight: 1 }}>{value}</p>
-      {sub && <p style={{ fontSize: '11px', color: '#C4C9D4', marginTop: '8px', fontWeight: 400 }}>{sub}</p>}
+      {sub && <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '8px', fontWeight: 400 }}>{sub}</p>}
     </div>
   )
 }
