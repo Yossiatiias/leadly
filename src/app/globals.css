@@ -263,6 +263,14 @@ html.dark .status-in_progress  { background: #0F2E0A; color: #86EFAC; border-col
 html.dark .status-published    { background: #0A2E12; color: #4ADE80; border-color: #14532D; }
 html.dark .status-not_relevant { background: #1F2937; color: #6B7280; border-color: #374151; }
 
+/* Dark mode — page-level overrides */
+html.dark table { color: var(--fg-2); }
+html.dark thead tr { background: var(--bg-sunken) !important; border-color: var(--border-subtle) !important; }
+html.dark tbody tr:hover { background: var(--bg-hover) !important; }
+html.dark td, html.dark th { color: var(--fg-2) !important; border-color: var(--border-subtle) !important; }
+html.dark h1, html.dark h2, html.dark h3 { color: var(--fg-1) !important; }
+html.dark p { color: var(--fg-3); }
+
 /* Dark theme toggle button */
 .theme-toggle {
   width: 32px; height: 32px;
