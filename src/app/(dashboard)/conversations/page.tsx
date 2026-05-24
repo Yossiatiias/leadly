@@ -35,6 +35,38 @@ export default function ConversationsPage() {
   const [greenUrl, setGreenUrl] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const selectedConvIdRef = useRef<string | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ─── Polling: רענון הודעות כל 3 שניות כשיש שיחה פתוחה ────────────────────
+  useEffect(() => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+    if (!selectedConvIdRef.current) return
+
+    pollIntervalRef.current = setInterval(async () => {
+      const convId = selectedConvIdRef.current
+      if (!convId) return
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true })
+      if (data) {
+        setMessages(prev => {
+          // מיזוג: שמור הודעות temp, הוסף חדשות מה-DB
+          const dbIds = new Set(data.map((m: Message) => m.id))
+          const temps = prev.filter(m => m.id.startsWith('temp-'))
+          const merged = [...data, ...temps.filter(t => !data.some((d: Message) => d.content === t.content))]
+          // רק אם יש שינוי
+          if (merged.length === prev.filter(m => !m.id.startsWith('temp-')).length + temps.length && dbIds.size === prev.filter(m => !m.id.startsWith('temp-')).length) return prev
+          return merged
+        })
+      }
+    }, 3000)
+
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+    }
+  }, [selected])
 
   useEffect(() => {
     init()
