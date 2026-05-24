@@ -272,6 +272,80 @@ html.dark h1, html.dark h2, html.dark h3 { color: var(--fg-1) !important; }
 html.dark p { color: var(--fg-3); }
 
 
+/* ─── Dark mode — Tailwind utility class overrides ───────────
+   Components use Tailwind class names; these rules ensure they
+   respond correctly to the dark theme.
+   ──────────────────────────────────────────────────────────── */
+
+/* Neutral grays */
+html.dark .text-gray-900 { color: var(--fg-1); }
+html.dark .text-gray-800 { color: var(--fg-1); }
+html.dark .text-gray-700 { color: var(--fg-2); }
+html.dark .text-gray-600 { color: var(--fg-2); }
+html.dark .text-gray-500 { color: var(--fg-3); }
+html.dark .text-gray-400 { color: var(--fg-3); }
+html.dark .text-gray-300 { color: var(--fg-4); }
+html.dark .text-gray-200 { color: var(--fg-4); }
+html.dark .bg-gray-50    { background: var(--bg-sunken); }
+html.dark .bg-gray-100   { background: var(--bg-hover); }
+html.dark .border-gray-50  { border-color: var(--border-subtle); }
+html.dark .border-gray-100 { border-color: var(--border-subtle); }
+html.dark .border-gray-200 { border-color: var(--border-default); }
+
+/* Red — alert banners + hot temperature */
+html.dark .bg-red-50      { background: #2D1212; }
+html.dark .bg-red-100     { background: #3B1010; }
+html.dark .border-red-100 { border-color: #7F1D1D; }
+html.dark .border-red-200 { border-color: #7F1D1D; }
+html.dark .text-red-400   { color: #FCA5A5; }
+html.dark .text-red-500   { color: #FCA5A5; }
+html.dark .text-red-600   { color: #FCA5A5; }
+html.dark .text-red-700   { color: #FCA5A5; }
+
+/* Amber/yellow — medium temperature + contacted status */
+html.dark .bg-amber-50      { background: #2D1F00; }
+html.dark .border-amber-200 { border-color: #78350F; }
+html.dark .text-amber-600   { color: #FCD34D; }
+html.dark .text-amber-700   { color: #FCD34D; }
+html.dark .text-amber-800   { color: #FCD34D; }
+
+/* Sky/blue — cold temperature + new status + info banners */
+html.dark .bg-sky-50        { background: #0C2234; }
+html.dark .bg-blue-50       { background: #0C1929; }
+html.dark .border-sky-200   { border-color: #164E63; }
+html.dark .border-blue-100  { border-color: #1E3A5F; }
+html.dark .text-sky-600     { color: #7DD3FC; }
+html.dark .text-sky-700     { color: #7DD3FC; }
+html.dark .text-sky-800     { color: #7DD3FC; }
+html.dark .text-blue-500    { color: #93C5FD; }
+html.dark .text-blue-600    { color: #93C5FD; }
+
+/* Green/emerald/lime — statuses + action buttons */
+html.dark .bg-green-50        { background: #0A2E12; }
+html.dark .bg-green-100       { background: #14532D; }
+html.dark .border-green-200   { border-color: #14532D; }
+html.dark .text-green-500     { color: #86EFAC; }
+html.dark .text-green-600     { color: #86EFAC; }
+html.dark .text-green-700     { color: #86EFAC; }
+html.dark .text-green-800     { color: #4ADE80; }
+html.dark .bg-emerald-50      { background: #0A2E1E; }
+html.dark .bg-emerald-100     { background: #064E3B; }
+html.dark .border-emerald-200 { border-color: #064E3B; }
+html.dark .text-emerald-500   { color: #6EE7B7; }
+html.dark .text-emerald-600   { color: #6EE7B7; }
+html.dark .text-emerald-700   { color: #6EE7B7; }
+html.dark .bg-lime-50         { background: #0F2E0A; }
+html.dark .text-lime-800      { color: #86EFAC; }
+
+/* Purple — AI script/summary sections */
+html.dark .bg-purple-100    { background: #2D1B69; }
+html.dark .text-purple-500  { color: #C4B5FD; }
+html.dark .text-purple-600  { color: #C4B5FD; }
+
+/* Slate — not_relevant status */
+html.dark .bg-slate-100   { background: var(--bg-hover); }
+html.dark .text-slate-500 { color: var(--fg-3); }
+
 /* Dark theme toggle button */
 .theme-toggle {
   width: 32px; height: 32px;

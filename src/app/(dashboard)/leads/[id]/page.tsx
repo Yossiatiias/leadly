@@ -147,7 +147,7 @@ export default function LeadDetailPage() {
                   </span>
                 )}
                 {lead.phone && (
-                  <span className="font-mono" dir="ltr">{lead.phone}</span>
+                  <span dir="ltr" style={{ fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{lead.phone}</span>
                 )}
                 <span>{SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}</span>
                 {lead.discount_percent && (
@@ -267,15 +267,15 @@ export default function LeadDetailPage() {
                   { label: 'איש מכירות', value: (lead as any).profile?.full_name },
                 ].map(({ label, value, dir }) => value ? (
                   <div key={label}>
-                    <p className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-                    <p className="text-sm font-semibold text-gray-800" dir={dir as any}>{value}</p>
+                    <p className="text-[11px] uppercase tracking-wider mb-1" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>{label}</p>
+                    <p className="text-sm font-medium text-gray-700" dir={dir as any}>{value}</p>
                   </div>
                 ) : null)}
               </div>
               {lead.notes && (
-                <div className="pt-2 border-t border-gray-50">
-                  <p className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5">הערות</p>
-                  <p className="text-sm text-gray-600 leading-relaxed">{lead.notes}</p>
+                <div className="pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  <p className="text-[11px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>הערות</p>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--fg-2)' }}>{lead.notes}</p>
                 </div>
               )}
             </div>
@@ -284,7 +284,7 @@ export default function LeadDetailPage() {
 
         {/* Activity timeline */}
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <div className="flex items-center gap-2">
               <Clock size={14} className="text-gray-400" />
               <h2 className="font-bold text-gray-800 text-sm">היסטוריית אינטראקציות</h2>
@@ -314,7 +314,7 @@ export default function LeadDetailPage() {
                     <div key={a.id} className="relative">
                       {/* Timeline line */}
                       {i < activities.length - 1 && (
-                        <div className="absolute right-[18px] top-8 bottom-0 w-px bg-gray-100" />
+                        <div className="absolute right-[18px] top-8 bottom-0 w-px" style={{ background: 'var(--border-subtle)' }} />
                       )}
                       <div className="flex gap-3 pb-4">
                         {/* Icon */}

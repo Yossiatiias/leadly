@@ -101,11 +101,12 @@ export default function LeadForm({ profiles, lead }: Props) {
     <form onSubmit={handleSubmit} className="card p-6 space-y-5">
       {/* Temperature */}
       <div>
-        <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">טמפרטורה</label>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>טמפרטורה</label>
         <div className="flex gap-2">
           {TEMPS.map(({ value, label, color }) => (
             <button key={value} type="button" onClick={() => set('temperature', value)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${form.temperature === value ? color + ' border-current' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}>
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${form.temperature === value ? color + ' border-current' : ''}`}
+              style={form.temperature !== value ? { background: 'var(--bg-sunken)', color: 'var(--fg-4)', borderColor: 'var(--border-default)' } : {}}>
               {label}
             </button>
           ))}
@@ -115,29 +116,29 @@ export default function LeadForm({ profiles, lead }: Props) {
       {/* Name + Phone */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">שם מלא *</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>שם מלא *</label>
           <input type="text" value={form.name} onChange={e => set('name', e.target.value)} required className="input-base" placeholder="ישראל ישראלי" />
         </div>
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">טלפון</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>טלפון</label>
           <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} className="input-base" dir="ltr" placeholder="050-0000000" />
         </div>
       </div>
 
       {/* Email */}
       <div>
-        <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">אימייל</label>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>אימייל</label>
         <input type="email" value={form.email} onChange={e => set('email', e.target.value)} className="input-base" dir="ltr" placeholder="name@example.com" />
       </div>
 
       {/* Company + Clinic count */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">שם מתחם / חברה</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>שם מתחם / חברה</label>
           <input type="text" value={form.company_name} onChange={e => set('company_name', e.target.value)} className="input-base" placeholder="מרכז רפואי X" />
         </div>
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">מספר קליניקות</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>מספר קליניקות</label>
           <input type="number" value={form.clinic_count} onChange={e => set('clinic_count', e.target.value)} className="input-base" placeholder="5" min="1" />
         </div>
       </div>
@@ -145,13 +146,13 @@ export default function LeadForm({ profiles, lead }: Props) {
       {/* Source + Status */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">מקור</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>מקור</label>
           <select value={form.source} onChange={e => set('source', e.target.value)} className="input-base">
             {SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">סטטוס</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>סטטוס</label>
           <select value={form.status} onChange={e => set('status', e.target.value)} className="input-base">
             {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
@@ -160,7 +161,7 @@ export default function LeadForm({ profiles, lead }: Props) {
 
       {form.source === 'social' && (
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">שם קמפיין</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>שם קמפיין</label>
           <input type="text" value={form.campaign_name} onChange={e => set('campaign_name', e.target.value)} className="input-base" />
         </div>
       )}
@@ -168,27 +169,27 @@ export default function LeadForm({ profiles, lead }: Props) {
       {/* Salesperson + Follow-up */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">איש מכירות</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>איש מכירות</label>
           <select value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} className="input-base">
             <option value="">— לא מוקצה —</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">follow-up הבא</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>follow-up הבא</label>
           <input type="date" value={form.next_followup} onChange={e => set('next_followup', e.target.value)} className="input-base" dir="ltr" />
         </div>
       </div>
 
       {/* Discount */}
       <div>
-        <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">הנחה שהוצעה (%)</label>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>הנחה שהוצעה (%)</label>
         <input type="number" value={form.discount_percent} onChange={e => set('discount_percent', e.target.value)} className="input-base" placeholder="10" min="0" max="100" />
       </div>
 
       {/* Notes */}
       <div>
-        <label className="block text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-2">הערות</label>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>הערות</label>
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} className="input-base resize-none" placeholder="מידע נוסף על הליד, מה ביקש, מה אמר..." />
       </div>
 
