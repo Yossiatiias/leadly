@@ -150,10 +150,11 @@ const VALUE_TYPES = [
 function PivotTable({ leads }: { leads: Lead[] }) {
   const [rowDim,    setRowDim]    = useState<string | null>('month')
   const [colDim,    setColDim]    = useState<string | null>('source')
+  const [valueDim,  setValueDim]  = useState<string | null>('assigned')
   const [valueType, setValueType] = useState<string>('count')
   const [dragOver,  setDragOver]  = useState<string | null>(null)
 
-  const usedKeys = new Set([rowDim, colDim].filter(Boolean) as string[])
+  const usedKeys = new Set([rowDim, colDim, valueDim].filter(Boolean) as string[])
   const available = PIVOT_DIMS.filter(d => !usedKeys.has(d.key))
 
   const { rows, cols, data } = useMemo(() => {
@@ -181,9 +182,14 @@ function PivotTable({ leads }: { leads: Lead[] }) {
     return '—'
   }
 
-  function DropZone({ zone, label, current }: { zone: 'row' | 'col'; label: string; current: string | null }) {
+  function DropZone({ zone, label, current }: { zone: 'row' | 'col' | 'val'; label: string; current: string | null }) {
     const dim = PIVOT_DIMS.find(d => d.key === current)
     const isOver = dragOver === zone
+    function clear() {
+      if (zone === 'row') setRowDim(null)
+      else if (zone === 'col') setColDim(null)
+      else setValueDim(null)
+    }
     return (
       <div
         onDragOver={e => { e.preventDefault(); setDragOver(zone) }}
@@ -191,8 +197,14 @@ function PivotTable({ leads }: { leads: Lead[] }) {
         onDrop={e => {
           e.preventDefault()
           const k = e.dataTransfer.getData('dimKey')
+          if (!k) return
+          // remove from other zones if already placed
+          if (rowDim    === k) setRowDim(null)
+          if (colDim    === k) setColDim(null)
+          if (valueDim  === k) setValueDim(null)
           if (zone === 'row') setRowDim(k)
-          else setColDim(k)
+          else if (zone === 'col') setColDim(k)
+          else setValueDim(k)
           setDragOver(null)
         }}
         style={{
@@ -206,8 +218,8 @@ function PivotTable({ leads }: { leads: Lead[] }) {
         <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}:</span>
         {dim ? (
           <span style={{ background: 'var(--brand)', color: 'white', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {dim.label}
-            <button onClick={() => zone === 'row' ? setRowDim(null) : setColDim(null)}
+            {zone === 'val' ? `ספירת ${dim.label}` : dim.label}
+            <button onClick={clear}
               style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, fontSize: '16px', lineHeight: 1, fontFamily: 'inherit' }}>x</button>
           </span>
         ) : (
@@ -247,23 +259,23 @@ function PivotTable({ leads }: { leads: Lead[] }) {
 
         {/* Drop zones */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <DropZone zone="row" label="שורות" current={rowDim} />
+          <DropZone zone="row" label="שורות"  current={rowDim} />
           <DropZone zone="col" label="עמודות" current={colDim} />
-          {/* Values selector */}
-          <div style={{ border: '2px solid var(--border-subtle)', borderRadius: '10px', padding: '8px 12px', background: 'var(--bg-sunken)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 600, whiteSpace: 'nowrap' }}>ערכים:</span>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <DropZone zone="val" label="ערכים"  current={valueDim} />
+          {/* Display type — only shown when valueDim is set */}
+          {valueDim && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingRight: '4px' }}>
               {VALUE_TYPES.map(vt => (
                 <button key={vt.key} onClick={() => setValueType(vt.key)}
                   style={{
-                    padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 400,
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 400,
                     cursor: 'pointer', border: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
                     background: valueType === vt.key ? 'var(--brand-leaf-500)' : 'var(--bg-hover)',
                     color: valueType === vt.key ? 'white' : 'var(--fg-3)',
                   }}>{vt.label}</button>
               ))}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
