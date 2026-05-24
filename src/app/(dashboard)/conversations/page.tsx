@@ -34,6 +34,7 @@ export default function ConversationsPage() {
   const [greenToken, setGreenToken] = useState<string | null>(null)
   const [greenUrl, setGreenUrl] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const selectedConvIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     init()
@@ -79,11 +80,14 @@ export default function ConversationsPage() {
         loadConversations(profile.business_id)
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `business_id=eq.${profile.business_id}` }, (payload) => {
-        setMessages(prev => {
-          const msg = payload.new as Message
-          if (prev.find(m => m.id === msg.id)) return prev
-          return [...prev, msg]
-        })
+        const msg = payload.new as Message & { conversation_id: string }
+        // Only add to view if it belongs to the currently open conversation
+        if (msg.conversation_id === selectedConvIdRef.current) {
+          setMessages(prev => {
+            if (prev.find(m => m.id === msg.id || (m.id.startsWith('temp-') && m.content === msg.content))) return prev
+            return [...prev, msg]
+          })
+        }
         loadConversations(profile.business_id)
       })
       .subscribe()
@@ -104,6 +108,7 @@ export default function ConversationsPage() {
 
   async function openConversation(conv: Conversation) {
     setSelected(conv)
+    selectedConvIdRef.current = conv.id
     setMessages([])
 
     const { data } = await supabase
@@ -129,6 +134,17 @@ export default function ConversationsPage() {
     const text = draft.trim()
     setDraft('')
 
+    // Optimistic update — show immediately without waiting for Realtime
+    const tempId = `temp-${Date.now()}`
+    const tempMsg: Message = {
+      id: tempId,
+      direction: 'outbound',
+      content: text,
+      sender_type: 'human',
+      created_at: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, tempMsg])
+
     // Send via Green API
     if (instanceId && greenToken) {
       const url = greenUrl || 'https://7107.api.greenapi.com'
@@ -139,13 +155,18 @@ export default function ConversationsPage() {
       }).catch(() => {})
     }
 
-    await supabase.from('messages').insert({
+    const { data: inserted } = await supabase.from('messages').insert({
       conversation_id: selected.id,
       business_id: businessId,
       direction: 'outbound',
       content: text,
       sender_type: 'human',
-    })
+    }).select().single()
+
+    // Replace temp message with real one from DB
+    if (inserted) {
+      setMessages(prev => prev.map(m => m.id === tempId ? inserted : m))
+    }
 
     await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selected.id)
 
