@@ -89,7 +89,10 @@ export async function POST(req: NextRequest) {
     }
 
     // שלח לעיבוד AI (async — לא מחכה)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+      (req.headers.get('x-forwarded-proto') && req.headers.get('host')
+        ? `${req.headers.get('x-forwarded-proto')}://${req.headers.get('host')}`
+        : 'http://localhost:3000')
     fetch(`${baseUrl}/api/whatsapp/ai-respond`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
