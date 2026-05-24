@@ -9,134 +9,143 @@ const supabase = createClient(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    console.log('[webhook] received:', JSON.stringify(body).slice(0, 300))
+    const { typeWebhook, instanceData } = body
 
-    // Green API webhook payload
-    const { typeWebhook, instanceData, senderData, messageData } = body
+    console.log('[webhook] typeWebhook:', typeWebhook)
 
-    // מתעניינים רק בהודעות נכנסות
-    // quotaExceeded עשוי להכיל נתוני הודעה — נטפל בו כמו incomingMessageReceived אם יש senderData
-    const isIncoming = typeWebhook === 'incomingMessageReceived'
-    const isQuota = typeWebhook === 'quotaExceeded'
+    // נטפל בכל webhook שקשור להודעה נכנסת — גם quotaExceeded משמש כטריגר
+    const isRelevant = [
+      'incomingMessageReceived',
+      'quotaExceeded',
+    ].includes(typeWebhook)
 
-    if (!isIncoming && !isQuota) {
-      console.log('[webhook] ignored typeWebhook:', typeWebhook)
-      return NextResponse.json({ ok: true })
-    }
-
-    if (isQuota) {
-      console.log('[webhook] quotaExceeded full body:', JSON.stringify(body))
-      // אם אין נתוני שולח — אין מה לעשות
-      if (!senderData?.chatId || !messageData) {
-        console.log('[webhook] quotaExceeded has no message data — skipping')
-        return NextResponse.json({ ok: true })
-      }
-      console.log('[webhook] quotaExceeded HAS message data — processing as incoming')
-    }
-
-    // מתעלמים מהודעות קבוצה
-    const chatId: string = senderData?.chatId || ''
-    if (chatId.includes('@g.us')) {
-      return NextResponse.json({ ok: true })
-    }
+    if (!isRelevant) return NextResponse.json({ ok: true })
 
     const instanceId: string = instanceData?.idInstance?.toString() || ''
-    const senderPhone: string = chatId.replace('@c.us', '')
-    const messageText: string = messageData?.textMessageData?.textMessage ||
-                                messageData?.extendedTextMessageData?.text || ''
+    if (!instanceId) return NextResponse.json({ ok: true })
 
-    console.log('[webhook] instanceId:', instanceId, 'phone:', senderPhone, 'text:', messageText)
-
-    if (!messageText || !senderPhone) {
-      console.log('[webhook] missing messageText or senderPhone — skipping')
-      return NextResponse.json({ ok: true })
-    }
-
-    // מצא את העסק לפי ה-instance ID
-    const { data: connection, error: connErr } = await supabase
+    // מצא עסק לפי instance
+    const { data: connection } = await supabase
       .from('whatsapp_connections')
       .select('business_id, bot_enabled')
       .eq('instance_id', instanceId)
       .single()
 
-    console.log('[webhook] connection:', connection, 'error:', connErr)
-
-    if (!connection || !connection.bot_enabled) {
-      console.log('[webhook] no connection or bot disabled — stopping')
+    if (!connection?.bot_enabled) {
+      console.log('[webhook] no connection or bot disabled')
       return NextResponse.json({ ok: true })
     }
 
-    const businessId: string = connection.business_id
+    const businessId = connection.business_id
+    const greenUrl = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com'
+    const greenToken = process.env.GREEN_API_TOKEN
 
-    // מצא או צור שיחה
-    let { data: conversation } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('business_id', businessId)
-      .eq('contact_phone', senderPhone)
-      .single()
+    // ─── במקום לסמוך על תוכן ה-webhook, שאל את Green API ישירות ───────────
+    const msgsRes = await fetch(
+      `${greenUrl}/waInstance${instanceId}/lastIncomingMessages/${greenToken}?minutes=3`
+    )
 
-    if (!conversation) {
-      const { data: newConversation } = await supabase
-        .from('conversations')
-        .insert({
-          business_id: businessId,
-          contact_phone: senderPhone,
-          contact_name: senderData?.senderName || null,
-          status: 'active',
-          bot_enabled: true,
-        })
-        .select()
-        .single()
-      conversation = newConversation
-    }
-
-    if (!conversation) {
-      return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 })
-    }
-
-    // שמור את ההודעה הנכנסת
-    await supabase.from('messages').insert({
-      conversation_id: conversation.id,
-      business_id: businessId,
-      direction: 'inbound',
-      content: messageText,
-      sender_type: 'contact',
-      whatsapp_message_id: messageData?.idMessage || null,
-    })
-
-    // אם הבוט כבוי לשיחה זו — לא לענות
-    if (!conversation.bot_enabled || conversation.status === 'human_takeover') {
+    if (!msgsRes.ok) {
+      console.log('[webhook] lastIncomingMessages failed:', msgsRes.status)
       return NextResponse.json({ ok: true })
     }
 
-    // שלח לעיבוד AI אחרי שהתשובה נשלחת (after = Vercel background task)
+    const incomingMsgs: any[] = await msgsRes.json()
+    console.log('[webhook] lastIncomingMessages count:', incomingMsgs?.length)
+
+    if (!Array.isArray(incomingMsgs) || incomingMsgs.length === 0) {
+      return NextResponse.json({ ok: true })
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
-      (req.headers.get('x-forwarded-proto') && req.headers.get('host')
-        ? `${req.headers.get('x-forwarded-proto')}://${req.headers.get('host')}`
-        : 'http://localhost:3000')
+      `${req.headers.get('x-forwarded-proto')}://${req.headers.get('host')}`
 
-    const aiPayload = {
-      conversationId: conversation.id,
-      businessId,
-      senderPhone,
-      messageText,
-      instanceId,
-    }
+    for (const msg of incomingMsgs) {
+      const chatId: string = msg.chatId || ''
+      if (chatId.includes('@g.us')) continue // דלג על קבוצות
 
-    after(async () => {
-      try {
-        await fetch(`${baseUrl}/api/whatsapp/ai-respond`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(aiPayload),
-        })
-      } catch (e) {
-        console.error('[webhook] after() ai-respond error:', e)
+      const senderPhone = chatId.replace('@c.us', '')
+      const messageText: string =
+        msg.textMessage ||
+        msg.extendedTextMessage?.text || ''
+      const messageId: string = msg.idMessage || ''
+
+      if (!messageText || !senderPhone || !messageId) continue
+
+      // בדוק אם כבר עיבדנו את ההודעה הזו
+      const { data: existing } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('whatsapp_message_id', messageId)
+        .maybeSingle()
+
+      if (existing) {
+        console.log('[webhook] already processed:', messageId)
+        continue
       }
-    })
+
+      console.log('[webhook] new message from', senderPhone, ':', messageText)
+
+      // מצא או צור שיחה
+      let { data: conversation } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('business_id', businessId)
+        .eq('contact_phone', senderPhone)
+        .maybeSingle()
+
+      if (!conversation) {
+        const { data: newConv } = await supabase
+          .from('conversations')
+          .insert({
+            business_id: businessId,
+            contact_phone: senderPhone,
+            contact_name: msg.senderName || null,
+            status: 'active',
+            bot_enabled: true,
+          })
+          .select()
+          .single()
+        conversation = newConv
+      }
+
+      if (!conversation) continue
+      if (!conversation.bot_enabled || conversation.status === 'human_takeover') continue
+
+      // שמור הודעה נכנסת
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        business_id: businessId,
+        direction: 'inbound',
+        content: messageText,
+        sender_type: 'contact',
+        whatsapp_message_id: messageId,
+      })
+
+      // קרא ל-ai-respond ברקע
+      const aiPayload = {
+        conversationId: conversation.id,
+        businessId,
+        senderPhone,
+        messageText,
+        instanceId,
+      }
+
+      after(async () => {
+        try {
+          await fetch(`${baseUrl}/api/whatsapp/ai-respond`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(aiPayload),
+          })
+        } catch (e) {
+          console.error('[webhook] after() error:', e)
+        }
+      })
+    }
 
     return NextResponse.json({ ok: true })
+
   } catch (error) {
     console.error('Webhook error:', error)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
