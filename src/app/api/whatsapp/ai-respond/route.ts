@@ -117,7 +117,7 @@ ${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} 
 
     // ─── קרא ל-Gemini ─────────────────────────────────────────────────────
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash',
       systemInstruction: systemPrompt,
     })
 
@@ -228,7 +228,7 @@ async function analyzeAndUpdateLead(
       .map(m => `${m.direction === 'inbound' ? 'לקוח' : 'בוט'}: ${m.content}`)
       .join('\n')
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
     const result = await model.generateContent(
       `נתח את שיחת הוואטסאפ הבאה עם לקוח פוטנציאלי. ענה אך ורק ב-JSON תקין, ללא טקסט נוסף.
