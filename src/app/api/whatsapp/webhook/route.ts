@@ -9,12 +9,14 @@ const supabase = createClient(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    console.log('[webhook] received:', JSON.stringify(body).slice(0, 300))
 
     // Green API webhook payload
     const { typeWebhook, instanceData, senderData, messageData } = body
 
     // מתעניינים רק בהודעות נכנסות
     if (typeWebhook !== 'incomingMessageReceived') {
+      console.log('[webhook] ignored typeWebhook:', typeWebhook)
       return NextResponse.json({ ok: true })
     }
 
@@ -29,18 +31,24 @@ export async function POST(req: NextRequest) {
     const messageText: string = messageData?.textMessageData?.textMessage ||
                                 messageData?.extendedTextMessageData?.text || ''
 
+    console.log('[webhook] instanceId:', instanceId, 'phone:', senderPhone, 'text:', messageText)
+
     if (!messageText || !senderPhone) {
+      console.log('[webhook] missing messageText or senderPhone — skipping')
       return NextResponse.json({ ok: true })
     }
 
     // מצא את העסק לפי ה-instance ID
-    const { data: connection } = await supabase
+    const { data: connection, error: connErr } = await supabase
       .from('whatsapp_connections')
       .select('business_id, bot_enabled')
       .eq('instance_id', instanceId)
       .single()
 
+    console.log('[webhook] connection:', connection, 'error:', connErr)
+
     if (!connection || !connection.bot_enabled) {
+      console.log('[webhook] no connection or bot disabled — stopping')
       return NextResponse.json({ ok: true })
     }
 
