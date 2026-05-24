@@ -19,6 +19,7 @@ const MIN_RESPONSE_INTERVAL_MS = 30_000 // 30 שניות בין תשובות
 export async function POST(req: NextRequest) {
   try {
     const { conversationId, businessId, senderPhone, messageText, instanceId } = await req.json()
+    console.log('[ai-respond] using key prefix:', process.env.GEMINI_API_KEY?.slice(0, 10))
 
     // ─── FIX 6: המתן 3 שניות לאיסוף הודעות מרובות מהירות ───────────────
     await new Promise(r => setTimeout(r, 3000))
