@@ -34,7 +34,7 @@ const STATUS_RANK: Record<string, number> = {
   new: 0, contacted: 1, in_progress: 2,
 }
 
-const MIN_RESPONSE_INTERVAL_MS = 30_000 // 30 שניות בין תשובות
+const MIN_RESPONSE_INTERVAL_MS = 5_000 // 5 שניות בין תשובות
 
 export async function POST(req: NextRequest) {
   try {
