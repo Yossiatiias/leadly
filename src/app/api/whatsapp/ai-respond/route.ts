@@ -114,7 +114,12 @@ ${qaText ? `\nQ&A:\n${qaText}` : ''}
 - אל תזכיר שאתה AI או בוט
 - אם אין לך תשובה — "אבדוק ואחזור אליך"
 - אם הלקוח רוצה לקבוע — הצע זמנים ריאליים לפי שעות הפעילות
-${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} — אמור "אעביר אותך לנציג שלנו"` : ''}`
+${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} — אמור "אעביר אותך לנציג שלנו"` : ''}
+
+חשוב: בסוף כל תשובה הוסף בשורה נפרדת: LEAD:{"name":null,"temperature":"cold","status":"new"}
+- name: שם פרטי אם הלקוח הציג עצמו, אחרת null
+- temperature: hot/medium/cold לפי רמת העניין
+- status: new/contacted/in_progress`
 
     // ─── קרא ל-Gemini ─────────────────────────────────────────────────────
     const model = genAI.getGenerativeModel({
@@ -124,7 +129,14 @@ ${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} 
 
     const chat = model.startChat({ history: history.slice(0, -1) })
     const result = await chat.sendMessage(combinedText)
-    const aiResponse = result.response.text()
+    const rawResponse = result.response.text()
+
+    if (!rawResponse) return NextResponse.json({ ok: true })
+
+    // חלץ LEAD JSON מהתשובה
+    const leadMatch = rawResponse.match(/LEAD:(\{[\s\S]*?\})/m)
+    const inlineAnalysis = leadMatch ? (() => { try { return JSON.parse(leadMatch[1]) } catch { return null } })() : null
+    const aiResponse = rawResponse.replace(/\nLEAD:\{[\s\S]*?\}/m, '').trim()
 
     if (!aiResponse) return NextResponse.json({ ok: true })
 
@@ -173,9 +185,10 @@ ${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} 
     // ─── צור ליד אם לא קיים ───────────────────────────────────────────────
     await ensureLeadExists(conversationId, businessId, senderPhone)
 
-    // ─── FIX 2+3+5: ניתוח שיחה לעדכון טמפרטורה/סטטוס/שם (async) ─────────
-    const allMsgs = [...msgs, { direction: 'outbound', content: aiResponse }]
-    analyzeAndUpdateLead(conversationId, senderPhone, allMsgs).catch(console.error)
+    // ─── עדכון ליד מהניתוח המשולב (ללא קריאת Gemini נוספת) ──────────────
+    if (inlineAnalysis) {
+      updateLeadFromAnalysis(conversationId, senderPhone, inlineAnalysis).catch(console.error)
+    }
 
     return NextResponse.json({ ok: true })
 
@@ -216,53 +229,13 @@ async function ensureLeadExists(conversationId: string, businessId: string, phon
   }
 }
 
-// ─── FIX 2+3+5: ניתוח שיחה — טמפרטורה, סטטוס, שם ────────────────────────────
-async function analyzeAndUpdateLead(
+// ─── עדכון ליד מניתוח משולב (ללא קריאת Gemini נוספת) ────────────────────────
+async function updateLeadFromAnalysis(
   conversationId: string,
   phone: string,
-  messages: { direction: string; content: string }[]
+  analysis: { name: string | null; temperature: string; status: string }
 ) {
   try {
-    if (messages.length < 2) return
-
-    const convoText = messages
-      .map(m => `${m.direction === 'inbound' ? 'לקוח' : 'בוט'}: ${m.content}`)
-      .join('\n')
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
-
-    const result = await model.generateContent(
-      `נתח את שיחת הוואטסאפ הבאה עם לקוח פוטנציאלי. ענה אך ורק ב-JSON תקין, ללא טקסט נוסף.
-
-שיחה:
-${convoText}
-
-פורמט תשובה בלבד:
-{"name":null,"temperature":"cold","status":"new"}
-
-כללים:
-- name: שם פרטי בלבד אם הלקוח הציג את עצמו בבירור, אחרת null
-- temperature:
-  hot    = הלקוח ביטא עניין ברור / שאל על מחיר / תור / זמינות / אמר שרוצה להתקדם
-  medium = פנה ושוחח אבל לא גילה עניין ממשי
-  cold   = שאלה כללית בלבד
-- status:
-  new         = הודעה ראשונה, הבוט טרם ענה
-  contacted   = הבוט ענה לפחות פעם אחת
-  in_progress = 3+ הודעות ויש עניין מצד הלקוח`
-    )
-
-    const raw = result.response.text().trim()
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) return
-
-    const analysis = JSON.parse(match[0]) as {
-      name: string | null
-      temperature: string
-      status: string
-    }
-
-    // מצא ליד
     const { data: conv } = await supabase
       .from('conversations')
       .select('lead_id')
@@ -279,29 +252,25 @@ ${convoText}
 
     const updates: Record<string, string> = {}
 
-    // טמפרטורה: תמיד עדכן (יכולה לעלות ולרדת)
     if (analysis.temperature && ['hot', 'medium', 'cold'].includes(analysis.temperature))
       updates.temperature = analysis.temperature
 
-    // סטטוס: רק התקדמות קדימה — אף פעם לא נסיגה
     if (
       analysis.status &&
       STATUS_RANK[analysis.status] !== undefined &&
       STATUS_RANK[analysis.status] > (STATUS_RANK[lead?.status ?? 'new'] ?? 0)
     ) updates.status = analysis.status
 
-    // שם: רק אם אין שם אמיתי עדיין (כלומר הטלפון שמור כשם)
     if (analysis.name && (!lead?.name || lead.name === phone))
       updates.name = analysis.name
 
     if (Object.keys(updates).length > 0)
       await supabase.from('leads').update(updates).eq('id', conv.lead_id)
 
-    // עדכן גם שם בשיחה
     if (analysis.name && (!lead?.name || lead.name === phone))
       await supabase.from('conversations').update({ contact_name: analysis.name }).eq('id', conversationId)
 
   } catch (e) {
-    console.error('analyzeAndUpdateLead error:', e)
+    console.error('updateLeadFromAnalysis error:', e)
   }
 }
