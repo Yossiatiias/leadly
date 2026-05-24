@@ -1,13 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+async function groqChat(systemPrompt: string, history: {role: string, content: string}[], userMessage: string): Promise<string> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 500,
+      temperature: 0.7,
+    }),
+  })
+  if (!res.ok) throw new Error(`Groq error: ${res.status} ${await res.text()}`)
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content || ''
+}
 
 // סדר עדיפות סטטוסים — מניע קדימה בלבד
 const STATUS_RANK: Record<string, number> = {
@@ -19,8 +39,6 @@ const MIN_RESPONSE_INTERVAL_MS = 30_000 // 30 שניות בין תשובות
 export async function POST(req: NextRequest) {
   try {
     const { conversationId, businessId, senderPhone, messageText, instanceId } = await req.json()
-    console.log('[ai-respond] using key prefix:', process.env.GEMINI_API_KEY?.slice(0, 10))
-
     // ─── FIX 6: המתן 3 שניות לאיסוף הודעות מרובות מהירות ───────────────
     await new Promise(r => setTimeout(r, 3000))
 
@@ -121,15 +139,12 @@ ${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} 
 - temperature: hot/medium/cold לפי רמת העניין
 - status: new/contacted/in_progress`
 
-    // ─── קרא ל-Gemini ─────────────────────────────────────────────────────
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      systemInstruction: systemPrompt,
-    })
-
-    const chat = model.startChat({ history: history.slice(0, -1) })
-    const result = await chat.sendMessage(combinedText)
-    const rawResponse = result.response.text()
+    // ─── קרא ל-Groq (Llama 3.3) ──────────────────────────────────────────
+    const groqHistory = history.slice(0, -1).map(m => ({
+      role: m.role === 'model' ? 'assistant' : 'user',
+      content: m.parts[0].text,
+    }))
+    const rawResponse = await groqChat(systemPrompt, groqHistory, combinedText)
 
     if (!rawResponse) return NextResponse.json({ ok: true })
 
