@@ -40,6 +40,7 @@ const FUNNEL_STAGES = [
 
 // ─── Pivot dimensions ─────────────────────────────────────────────────────────
 const PIVOT_DIMS = [
+  { key: 'count',       label: 'כמות' },
   { key: 'month',       label: 'חודש' },
   { key: 'year',        label: 'שנה' },
   { key: 'week',        label: 'שבוע' },
@@ -66,6 +67,7 @@ function getDimValue(lead: Lead, dim: string): string {
     case 'status':      return STATUS_LABELS[lead.status] || lead.status
     case 'temperature': return TEMP_LABELS[lead.temperature] || lead.temperature
     case 'assigned':    return lead.profile?.full_name || 'לא שויך'
+    case 'count':       return 'כמות'
     default: return ''
   }
 }
@@ -150,7 +152,7 @@ const VALUE_TYPES = [
 function PivotTable({ leads }: { leads: Lead[] }) {
   const [rowDim,    setRowDim]    = useState<string | null>('month')
   const [colDim,    setColDim]    = useState<string | null>('source')
-  const [valueDim,  setValueDim]  = useState<string | null>('assigned')
+  const [valueDim,  setValueDim]  = useState<string | null>('count')
   const [valueType, setValueType] = useState<string>('count')
   const [dragOver,  setDragOver]  = useState<string | null>(null)
 
@@ -218,7 +220,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
         <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}:</span>
         {dim ? (
           <span style={{ background: 'var(--brand)', color: 'white', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {zone === 'val' ? `ספירת ${dim.label}` : dim.label}
+            {zone === 'val' ? (dim.key === 'count' ? 'כמות לידים' : `ספירת ${dim.label}`) : dim.label}
             <button onClick={clear}
               style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, fontSize: '16px', lineHeight: 1, fontFamily: 'inherit' }}>x</button>
           </span>
