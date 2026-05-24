@@ -15,9 +15,23 @@ export async function POST(req: NextRequest) {
     const { typeWebhook, instanceData, senderData, messageData } = body
 
     // מתעניינים רק בהודעות נכנסות
-    if (typeWebhook !== 'incomingMessageReceived') {
+    // quotaExceeded עשוי להכיל נתוני הודעה — נטפל בו כמו incomingMessageReceived אם יש senderData
+    const isIncoming = typeWebhook === 'incomingMessageReceived'
+    const isQuota = typeWebhook === 'quotaExceeded'
+
+    if (!isIncoming && !isQuota) {
       console.log('[webhook] ignored typeWebhook:', typeWebhook)
       return NextResponse.json({ ok: true })
+    }
+
+    if (isQuota) {
+      console.log('[webhook] quotaExceeded full body:', JSON.stringify(body))
+      // אם אין נתוני שולח — אין מה לעשות
+      if (!senderData?.chatId || !messageData) {
+        console.log('[webhook] quotaExceeded has no message data — skipping')
+        return NextResponse.json({ ok: true })
+      }
+      console.log('[webhook] quotaExceeded HAS message data — processing as incoming')
     }
 
     // מתעלמים מהודעות קבוצה
