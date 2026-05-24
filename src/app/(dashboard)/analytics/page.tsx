@@ -148,66 +148,27 @@ const VALUE_TYPES = [
 ]
 
 function PivotTable({ leads }: { leads: Lead[] }) {
-  const [rowDim,    setRowDim]    = useState<string | null>('assigned')
-  const [colDim,    setColDim]    = useState<string | null>('month')
-  const [filterDim, setFilterDim] = useState<string | null>(null)
-  const [filterVal, setFilterVal] = useState<string>('')
+  const [rowDim,    setRowDim]    = useState<string | null>('month')
+  const [colDim,    setColDim]    = useState<string | null>('source')
   const [valueType, setValueType] = useState<string>('count')
   const [dragOver,  setDragOver]  = useState<string | null>(null)
 
-  function handleCheckbox(key: string) {
-    if (rowDim    === key) return setRowDim(null)
-    if (colDim    === key) return setColDim(null)
-    if (filterDim === key) { setFilterDim(null); return setFilterVal('') }
-    if (!rowDim)    return setRowDim(key)
-    if (!colDim)    return setColDim(key)
-    if (!filterDim) return setFilterDim(key)
-  }
-
-  function onDrop(zone: 'row' | 'col' | 'filter') {
-    return (e: React.DragEvent) => {
-      e.preventDefault()
-      const key = e.dataTransfer.getData('dimKey')
-      if (!key) return
-      if (rowDim    === key) setRowDim(null)
-      if (colDim    === key) setColDim(null)
-      if (filterDim === key) { setFilterDim(null); setFilterVal('') }
-      if (zone === 'row')    setRowDim(key)
-      if (zone === 'col')    setColDim(key)
-      if (zone === 'filter') setFilterDim(key)
-      setDragOver(null)
-    }
-  }
-
-  function removeZone(zone: 'row' | 'col' | 'filter') {
-    if (zone === 'row')    setRowDim(null)
-    if (zone === 'col')    setColDim(null)
-    if (zone === 'filter') { setFilterDim(null); setFilterVal('') }
-  }
-
-  const filteredLeads = useMemo(() => {
-    if (!filterDim || !filterVal) return leads
-    return leads.filter(l => getDimValue(l, filterDim) === filterVal)
-  }, [leads, filterDim, filterVal])
-
-  const filterOptions = useMemo(() => {
-    if (!filterDim) return []
-    return [...new Set(leads.map(l => getDimValue(l, filterDim)))].sort()
-  }, [leads, filterDim])
+  const usedKeys = new Set([rowDim, colDim].filter(Boolean) as string[])
+  const available = PIVOT_DIMS.filter(d => !usedKeys.has(d.key))
 
   const { rows, cols, data } = useMemo(() => {
     if (!rowDim) return { rows: [] as string[], cols: [] as string[], data: {} as Record<string, Record<string, number>> }
-    const rowVals = [...new Set(filteredLeads.map(l => getDimValue(l, rowDim)))].sort()
-    const colVals = colDim ? [...new Set(filteredLeads.map(l => getDimValue(l, colDim)))].sort() : ['סה"כ']
+    const rowVals = [...new Set(leads.map(l => getDimValue(l, rowDim)))].sort()
+    const colVals = colDim ? [...new Set(leads.map(l => getDimValue(l, colDim)))].sort() : ['סה"כ']
     const d: Record<string, Record<string, number>> = {}
     rowVals.forEach(r => { d[r] = {} })
-    filteredLeads.forEach(lead => {
+    leads.forEach(lead => {
       const r = getDimValue(lead, rowDim)
       const c = colDim ? getDimValue(lead, colDim) : 'סה"כ'
       d[r][c] = (d[r][c] || 0) + 1
     })
     return { rows: rowVals, cols: colVals, data: d }
-  }, [filteredLeads, rowDim, colDim])
+  }, [leads, rowDim, colDim])
 
   const grandTotal = rows.reduce((s, r) => s + cols.reduce((ss, c) => ss + (data[r]?.[c] || 0), 0), 0)
 
@@ -220,131 +181,101 @@ function PivotTable({ leads }: { leads: Lead[] }) {
     return '—'
   }
 
-  const selSt: React.CSSProperties = {
-    width: '100%', padding: '5px 8px', borderRadius: '6px', outline: 'none',
-    border: '1px solid var(--border-default)', fontSize: '12px',
-    background: 'var(--bg-surface)', color: 'var(--fg-1)', fontFamily: 'inherit',
-  }
-
-  function ZoneBox({ zone, label, icon, current }: { zone: 'row' | 'col' | 'filter'; label: string; icon: string; current: string | null }) {
+  function DropZone({ zone, label, current }: { zone: 'row' | 'col'; label: string; current: string | null }) {
     const dim = PIVOT_DIMS.find(d => d.key === current)
-    const over = dragOver === zone
+    const isOver = dragOver === zone
     return (
       <div
         onDragOver={e => { e.preventDefault(); setDragOver(zone) }}
         onDragLeave={() => setDragOver(null)}
-        onDrop={onDrop(zone)}
+        onDrop={e => {
+          e.preventDefault()
+          const k = e.dataTransfer.getData('dimKey')
+          if (zone === 'row') setRowDim(k)
+          else setColDim(k)
+          setDragOver(null)
+        }}
         style={{
-          border: `1.5px dashed ${over ? 'var(--brand)' : 'var(--border-default)'}`,
-          borderRadius: '8px', padding: '7px 8px', minHeight: '62px',
-          background: over ? 'var(--brand-sky-50)' : 'var(--bg-surface)', transition: 'all 0.15s',
+          border: `2px dashed ${isOver ? 'var(--brand)' : 'var(--border-default)'}`,
+          borderRadius: '10px', padding: '8px 12px', minHeight: '44px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          background: isOver ? 'var(--brand-sky-50)' : 'var(--bg-sunken)',
+          transition: 'all 0.15s', cursor: 'default',
         }}
       >
-        <p style={{ fontSize: '10px', fontWeight: 600, color: 'var(--fg-4)', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-          <span style={{ fontSize: '9px' }}>{icon}</span>{label}
-        </p>
+        <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}:</span>
         {dim ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--brand)', borderRadius: '5px', padding: '3px 8px' }}>
-            <span style={{ fontSize: '11px', color: 'white', fontWeight: 400, flex: 1 }}>{dim.label}</span>
-            <button onClick={() => removeZone(zone)}
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', padding: 0, fontSize: '15px', lineHeight: 1, fontFamily: 'inherit' }}>
-              x
-            </button>
-          </div>
+          <span style={{ background: 'var(--brand)', color: 'white', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {dim.label}
+            <button onClick={() => zone === 'row' ? setRowDim(null) : setColDim(null)}
+              style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, fontSize: '16px', lineHeight: 1, fontFamily: 'inherit' }}>x</button>
+          </span>
         ) : (
-          <p style={{ fontSize: '11px', color: 'var(--fg-4)', fontStyle: 'italic' }}>גרור לכאן</p>
+          <span style={{ fontSize: '12px', color: 'var(--fg-4)' }}>גרור שדה לכאן</span>
         )}
       </div>
     )
   }
 
   return (
-    <div style={{
-      border: '1px solid var(--border-default)', borderRadius: '14px', overflow: 'hidden',
-      display: 'flex', direction: 'rtl', background: 'var(--bg-surface)',
-      boxShadow: '0 1px 4px rgba(20,23,28,0.06)',
-    }}>
+    <div className="card" style={{ padding: '20px' }}>
+      <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--fg-2)', marginBottom: '16px' }}>
+        טבלת ניתוח — גרור שדות
+      </h2>
 
-      {/* ── Field panel (right side in RTL) ── */}
-      <div style={{ width: '238px', flexShrink: 0, borderLeft: '1px solid var(--border-default)', background: 'var(--bg-sunken)', display: 'flex', flexDirection: 'column' }}>
-
-        <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--border-default)' }}>
-          <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)' }}>שדות PivotTable</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '16px', marginBottom: '20px', alignItems: 'start' }}>
+        {/* Field palette */}
+        <div>
+          <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            שדות זמינים
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            {available.map(dim => (
+              <div key={dim.key} draggable onDragStart={e => e.dataTransfer.setData('dimKey', dim.key)}
+                style={{
+                  padding: '7px 12px', background: 'var(--bg-hover)',
+                  borderRadius: '8px', fontSize: '13px', fontWeight: 400,
+                  color: 'var(--fg-2)', cursor: 'grab', border: '1.5px solid var(--border-subtle)',
+                  userSelect: 'none', display: 'flex', alignItems: 'center', gap: '6px',
+                }}>
+                <span style={{ opacity: 0.4, fontSize: '10px' }}>⠿</span>
+                {dim.label}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Checkboxes */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-default)' }}>
-          <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginBottom: '8px' }}>בחר שדות להוסיף לדוח:</p>
-          {PIVOT_DIMS.map(dim => {
-            const inUse = [rowDim, colDim, filterDim].includes(dim.key)
-            return (
-              <label key={dim.key} draggable onDragStart={e => e.dataTransfer.setData('dimKey', dim.key)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', cursor: 'pointer', userSelect: 'none' }}>
-                <input type="checkbox" checked={!!inUse} onChange={() => handleCheckbox(dim.key)}
-                  style={{ accentColor: 'var(--brand)', width: '14px', height: '14px', cursor: 'pointer', flexShrink: 0 }} />
-                <span style={{ fontSize: '13px', color: inUse ? 'var(--fg-1)' : 'var(--fg-3)', fontWeight: inUse ? 500 : 400 }}>
-                  {dim.label}
-                </span>
-              </label>
-            )
-          })}
-        </div>
-
-        {/* 4 zones */}
-        <div style={{ padding: '12px 16px', flex: 1 }}>
-          <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginBottom: '10px' }}>גרור שדות בין האזורים שלהלן:</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-            <ZoneBox zone="filter" label="מסננים" icon="▼" current={filterDim} />
-            <ZoneBox zone="col"    label="עמודות"  icon="|||" current={colDim} />
-            <ZoneBox zone="row"    label="שורות"   icon="=" current={rowDim} />
-            <div style={{ border: '1.5px solid var(--border-default)', borderRadius: '8px', padding: '7px 8px', background: 'var(--bg-surface)', minHeight: '62px' }}>
-              <p style={{ fontSize: '10px', fontWeight: 600, color: 'var(--fg-4)', marginBottom: '5px' }}>
-                &#931; ערכים
-              </p>
-              <select value={valueType} onChange={e => setValueType(e.target.value)} style={selSt}>
-                {VALUE_TYPES.map(vt => <option key={vt.key} value={vt.key}>{vt.label}</option>)}
-              </select>
+        {/* Drop zones */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <DropZone zone="row" label="שורות" current={rowDim} />
+          <DropZone zone="col" label="עמודות" current={colDim} />
+          {/* Values selector */}
+          <div style={{ border: '2px solid var(--border-subtle)', borderRadius: '10px', padding: '8px 12px', background: 'var(--bg-sunken)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 600, whiteSpace: 'nowrap' }}>ערכים:</span>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {VALUE_TYPES.map(vt => (
+                <button key={vt.key} onClick={() => setValueType(vt.key)}
+                  style={{
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 400,
+                    cursor: 'pointer', border: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
+                    background: valueType === vt.key ? 'var(--brand-leaf-500)' : 'var(--bg-hover)',
+                    color: valueType === vt.key ? 'white' : 'var(--fg-3)',
+                  }}>{vt.label}</button>
+              ))}
             </div>
           </div>
-
-          {/* Filter value picker */}
-          {filterDim && (
-            <div>
-              <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginBottom: '5px' }}>
-                {PIVOT_DIMS.find(d => d.key === filterDim)?.label}:
-              </p>
-              <select value={filterVal} onChange={e => setFilterVal(e.target.value)} style={selSt}>
-                <option value="">הכל</option>
-                {filterOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* ── Table area (left side) ── */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px', minWidth: 0 }}>
-        <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-2)', marginBottom: '14px' }}>
-          טבלת ניתוח
-        </p>
-
-        {!rowDim ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--fg-4)' }}>
-            <p style={{ fontSize: '30px', marginBottom: '10px' }}>📋</p>
-            <p style={{ fontSize: '14px', fontWeight: 400 }}>סמן שדה ברשימה מימין כדי להתחיל</p>
-            <p style={{ fontSize: '12px', marginTop: '4px' }}>לדוגמא: סמן "איש מכירות" ו"חודש"</p>
-          </div>
-        ) : rows.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--fg-4)', fontSize: '13px' }}>
-            אין נתונים בתקופה הנבחרת
-          </div>
-        ) : (
+      {/* Result table */}
+      {rowDim && rows.length > 0 ? (
+        <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ background: 'var(--bg-sunken)', borderBottom: '2px solid var(--border-default)' }}>
                 <th style={{ padding: '9px 14px', textAlign: 'right', color: 'var(--fg-3)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                   {PIVOT_DIMS.find(d => d.key === rowDim)?.label}
-                  {colDim && ` \\ ${PIVOT_DIMS.find(d => d.key === colDim)?.label}`}
+                  {colDim && ` / ${PIVOT_DIMS.find(d => d.key === colDim)?.label}`}
                 </th>
                 {cols.map(c => (
                   <th key={c} style={{ padding: '9px 14px', textAlign: 'center', color: 'var(--fg-3)', fontWeight: 500, whiteSpace: 'nowrap' }}>{c}</th>
@@ -366,9 +297,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
                           padding: '8px 14px', textAlign: 'center',
                           color: val ? 'var(--fg-1)' : 'var(--fg-4)', fontWeight: val ? 500 : 400,
                           background: val ? `rgba(63,169,220,${(val / max) * 0.18})` : 'transparent',
-                        }}>
-                          {fmtCell(row, c)}
-                        </td>
+                        }}>{fmtCell(row, c)}</td>
                       )
                     })}
                     <td style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 600, color: 'var(--brand)', borderRight: '2px solid var(--border-default)' }}>
@@ -389,8 +318,14 @@ function PivotTable({ leads }: { leads: Lead[] }) {
               </tr>
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--fg-4)' }}>
+          <p style={{ fontSize: '32px', marginBottom: '8px' }}>📋</p>
+          <p style={{ fontSize: '14px', fontWeight: 400 }}>גרור שדה מהרשימה לאזור "שורות" כדי להתחיל</p>
+          <p style={{ fontSize: '12px', marginTop: '4px' }}>לדוגמא: חודש בשורות + מקור בעמודות</p>
+        </div>
+      )}
     </div>
   )
 }
