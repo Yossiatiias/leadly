@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -96,22 +96,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    // שלח לעיבוד AI (async — לא מחכה)
+    // שלח לעיבוד AI אחרי שהתשובה נשלחת (after = Vercel background task)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
       (req.headers.get('x-forwarded-proto') && req.headers.get('host')
         ? `${req.headers.get('x-forwarded-proto')}://${req.headers.get('host')}`
         : 'http://localhost:3000')
-    fetch(`${baseUrl}/api/whatsapp/ai-respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        conversationId: conversation.id,
-        businessId,
-        senderPhone,
-        messageText,
-        instanceId,
-      }),
-    }).catch(console.error)
+
+    const aiPayload = {
+      conversationId: conversation.id,
+      businessId,
+      senderPhone,
+      messageText,
+      instanceId,
+    }
+
+    after(async () => {
+      try {
+        await fetch(`${baseUrl}/api/whatsapp/ai-respond`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(aiPayload),
+        })
+      } catch (e) {
+        console.error('[webhook] after() ai-respond error:', e)
+      }
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
