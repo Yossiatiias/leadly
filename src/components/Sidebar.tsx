@@ -10,7 +10,8 @@ import { Moon, Sun } from 'lucide-react'
 const navItems = [
   { href: '/',             label: 'בית'              },
   { href: '/conversations', label: 'שיחות'           },
-  { href: '/leads',        label: 'לידים'            },
+  { href: '/leads',        label: 'ניהול לידים'      },
+  { href: '/analytics',   label: 'ניתוח ביצועים'    },
   { href: '/qa',           label: 'שאלות ותשובות'   },
   { href: '/connections',  label: 'חיבורים'          },
   { href: '/reports',      label: 'דוחות'            },
