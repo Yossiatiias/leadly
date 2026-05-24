@@ -307,7 +307,7 @@ export default function SettingsPage() {
               </div>
               <button onClick={() => removeService(i)} style={{
                 width: '32px', height: '36px', borderRadius: '6px', border: 'none',
-                background: '#FEF2F2', color: '#C0392B', cursor: 'pointer', fontSize: '14px',
+                background: 'var(--bg-hover)', color: '#EF4444', cursor: 'pointer', fontSize: '14px',
                 marginTop: '18px',
               }}>✕</button>
             </div>

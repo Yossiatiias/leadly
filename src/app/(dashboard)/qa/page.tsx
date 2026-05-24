@@ -254,7 +254,7 @@ export default function QAPage() {
                           title={item.is_active ? 'השבת' : 'הפעל'}
                           style={{
                             width: '28px', height: '28px', borderRadius: '6px', border: 'none',
-                            background: item.is_active ? '#E8F8EC' : '#F0F0F0',
+                            background: item.is_active ? 'var(--brand-leaf-50)' : 'var(--bg-hover)',
                             cursor: 'pointer', fontSize: '14px',
                           }}
                         >
@@ -264,7 +264,7 @@ export default function QAPage() {
                           onClick={() => startEdit(item)}
                           style={{
                             width: '28px', height: '28px', borderRadius: '6px', border: 'none',
-                            background: '#EBF5FA', cursor: 'pointer', fontSize: '13px',
+                            background: 'var(--bg-hover)', cursor: 'pointer', fontSize: '13px',
                           }}
                         >
                           ✏️
@@ -273,7 +273,7 @@ export default function QAPage() {
                           onClick={() => deleteItem(item.id)}
                           style={{
                             width: '28px', height: '28px', borderRadius: '6px', border: 'none',
-                            background: '#FEF2F2', cursor: 'pointer', fontSize: '13px',
+                            background: 'var(--bg-hover)', cursor: 'pointer', fontSize: '13px',
                           }}
                         >
                           🗑️

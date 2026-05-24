@@ -27,7 +27,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: '#F8FAFC' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--bg-canvas)' }}>
       {/* Left panel - branding */}
       <div style={{
         display: 'none',
@@ -91,20 +91,20 @@ export default function LoginPage() {
           </div>
 
           <div style={{
-            background: 'white',
+            background: 'var(--bg-surface)',
             borderRadius: '20px',
-            border: '1px solid #E2E8F0',
+            border: '1px solid var(--border-subtle)',
             boxShadow: '0 4px 24px rgba(30,41,59,0.08)',
             padding: '36px',
           }}>
             <div style={{ marginBottom: '28px' }}>
-              <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#1E293B' }}>ברוך הבא</h1>
-              <p style={{ fontSize: '14px', color: '#64748B', marginTop: '4px' }}>התחבר כדי לנהל את הלידים שלך</p>
+              <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--fg-1)' }}>ברוך הבא</h1>
+              <p style={{ fontSize: '14px', color: 'var(--fg-3)', marginTop: '4px' }}>התחבר כדי לנהל את הלידים שלך</p>
             </div>
 
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>אימייל</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--fg-2)', marginBottom: '6px' }}>אימייל</label>
                 <input
                   type="email"
                   value={email}
@@ -114,17 +114,17 @@ export default function LoginPage() {
                   dir="ltr"
                   style={{
                     width: '100%', padding: '11px 14px',
-                    border: '1.5px solid #E2E8F0', borderRadius: '10px',
-                    fontSize: '14px', color: '#1E293B', background: '#F8FAFC',
+                    border: '1.5px solid var(--border-default)', borderRadius: '10px',
+                    fontSize: '14px', color: 'var(--fg-1)', background: 'var(--bg-sunken)',
                     outline: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)'; e.target.style.background = 'white' }}
-                  onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F7F8FA' }}
+                  onFocus={e => { e.target.style.borderColor = '#3FA9DC'; e.target.style.boxShadow = '0 0 0 3px rgba(63,169,220,0.15)'; e.target.style.background = 'var(--bg-surface)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'var(--bg-sunken)' }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>סיסמה</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--fg-2)', marginBottom: '6px' }}>סיסמה</label>
                 <input
                   type="password"
                   value={password}
@@ -134,12 +134,12 @@ export default function LoginPage() {
                   dir="ltr"
                   style={{
                     width: '100%', padding: '11px 14px',
-                    border: '1.5px solid #E5E7EB', borderRadius: '10px',
-                    fontSize: '14px', color: '#111827', background: '#F7F8FA',
+                    border: '1.5px solid var(--border-default)', borderRadius: '10px',
+                    fontSize: '14px', color: 'var(--fg-1)', background: 'var(--bg-sunken)',
                     outline: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)'; e.target.style.background = 'white' }}
-                  onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none'; e.target.style.background = '#F7F8FA' }}
+                  onFocus={e => { e.target.style.borderColor = '#3FA9DC'; e.target.style.boxShadow = '0 0 0 3px rgba(63,169,220,0.15)'; e.target.style.background = 'var(--bg-surface)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'var(--bg-sunken)' }}
                 />
               </div>
 

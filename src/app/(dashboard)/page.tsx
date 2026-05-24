@@ -60,8 +60,8 @@ function DonutChart({ slices, size = 120 }: { slices: { value: number; color: st
       <circle cx={cx} cy={cy} r={r + 6} fill="var(--bg-hover)" />
       {paths}
       <circle cx={cx} cy={cy} r={r - 16} fill="var(--bg-surface)" />
-      <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontSize: '16px', fontWeight: 800, fill: 'var(--fg-1)', fontFamily: 'Assistant, sans-serif' }}>{total}</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" style={{ fontSize: '9px', fill: 'var(--fg-3)', fontFamily: 'Assistant, sans-serif' }}>לידים</text>
+      <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontSize: '16px', fontWeight: 800, fill: 'var(--fg-1)', fontFamily: 'var(--font-sans)' }}>{total}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle" style={{ fontSize: '9px', fill: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}>לידים</text>
     </svg>
   )
 }
@@ -157,9 +157,9 @@ export default async function DashboardPage() {
       </div>
 
       {newToday > 0 && (
-        <div style={{ borderRadius: '10px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px', background: '#EEF2FF', border: '1px solid #C7D2FE' }}>
-          <ArrowUp size={14} style={{ color: '#3730A3' }} />
-          <p style={{ color: '#3730A3', fontWeight: 600, fontSize: '13px' }}>{newToday} לידים חדשים הגיעו היום</p>
+        <div style={{ borderRadius: '10px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px', background: 'var(--brand-sky-50)', border: '1px solid var(--brand-sky-100)' }}>
+          <ArrowUp size={14} style={{ color: 'var(--brand-sky-700)' }} />
+          <p style={{ color: 'var(--brand-sky-700)', fontWeight: 600, fontSize: '13px' }}>{newToday} לידים חדשים הגיעו היום</p>
         </div>
       )}
 
@@ -225,13 +225,13 @@ export default async function DashboardPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     {lead.phone && (
-                      <a href={`tel:${lead.phone}`} style={{ width: '28px', height: '28px', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0FDF4', textDecoration: 'none' }}>
+                      <a href={`tel:${lead.phone}`} style={{ width: '28px', height: '28px', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)', textDecoration: 'none' }}>
                         <Phone size={12} style={{ color: '#15803D' }} />
                       </a>
                     )}
                     {lead.phone && (
                       <a href={`https://wa.me/972${lead.phone.replace(/^0/, '').replace(/-/g, '')}`} target="_blank"
-                        style={{ width: '28px', height: '28px', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0FDF4', textDecoration: 'none' }}>
+                        style={{ width: '28px', height: '28px', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)', textDecoration: 'none' }}>
                         <MessageCircle size={12} style={{ color: '#15803D' }} />
                       </a>
                     )}

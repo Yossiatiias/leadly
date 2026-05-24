@@ -85,7 +85,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
           <img
             src={dark ? '/logo-dark.png' : '/logo-light.png'}
             alt="Leadly"
-            style={{ width: '120px', height: 'auto', objectFit: 'contain', transition: 'opacity 0.2s' }}
+            style={{ width: '130px', height: 'auto', objectFit: 'contain', transition: 'all 0.2s', mixBlendMode: dark ? 'screen' : 'multiply' }}
           />
           <button onClick={toggleTheme} className="theme-toggle" title={dark ? 'מצב בהיר' : 'מצב כהה'}>
             {dark ? <Sun size={15} /> : <Moon size={15} />}

@@ -271,6 +271,7 @@ html.dark td, html.dark th { color: var(--fg-2) !important; border-color: var(--
 html.dark h1, html.dark h2, html.dark h3 { color: var(--fg-1) !important; }
 html.dark p { color: var(--fg-3); }
 
+
 /* Dark theme toggle button */
 .theme-toggle {
   width: 32px; height: 32px;
