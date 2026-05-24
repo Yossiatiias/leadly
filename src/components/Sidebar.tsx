@@ -113,7 +113,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
         {navItems.map(({ href, label }) => {
           const active = pathname === href || (href !== '/' && pathname.startsWith(href))
           const showBadge = href === '/conversations' && unread > 0 && !active

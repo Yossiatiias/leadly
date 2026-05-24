@@ -110,13 +110,18 @@ function FunnelChart({ leads }: { leads: Lead[] }) {
   }))
   const total = stages[0].count || 1
   const W = 560
-  const segH = 52
+  const segH = 62
   const H = stages.length * segH
 
   return (
     <div style={{ overflowX: 'auto' }}>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`}
         style={{ maxWidth: '560px', display: 'block', margin: '0 auto' }}>
+        <defs>
+          <filter id="txt-shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.55" />
+          </filter>
+        </defs>
         {stages.map((stage, i) => {
           const n = stages.length
           const y = i * segH
@@ -129,22 +134,23 @@ function FunnelChart({ leads }: { leads: Lead[] }) {
             `${W - nextIndent},${y + segH - 2}`,
             `${nextIndent},${y + segH - 2}`,
           ].join(' ')
+          const cy = y + segH / 2
 
           return (
-            <g key={stage.key}>
+            <g key={stage.key} filter="url(#txt-shadow)">
               <polygon points={points} fill={stage.color} />
+              {/* label */}
               <text
-                x={W / 2} y={y + segH / 2 + 5}
+                x={W / 2} y={cy - 6}
                 textAnchor="middle" fill="white"
-                style={{ fontSize: '12.5px', fontWeight: '700', fontFamily: 'Rubik, sans-serif' }}
-              >
-                {stage.label}
-                {'  —  '}
-                {stage.count}
-                {'  ('}
-                {pct}
-                {'%)'}
-              </text>
+                style={{ fontSize: '13px', fontWeight: '800', fontFamily: 'Rubik, sans-serif' }}
+              >{stage.label}</text>
+              {/* count + pct */}
+              <text
+                x={W / 2} y={cy + 13}
+                textAnchor="middle" fill="rgba(255,255,255,0.92)"
+                style={{ fontSize: '12px', fontWeight: '600', fontFamily: 'Rubik, sans-serif' }}
+              >{stage.count} לידים ({pct}%)</text>
             </g>
           )
         })}
@@ -154,9 +160,17 @@ function FunnelChart({ leads }: { leads: Lead[] }) {
 }
 
 // ─── Pivot Table ──────────────────────────────────────────────────────────────
+const VALUE_TYPES = [
+  { key: 'count',   label: 'ספירת לידים' },
+  { key: 'pct_row', label: '% מהשורה' },
+  { key: 'pct_col', label: '% מהעמודה' },
+  { key: 'pct_all', label: '% מהכלל' },
+]
+
 function PivotTable({ leads }: { leads: Lead[] }) {
   const [rowDim, setRowDim] = useState<string | null>('month')
   const [colDim, setColDim] = useState<string | null>('source')
+  const [valueType, setValueType] = useState<string>('count')
   const [dragOver, setDragOver] = useState<string | null>(null)
 
   const usedKeys = new Set([rowDim, colDim].filter(Boolean) as string[])
@@ -222,6 +236,23 @@ function PivotTable({ leads }: { leads: Lead[] }) {
 
   const grandTotal = rows.reduce((s, r) => s + cols.reduce((ss, c) => ss + (data[r]?.[c] || 0), 0), 0)
 
+  function fmtCell(r: string, c: string): string {
+    const v = data[r]?.[c] || 0
+    if (valueType === 'count') return v ? String(v) : '—'
+    if (valueType === 'pct_row') {
+      const rt = cols.reduce((s, cc) => s + (data[r]?.[cc] || 0), 0)
+      return rt ? `${Math.round(v / rt * 100)}%` : '—'
+    }
+    if (valueType === 'pct_col') {
+      const ct = rows.reduce((s, rr) => s + (data[rr]?.[c] || 0), 0)
+      return ct ? `${Math.round(v / ct * 100)}%` : '—'
+    }
+    if (valueType === 'pct_all') {
+      return grandTotal ? `${Math.round(v / grandTotal * 100)}%` : '—'
+    }
+    return '—'
+  }
+
   return (
     <div className="card" style={{ padding: '20px' }}>
       <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', marginBottom: '16px' }}>
@@ -258,16 +289,27 @@ function PivotTable({ leads }: { leads: Lead[] }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <DropZone zone="row" label="שורות" current={rowDim} />
           <DropZone zone="col" label="עמודות" current={colDim} />
+          {/* Values selector */}
           <div style={{
             border: '2px solid var(--border-subtle)', borderRadius: '10px',
             padding: '8px 12px', background: 'var(--bg-sunken)',
-            display: 'flex', alignItems: 'center', gap: '8px',
+            display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
           }}>
-            <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 700 }}>ערכים:</span>
-            <span style={{
-              background: 'var(--brand-leaf-500)', color: 'white', borderRadius: '6px',
-              padding: '3px 10px', fontSize: '12px', fontWeight: 700,
-            }}>ספירת לידים</span>
+            <span style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 700, whiteSpace: 'nowrap' }}>ערכים:</span>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {VALUE_TYPES.map(vt => (
+                <button
+                  key={vt.key}
+                  onClick={() => setValueType(vt.key)}
+                  style={{
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+                    cursor: 'pointer', border: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
+                    background: valueType === vt.key ? 'var(--brand-leaf-500)' : 'var(--bg-hover)',
+                    color: valueType === vt.key ? 'white' : 'var(--fg-3)',
+                  }}
+                >{vt.label}</button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -298,6 +340,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
                       const val = data[row]?.[c] || 0
                       const max = Math.max(...rows.map(r => data[r]?.[c] || 0), 1)
                       const intensity = val / max
+                      const display = fmtCell(row, c)
                       return (
                         <td key={c} style={{
                           padding: '8px 14px', textAlign: 'center',
@@ -305,7 +348,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
                           fontWeight: val ? 600 : 400,
                           background: val ? `rgba(63,169,220,${intensity * 0.2})` : 'transparent',
                         }}>
-                          {val || '—'}
+                          {display}
                         </td>
                       )
                     })}
@@ -345,8 +388,7 @@ const PERIODS = [
   { key: 'today', label: 'היום' },
   { key: 'week',  label: 'שבוע' },
   { key: 'month', label: '30 יום' },
-  { key: 'ytd',   label: 'מתחיל השנה' },
-  { key: 'year',  label: 'שנה שלמה' },
+  { key: 'ytd',   label: 'מתחילת השנה' },
   { key: 'custom', label: 'טווח מותאם' },
 ]
 
