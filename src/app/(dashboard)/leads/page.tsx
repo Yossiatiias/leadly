@@ -171,11 +171,11 @@ export default function LeadsPage() {
                   {/* Name */}
                   <td className="px-3 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-extrabold shrink-0 ${temp.bg} ${temp.text}`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-medium shrink-0 ${temp.bg} ${temp.text}`}>
                         {lead.name.charAt(0)}
                       </div>
                       <div>
-                        <Link href={`/leads/${lead.id}`} className="font-bold text-gray-900 hover:text-[#5a9030] transition-colors text-sm block">
+                        <Link href={`/leads/${lead.id}`} className="font-medium text-gray-800 hover:text-[#5a9030] transition-colors text-sm block">
                           {lead.name}
                         </Link>
                         {lead.company_name && <p className="text-xs text-gray-400">{lead.company_name}{lead.clinic_count ? ` · ${lead.clinic_count} קליניקות` : ''}</p>}
@@ -184,16 +184,16 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   {/* Phone */}
-                  <td className="px-3 py-4 text-sm text-gray-500 font-mono text-center" dir="ltr">{lead.phone || '—'}</td>
+                  <td className="px-3 py-4 text-center" dir="ltr" style={{ fontSize: '13px', fontWeight: 400, color: 'var(--fg-3)', fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{lead.phone || '—'}</td>
                   {/* Source */}
                   <td className="px-3 py-4">
-                    <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                    <span className="text-[11px] font-normal text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
                       {SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}
                     </span>
                   </td>
                   {/* Status */}
                   <td className="px-3 py-4">
-                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full status-${lead.status}`}>
+                    <span className={`text-[11px] font-normal px-2.5 py-1 rounded-full status-${lead.status}`}>
                       {status.label}
                     </span>
                   </td>
@@ -202,7 +202,7 @@ export default function LeadsPage() {
                   {/* Follow-up */}
                   <td className="px-3 py-4 text-sm">
                     {lead.next_followup ? (
-                      <span className={`font-bold ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
+                      <span className={`font-normal ${isOverdue ? 'text-red-400' : 'text-gray-400'}`}>
                         {isOverdue && '⚠ '}{new Date(lead.next_followup).toLocaleDateString('he-IL')}
                       </span>
                     ) : <span className="text-gray-300">—</span>}

@@ -141,15 +141,15 @@ function FunnelChart({ leads }: { leads: Lead[] }) {
               <polygon points={points} fill={stage.color} />
               {/* label */}
               <text
-                x={W / 2} y={cy - 6}
+                x={W / 2} y={cy - 5}
                 textAnchor="middle" fill="white"
-                style={{ fontSize: '13px', fontWeight: '800', fontFamily: 'Rubik, sans-serif' }}
+                style={{ fontSize: '15px', fontWeight: '400', fontFamily: 'Rubik, sans-serif' }}
               >{stage.label}</text>
               {/* count + pct */}
               <text
-                x={W / 2} y={cy + 13}
-                textAnchor="middle" fill="rgba(255,255,255,0.92)"
-                style={{ fontSize: '12px', fontWeight: '600', fontFamily: 'Rubik, sans-serif' }}
+                x={W / 2} y={cy + 14}
+                textAnchor="middle" fill="rgba(255,255,255,0.85)"
+                style={{ fontSize: '13px', fontWeight: '300', fontFamily: 'Rubik, sans-serif' }}
               >{stage.count} לידים ({pct}%)</text>
             </g>
           )

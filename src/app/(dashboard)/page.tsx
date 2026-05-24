@@ -19,8 +19,8 @@ function HBarChart({ data }: { data: { label: string; value: number; color: stri
         return (
           <div key={label}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--fg-3)', fontWeight: 600 }}>{label}</span>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--fg-1)' }}>{value}</span>
+              <span style={{ fontSize: '12px', color: 'var(--fg-3)', fontWeight: 400 }}>{label}</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-1)' }}>{value}</span>
             </div>
             <div style={{ height: '7px', background: 'var(--bg-hover)', borderRadius: '99px', overflow: 'hidden' }}>
               <div style={{
@@ -60,8 +60,8 @@ function DonutChart({ slices, size = 120 }: { slices: { value: number; color: st
       <circle cx={cx} cy={cy} r={r + 6} fill="var(--bg-hover)" />
       {paths}
       <circle cx={cx} cy={cy} r={r - 16} fill="var(--bg-surface)" />
-      <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontSize: '16px', fontWeight: 800, fill: 'var(--fg-1)', fontFamily: 'var(--font-sans)' }}>{total}</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" style={{ fontSize: '9px', fill: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}>לידים</text>
+      <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontSize: '16px', fontWeight: 400, fill: 'var(--fg-1)', fontFamily: 'var(--font-sans)' }}>{total}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle" style={{ fontSize: '9px', fontWeight: 400, fill: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}>לידים</text>
     </svg>
   )
 }
@@ -197,7 +197,7 @@ export default async function DashboardPage() {
                   <div style={{
                     width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '11px', fontWeight: 800,
+                    fontSize: '11px', fontWeight: 500,
                     background: i === 0 ? '#3730A3' : 'var(--bg-hover)',
                     color: i === 0 ? 'white' : 'var(--fg-3)',
                   }}>
@@ -205,7 +205,7 @@ export default async function DashboardPage() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
-                      <Link href={`/leads/${lead.id}`} style={{ fontWeight: 700, color: 'var(--fg-1)', textDecoration: 'none', fontSize: '13px' }}>
+                      <Link href={`/leads/${lead.id}`} style={{ fontWeight: 500, color: 'var(--fg-1)', textDecoration: 'none', fontSize: '13px' }}>
                         {lead.name}
                       </Link>
                       {lead.company_name && <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>· {lead.company_name}</span>}
@@ -219,7 +219,7 @@ export default async function DashboardPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>{SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}</span>
                       {isOverdue && daysOverdue > 0 && (
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#EF4444' }}>⚠ {daysOverdue} ימים ללא טיפול</span>
+                        <span style={{ fontSize: '11px', fontWeight: 400, color: '#EF4444' }}>⚠ {daysOverdue} ימים ללא טיפול</span>
                       )}
                     </div>
                   </div>
@@ -283,7 +283,7 @@ export default async function DashboardPage() {
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: color, flexShrink: 0 }} />
                   <span style={{ fontSize: '12px', color: 'var(--fg-3)', flex: 1 }}>{label}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--fg-1)' }}>{value}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-1)' }}>{value}</span>
                 </div>
               ))}
             </div>
@@ -300,7 +300,7 @@ export default async function DashboardPage() {
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: color, flexShrink: 0 }} />
                   <span style={{ fontSize: '12px', color: 'var(--fg-3)', flex: 1 }}>{label}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--fg-1)' }}>{value}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-1)' }}>{value}</span>
                 </div>
               ))}
             </div>
