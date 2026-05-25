@@ -135,15 +135,11 @@ export default function ConversationsPage() {
   async function loadConversations(bId: string) {
     const { data } = await supabase
       .from('conversations')
-      .select('*, leads(status)')
+      .select('*')
       .eq('business_id', bId)
       .order('updated_at', { ascending: false })
 
-    const mapped = (data || []).map((c: any) => ({
-      ...c,
-      lead_status: c.leads?.status || null,
-    }))
-    setConversations(mapped)
+    setConversations(data || [])
     setLoading(false)
   }
 
