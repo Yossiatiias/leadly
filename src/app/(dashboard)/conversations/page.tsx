@@ -260,9 +260,9 @@ export default function ConversationsPage() {
                     </div>
                     <div>
                       <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
-                        {conv.contact_name || conv.contact_phone}
+                        {conv.contact_name && conv.contact_name.toLowerCase() !== 'test' ? conv.contact_name : conv.contact_phone}
                       </p>
-                      {conv.contact_name && (
+                      {conv.contact_name && conv.contact_name.toLowerCase() !== 'test' && (
                         <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '1px 0 0' }}>{conv.contact_phone}</p>
                       )}
                     </div>
@@ -274,7 +274,7 @@ export default function ConversationsPage() {
                       background: conv.bot_enabled ? '#E8F8EC' : '#FEF2F2',
                       color: conv.bot_enabled ? '#2E7D32' : '#C0392B',
                     }}>
-                      {conv.bot_enabled ? 'בוט פעיל' : 'אנושי'}
+                      {conv.bot_enabled ? 'סוכן פעיל' : 'אנושי'}
                     </span>
                   </div>
                 </div>
@@ -303,7 +303,7 @@ export default function ConversationsPage() {
               </div>
               <div>
                 <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: 0 }}>
-                  {selected.contact_name || selected.contact_phone}
+                  {selected.contact_name && selected.contact_name.toLowerCase() !== 'test' ? selected.contact_name : selected.contact_phone}
                 </p>
                 <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '2px 0 0' }}>{selected.contact_phone}</p>
               </div>
@@ -311,7 +311,7 @@ export default function ConversationsPage() {
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span style={{ fontSize: '12px', color: 'var(--fg-3)' }}>
-                {selected.bot_enabled ? 'הבוט מגיב אוטומטית' : 'מצב ידני'}
+                {selected.bot_enabled ? 'הסוכן מגיב אוטומטית' : 'מצב ידני'}
               </span>
               <button
                 onClick={() => toggleBot(selected)}
@@ -322,7 +322,7 @@ export default function ConversationsPage() {
                   fontFamily: 'inherit', fontWeight: 600, fontSize: '12px',
                 }}
               >
-                {selected.bot_enabled ? '⏸ עצור בוט' : '▶ הפעל בוט'}
+                {selected.bot_enabled ? '⏸ עצור סוכן' : '▶ הפעל סוכן'}
               </button>
             </div>
           </div>
@@ -356,14 +356,14 @@ export default function ConversationsPage() {
                   border: msg.sender_type === 'human' ? '1px solid var(--border-default)' : 'none',
                 }}>
                   {msg.sender_type !== 'contact' && (
-                    <p style={{ fontSize: '10px', color: 'var(--fg-3)', margin: '0 0 4px', fontWeight: 600 }}>
-                      {msg.sender_type === 'ai' ? '🤖 AI' : '👤 נציג'}
+                    <p style={{ fontSize: '10px', color: msg.direction === 'inbound' ? '#2d6a2d' : 'var(--fg-3)', margin: '0 0 4px', fontWeight: 600 }}>
+                      {msg.sender_type === 'ai' ? '🤖 סוכן AI' : '👤 נציג'}
                     </p>
                   )}
-                  <p style={{ margin: 0, fontSize: '14px', color: 'var(--fg-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: msg.direction === 'inbound' ? '#1a1a1a' : 'var(--fg-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                     {msg.content}
                   </p>
-                  <p style={{ margin: '4px 0 0', fontSize: '10px', color: 'var(--fg-3)', textAlign: 'left' }}>
+                  <p style={{ margin: '4px 0 0', fontSize: '10px', color: msg.direction === 'inbound' ? '#4a7a4a' : 'var(--fg-3)', textAlign: 'left' }}>
                     {formatTime(msg.created_at)}
                   </p>
                 </div>
