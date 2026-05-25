@@ -260,9 +260,9 @@ export default function ConversationsPage() {
                     </div>
                     <div>
                       <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
-                        {conv.contact_name && conv.contact_name.toLowerCase() !== 'test' ? conv.contact_name : conv.contact_phone}
+                        {conv.contact_name || conv.contact_phone}
                       </p>
-                      {conv.contact_name && conv.contact_name.toLowerCase() !== 'test' && (
+                      {conv.contact_name && (
                         <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '1px 0 0' }}>{conv.contact_phone}</p>
                       )}
                     </div>
@@ -303,7 +303,7 @@ export default function ConversationsPage() {
               </div>
               <div>
                 <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: 0 }}>
-                  {selected.contact_name && selected.contact_name.toLowerCase() !== 'test' ? selected.contact_name : selected.contact_phone}
+                  {selected.contact_name || selected.contact_phone}
                 </p>
                 <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '2px 0 0' }}>{selected.contact_phone}</p>
               </div>
