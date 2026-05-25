@@ -18,6 +18,8 @@ interface Conversation {
   status: string
   bot_enabled: boolean
   updated_at: string
+  lead_id?: string | null
+  lead_status?: string | null
   unread_count?: number
 }
 
@@ -33,6 +35,9 @@ export default function ConversationsPage() {
   const [instanceId, setInstanceId] = useState<string | null>(null)
   const [greenToken, setGreenToken] = useState<string | null>(null)
   const [greenUrl, setGreenUrl] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const selectedConvIdRef = useRef<string | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -130,13 +135,26 @@ export default function ConversationsPage() {
   async function loadConversations(bId: string) {
     const { data } = await supabase
       .from('conversations')
-      .select('*')
+      .select('*, leads(status)')
       .eq('business_id', bId)
       .order('updated_at', { ascending: false })
 
-    setConversations(data || [])
+    const mapped = (data || []).map((c: any) => ({
+      ...c,
+      lead_status: c.leads?.status || null,
+    }))
+    setConversations(mapped)
     setLoading(false)
   }
+
+  // ─── פילטור שיחות לפי חיפוש + תאריכים ───────────────────────────────────
+  const filteredConversations = conversations.filter(conv => {
+    const q = search.toLowerCase()
+    if (q && !((conv.contact_name || '').toLowerCase().includes(q)) && !conv.contact_phone.includes(q)) return false
+    if (dateFrom && conv.updated_at < dateFrom) return false
+    if (dateTo && conv.updated_at > dateTo + 'T23:59:59') return false
+    return true
+  })
 
   async function openConversation(conv: Conversation) {
     setSelected(conv)
@@ -225,19 +243,39 @@ export default function ConversationsPage() {
         display: 'flex', flexDirection: 'column',
         background: 'var(--bg-surface)',
       }}>
-        <div style={{ padding: '20px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>שיחות</h2>
-          <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '4px 0 0' }}>{conversations.length} שיחות</p>
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>שיחות</h2>
+            <span style={{ fontSize: '11px', color: 'var(--fg-3)' }}>{filteredConversations.length} שיחות</span>
+          </div>
+          {/* חיפוש */}
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="🔍 חיפוש לפי שם או טלפון..."
+            style={{
+              width: '100%', padding: '7px 10px', borderRadius: '8px', fontSize: '12px',
+              border: '1px solid var(--border-default)', background: 'var(--bg-sunken)',
+              color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+          {/* סינון תאריכים */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ flex: 1, padding: '5px 6px', borderRadius: '7px', fontSize: '11px', border: '1px solid var(--border-default)', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ flex: 1, padding: '5px 6px', borderRadius: '7px', fontSize: '11px', border: '1px solid var(--border-default)', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {conversations.length === 0 ? (
+          {filteredConversations.length === 0 ? (
             <div style={{ padding: '40px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: '32px', margin: '0 0 8px' }}>💬</p>
-              <p style={{ color: '#7AAEC4', fontSize: '13px' }}>אין שיחות עדיין</p>
+              <p style={{ color: '#7AAEC4', fontSize: '13px' }}>אין שיחות</p>
             </div>
           ) : (
-            conversations.map(conv => (
+            filteredConversations.map(conv => (
               <div
                 key={conv.id}
                 onClick={() => openConversation(conv)}
@@ -269,13 +307,22 @@ export default function ConversationsPage() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                     <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatTime(conv.updated_at)}</span>
-                    <span style={{
-                      fontSize: '10px', padding: '2px 6px', borderRadius: '99px',
-                      background: conv.bot_enabled ? '#E8F8EC' : '#FEF2F2',
-                      color: conv.bot_enabled ? '#2E7D32' : '#C0392B',
-                    }}>
-                      {conv.bot_enabled ? 'סוכן פעיל' : 'אנושי'}
-                    </span>
+                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {!conv.bot_enabled && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E' }}>
+                          עם הסוכן
+                        </span>
+                      )}
+                      {conv.lead_status === 'in_progress' && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#DBEAFE', color: '#1E40AF' }}>בתהליך</span>
+                      )}
+                      {conv.lead_status === 'booked' && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#D1FAE5', color: '#065F46' }}>נקבע תור</span>
+                      )}
+                      {conv.bot_enabled && !conv.lead_status && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#E8F8EC', color: '#2E7D32' }}>סוכן פעיל</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
