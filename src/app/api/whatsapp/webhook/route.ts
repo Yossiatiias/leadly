@@ -110,9 +110,8 @@ export async function POST(req: NextRequest) {
       }
 
       if (!conversation) continue
-      if (!conversation.bot_enabled || conversation.status === 'human_takeover') continue
 
-      // שמור הודעה נכנסת
+      // שמור הודעה נכנסת תמיד — גם במצב ידני
       await supabase.from('messages').insert({
         conversation_id: conversation.id,
         business_id: businessId,
@@ -121,6 +120,14 @@ export async function POST(req: NextRequest) {
         sender_type: 'contact',
         whatsapp_message_id: messageId,
       })
+
+      // עדכן updated_at על השיחה כדי שתעלה לראש הרשימה
+      await supabase.from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversation.id)
+
+      // אם מצב ידני — שמור אבל אל תפעיל AI
+      if (!conversation.bot_enabled || conversation.status === 'human_takeover') continue
 
       // קרא ל-ai-respond ברקע
       const aiPayload = {
