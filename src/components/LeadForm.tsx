@@ -92,6 +92,13 @@ export default function LeadForm({ profiles, lead }: Props) {
       setError('שגיאה בשמירה: ' + result.error.message)
       setLoading(false)
     } else {
+      // סנכרן שם ליד → שיחה אם השם השתנה
+      if (lead && payload.name && payload.name !== lead.name) {
+        await supabase
+          .from('conversations')
+          .update({ contact_name: payload.name })
+          .eq('lead_id', lead.id)
+      }
       router.push('/leads')
       router.refresh()
     }

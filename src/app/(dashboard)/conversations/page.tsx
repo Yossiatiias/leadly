@@ -293,7 +293,7 @@ export default function ConversationsPage() {
                       {(conv.contact_name || conv.contact_phone)[0]}
                     </div>
                     <div>
-                      <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
+                      <p style={{ fontWeight: 400, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
                         {conv.contact_name || conv.contact_phone}
                       </p>
                       {conv.contact_name && (
@@ -306,7 +306,7 @@ export default function ConversationsPage() {
                     <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {!conv.bot_enabled && (
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E' }}>
-                          עם הסוכן
+                          אנושי
                         </span>
                       )}
                       {conv.lead_status === 'in_progress' && (

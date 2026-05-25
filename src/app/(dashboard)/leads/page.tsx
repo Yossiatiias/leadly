@@ -6,6 +6,19 @@ import { TEMP_CONFIG, STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, getPrioritySc
 import { Search, Phone, MessageCircle, SlidersHorizontal, X, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 
+function formatPhone(phone: string): string {
+  if (!phone) return '—'
+  const clean = phone.replace(/\D/g, '')
+  if (clean.startsWith('972') && clean.length >= 12) {
+    const local = '0' + clean.slice(3) // 0521234567
+    return local.slice(0, 3) + '-' + local.slice(3, 6) + '-' + local.slice(6)
+  }
+  if (clean.startsWith('0') && clean.length === 10) {
+    return clean.slice(0, 3) + '-' + clean.slice(3, 6) + '-' + clean.slice(6)
+  }
+  return phone
+}
+
 const STATUSES = ['new', 'contacted', 'in_progress', 'published', 'not_relevant']
 const SOURCES = ['backoffice', 'whatsapp', 'social', 'outreach', 'manual']
 const TEMPS = ['hot', 'medium', 'cold']
@@ -184,7 +197,7 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   {/* Phone */}
-                  <td className="px-3 py-4 text-center" dir="ltr" style={{ fontSize: '13px', fontWeight: 400, color: 'var(--fg-3)', fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{lead.phone || '—'}</td>
+                  <td className="px-3 py-4 text-center" dir="ltr" style={{ fontSize: '13px', fontWeight: 400, color: 'var(--fg-3)', fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{formatPhone(lead.phone || '')}</td>
                   {/* Source */}
                   <td className="px-3 py-4">
                     <span className="text-[11px] font-normal text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
