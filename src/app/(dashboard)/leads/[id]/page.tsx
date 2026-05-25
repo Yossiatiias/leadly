@@ -16,6 +16,19 @@ import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { he } from 'date-fns/locale'
 
+function formatPhone(phone: string): string {
+  if (!phone) return '—'
+  const clean = phone.replace(/\D/g, '')
+  if (clean.startsWith('972') && clean.length >= 12) {
+    const local = '0' + clean.slice(3)
+    return local.slice(0, 3) + '-' + local.slice(3, 6) + '-' + local.slice(6)
+  }
+  if (clean.startsWith('0') && clean.length === 10) {
+    return clean.slice(0, 3) + '-' + clean.slice(3, 6) + '-' + clean.slice(6)
+  }
+  return phone
+}
+
 const OUTCOME_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   interested:    { icon: CheckCircle2, color: 'text-emerald-500', label: 'מעוניין' },
   not_interested:{ icon: XCircle,      color: 'text-red-400',     label: 'לא מעוניין' },
@@ -134,7 +147,7 @@ export default function LeadDetailPage() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-extrabold text-gray-900">{lead.name}</h1>
+                <h1 className="text-2xl font-normal text-gray-900">{lead.name}</h1>
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${temp.bg} ${temp.text}`}>{temp.emoji} {temp.label}</span>
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${status.bg} ${status.text}`}>{status.label}</span>
               </div>
@@ -147,7 +160,7 @@ export default function LeadDetailPage() {
                   </span>
                 )}
                 {lead.phone && (
-                  <span dir="ltr" style={{ fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{lead.phone}</span>
+                  <span dir="ltr" style={{ fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{formatPhone(lead.phone)}</span>
                 )}
                 <span>{SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}</span>
                 {lead.discount_percent && (
@@ -258,7 +271,7 @@ export default function LeadDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: 'שם מלא', value: lead.name },
-                  { label: 'טלפון', value: lead.phone, dir: 'ltr' },
+                  { label: 'טלפון', value: formatPhone(lead.phone || ''), dir: 'ltr' },
                   { label: 'אימייל', value: lead.email, dir: 'ltr' },
                   { label: 'מקור', value: SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS] },
                   { label: 'שם מתחם', value: lead.company_name },
