@@ -54,7 +54,7 @@ export default function LeadDetailPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(true)
 
   // AI state
   const [aiScript, setAiScript] = useState('')
@@ -285,7 +285,7 @@ export default function LeadDetailPage() {
               </div>
               {lead.notes && (
                 <div className="pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                  <p className="text-[11px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>הערות</p>
+                  <p className="text-[11px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>מידע כללי רלוונטי</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--fg-2)' }}>{lead.notes}</p>
                 </div>
               )}
@@ -298,7 +298,7 @@ export default function LeadDetailPage() {
           <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <div className="flex items-center gap-2">
               <Clock size={14} className="text-gray-400" />
-              <h2 className="font-bold text-gray-800 text-sm">היסטוריית אינטראקציות</h2>
+              <h2 className="font-bold text-gray-800 text-sm">תיעוד שיחות עם הלקוח</h2>
             </div>
             <span className="text-xs text-gray-400 font-semibold">{activities.length}</span>
           </div>
@@ -309,7 +309,7 @@ export default function LeadDetailPage() {
                 <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center mx-auto mb-2">
                   <Clock size={18} className="text-gray-300" />
                 </div>
-                <p className="text-gray-400 text-sm font-semibold">אין אינטראקציות עדיין</p>
+                <p className="text-gray-400 text-sm font-semibold">אין שיחות מתועדות עדיין</p>
                 <button onClick={() => setShowModal(true)} className="mt-2 text-xs text-[#7DC242] font-bold hover:underline">
                   + תעד ראשון
                 </button>

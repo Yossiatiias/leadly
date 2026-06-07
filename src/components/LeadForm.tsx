@@ -177,7 +177,7 @@ export default function LeadForm({ profiles, lead }: Props) {
 
       {/* Notes */}
       <div>
-        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>הערות</label>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>מידע כללי רלוונטי</label>
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} className="input-base resize-none" placeholder="מידע נוסף על הליד, מה ביקש, מה אמר..." />
       </div>
 
