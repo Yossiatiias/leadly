@@ -28,14 +28,18 @@ const TEMP_LABELS: Record<string, string> = { hot: 'חם', medium: 'בינוני
 
 // ─── Funnel stages ────────────────────────────────────────────────────────────
 const FUNNEL_STAGES = [
-  { key: 'total',        label: 'לידים שהגיעו',  color: '#BE185D', filter: (l: Lead[]) => l },
-  { key: 'new',          label: 'חדש',            color: '#166534', filter: (l: Lead[]) => l.filter(x => x.status === 'new') },
-  { key: 'contacted',    label: 'בוצע קשר',       color: '#C2410C', filter: (l: Lead[]) => l.filter(x => x.status === 'contacted') },
-  { key: 'in_progress',  label: 'בטיפול',          color: '#B45309', filter: (l: Lead[]) => l.filter(x => x.status === 'in_progress') },
-  { key: 'hot',          label: 'ליד חם',          color: '#991B1B', filter: (l: Lead[]) => l.filter(x => x.temperature === 'hot') },
-  { key: 'medium',       label: 'ליד בינוני',      color: '#92400E', filter: (l: Lead[]) => l.filter(x => x.temperature === 'medium') },
-  { key: 'published',    label: 'נסגר',            color: '#065F46', filter: (l: Lead[]) => l.filter(x => x.status === 'published') },
-  { key: 'not_relevant', label: 'לא רלוונטי',      color: '#4B5563', filter: (l: Lead[]) => l.filter(x => x.status === 'not_relevant') },
+  { key: 'total',          label: 'לידים שהגיעו',       tooltip: 'סך כל הלידים שנכנסו למערכת בתקופה הנבחרת',                                                     color: '#BE185D', filter: (l: Lead[]) => l },
+  { key: 'new',            label: 'חדש',                 tooltip: 'ליד שנרשם ועדיין לא טופל — ממתין לטיפול ראשוני',                                                color: '#1D4ED8', filter: (l: Lead[]) => l.filter(x => x.status === 'new') },
+  { key: 'no_answer',      label: 'אין מענה',            tooltip: 'ניסיון יצירת קשר בוצע אך הלקוח לא ענה — נדרש מעקב נוסף',                                      color: '#C2410C', filter: (l: Lead[]) => l.filter(x => x.status === 'contacted') },
+  { key: 'follow_up',      label: 'למעקב',               tooltip: 'הלקוח ביקש שיחזרו אליו במועד מאוחר יותר — ממתין לחזרה',                                       color: '#B45309', filter: (l: Lead[]) => l.filter(x => x.status === 'in_progress') },
+  { key: 'not_relevant',   label: 'לא רלוונטי',          tooltip: 'ליד שאינו מתאים לשירות — עקב מרחק גיאוגרפי, היעדר שירות מתאים, או סיבה עסקית אחרת',          color: '#4B5563', filter: (l: Lead[]) => l.filter(x => x.status === 'not_relevant') },
+  { key: 'booked',         label: 'נקבע תור',            tooltip: 'הושג הסכם על פגישה או תור — הליד הומר בהצלחה לתיאום מוגדר',                                   color: '#065F46', filter: (l: Lead[]) => l.filter(x => x.status === 'published') },
+  { key: 'no_show',        label: 'לא הגיעו',            tooltip: 'הלקוח לא הגיע לתור שנקבע — נדרש תיאום מחדש או בירור סיבת ההיעדרות',                          color: '#7C3AED', filter: (l: Lead[]) => l.filter(x => x.status === 'no_show') },
+  { key: 'arrived',        label: 'הגיע',                tooltip: 'הלקוח הגיע לתור ונמצא כעת במעקב פעיל לקידום תהליך הרכישה',                                   color: '#0369A1', filter: (l: Lead[]) => l.filter(x => x.status === 'arrived') },
+  { key: 'quote_sent',     label: 'הצעת מחיר',           tooltip: 'הוגשה ללקוח הצעת מחיר — ממתין לבחינתה ולקבלת החלטה סופית',                                    color: '#0891B2', filter: (l: Lead[]) => l.filter(x => x.status === 'quote_sent') },
+  { key: 'quote_followup', label: 'מעקב אחר הצעת מחיר', tooltip: 'הצעת המחיר נמצאת בשלב שיחה — מתנהל מעקב פעיל במטרה לסגור את העסקה',                         color: '#0284C7', filter: (l: Lead[]) => l.filter(x => x.status === 'quote_followup') },
+  { key: 'closed',         label: 'נסגר',                tooltip: 'העסקה נסגרה בהצלחה — הלקוח שילם והפך ללקוח פעיל',                                            color: '#15803D', filter: (l: Lead[]) => l.filter(x => x.status === 'closed') },
+  { key: 'lost',           label: 'אבוד',                tooltip: 'הלקוח סירב להצעה ועבר למתחרה — ליד שאבד מהמשפך',                                             color: '#991B1B', filter: (l: Lead[]) => l.filter(x => x.status === 'lost') },
 ]
 
 // ─── Pivot dimensions ─────────────────────────────────────────────────────────
@@ -103,14 +107,20 @@ function filterByPeriod(leads: Lead[], period: string, from: string, to: string)
 
 // ─── Funnel Chart ─────────────────────────────────────────────────────────────
 function FunnelChart({ leads }: { leads: Lead[] }) {
+  const [hovered, setHovered] = useState<typeof FUNNEL_STAGES[0] | null>(null)
+  const [mouse, setMouse] = useState({ x: 0, y: 0 })
+
   const stages = FUNNEL_STAGES.map(s => ({ ...s, count: s.filter(leads).length }))
   const total = stages[0].count || 1
   const W = 560
-  const segH = 62
+  const segH = 52
   const H = stages.length * segH
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div
+      style={{ overflowX: 'auto', position: 'relative' }}
+      onMouseMove={e => setMouse({ x: e.clientX, y: e.clientY })}
+    >
       <svg width="100%" viewBox={`0 0 ${W} ${H}`}
         style={{ maxWidth: '560px', display: 'block', margin: '0 auto' }}>
         <defs>
@@ -126,17 +136,48 @@ function FunnelChart({ leads }: { leads: Lead[] }) {
           const pct = total > 0 ? Math.round((stage.count / total) * 100) : 0
           const points = [`${indent},${y}`, `${W - indent},${y}`, `${W - nextIndent},${y + segH - 2}`, `${nextIndent},${y + segH - 2}`].join(' ')
           const cy = y + segH / 2
+          const isHovered = hovered?.key === stage.key
           return (
-            <g key={stage.key} filter="url(#txt-shadow)">
-              <polygon points={points} fill={stage.color} />
+            <g
+              key={stage.key}
+              filter="url(#txt-shadow)"
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHovered(stage)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <polygon points={points} fill={stage.color} opacity={isHovered ? 0.85 : 1} />
               <text x={W / 2} y={cy - 5} textAnchor="middle" fill="white"
-                style={{ fontSize: '15px', fontWeight: '400', fontFamily: 'Rubik, sans-serif' }}>{stage.label}</text>
-              <text x={W / 2} y={cy + 14} textAnchor="middle" fill="rgba(255,255,255,0.85)"
-                style={{ fontSize: '13px', fontWeight: '300', fontFamily: 'Rubik, sans-serif' }}>{stage.count} לידים ({pct}%)</text>
+                style={{ fontSize: '13px', fontWeight: '400', fontFamily: 'Rubik, sans-serif' }}>{stage.label}</text>
+              <text x={W / 2} y={cy + 12} textAnchor="middle" fill="rgba(255,255,255,0.85)"
+                style={{ fontSize: '11px', fontWeight: '300', fontFamily: 'Rubik, sans-serif' }}>{stage.count} לידים ({pct}%)</text>
             </g>
           )
         })}
       </svg>
+
+      {/* Floating tooltip */}
+      {hovered && (
+        <div style={{
+          position: 'fixed',
+          left: mouse.x + 14,
+          top: mouse.y - 56,
+          background: 'rgba(15, 23, 42, 0.95)',
+          color: 'white',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          fontSize: '12px',
+          maxWidth: '240px',
+          zIndex: 9999,
+          pointerEvents: 'none',
+          lineHeight: 1.6,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+          backdropFilter: 'blur(6px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}>
+          <p style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px', color: 'white' }}>{hovered.label}</p>
+          <p style={{ color: 'rgba(255,255,255,0.75)', margin: 0 }}>{hovered.tooltip}</p>
+        </div>
+      )}
     </div>
   )
 }
