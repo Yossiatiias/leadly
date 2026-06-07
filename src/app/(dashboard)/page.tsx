@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { getPriorityScore, TEMP_CONFIG, STATUS_CONFIG, SOURCE_LABELS } from '@/types'
+import { getPriorityScore, STATUS_CONFIG, SOURCE_LABELS } from '@/types'
 import Link from 'next/link'
-import { Phone, MessageCircle, ChevronLeft, Flame, Clock, TrendingUp, CheckCircle2, Users, ArrowUp } from 'lucide-react'
+import { Phone, MessageCircle, ChevronLeft, CheckCircle2, ArrowUp } from 'lucide-react'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -66,12 +66,13 @@ function DonutChart({ slices, size = 120 }: { slices: { value: number; color: st
   )
 }
 
-function KpiCard({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color: string; bg: string }) {
+function KpiCard({ label, value, sub, color, extra }: { label: string; value: number | string; sub?: string; color: string; bg?: string; extra?: React.ReactNode }) {
   return (
     <div style={{ background: 'var(--bg-surface)', borderRadius: '16px', border: '1px solid var(--border-subtle)', padding: '20px 22px', boxShadow: '0 1px 3px rgba(17,24,39,0.05)' }}>
       <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fg-4)', marginBottom: '10px' }}>{label}</p>
       <p style={{ fontSize: '28px', fontWeight: 400, color, lineHeight: 1 }}>{value}</p>
       {sub && <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '8px', fontWeight: 400 }}>{sub}</p>}
+      {extra}
     </div>
   )
 }
@@ -93,17 +94,24 @@ export default async function DashboardPage() {
 
   const leads = allLeads || []
   const active = leads.filter(l => !['published', 'not_relevant'].includes(l.status))
+  const now = new Date()
   const today = new Date(); today.setHours(0, 0, 0, 0)
+  const weekAgo  = new Date(now.getTime() - 7  * 86400000)
+  const monthAgo = new Date(now.getTime() - 30 * 86400000)
 
   const priorities = active
     .sort((a, b) => getPriorityScore(b) - getPriorityScore(a))
     .slice(0, 8)
 
-  const hot = active.filter(l => l.temperature === 'hot').length
-  const overdueCount = active.filter(l => l.next_followup && new Date(l.next_followup) < new Date()).length
-  const newToday = leads.filter(l => new Date(l.created_at) >= today).length
-  const published = leads.filter(l => l.status === 'published').length
-  const convRate = leads.length ? Math.round((published / leads.length) * 100) : 0
+  const newToday      = leads.filter(l => new Date(l.created_at) >= today).length
+  const newWeek       = leads.filter(l => new Date(l.created_at) >= weekAgo).length
+  const newMonth      = leads.filter(l => new Date(l.created_at) >= monthAgo).length
+  const newLeads      = leads.filter(l => l.status === 'new').length
+  const inProgress    = leads.filter(l => ['contacted', 'in_progress'].includes(l.status)).length
+  const published     = leads.filter(l => l.status === 'published').length
+  const notRelevant   = leads.filter(l => l.status === 'not_relevant').length
+  const convRate      = leads.length ? Math.round((published / leads.length) * 100) : 0
+  const overdueCount  = active.filter(l => l.next_followup && new Date(l.next_followup) < new Date()).length
 
   const statusData = [
     { label: 'חדש',         value: leads.filter(l => l.status === 'new').length,          color: '#3FA9DC' },
@@ -149,11 +157,24 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '20px' }}>
-        <KpiCard label="לידים פעילים" value={active.length} sub={`מתוך ${leads.length} סה״כ`} color="#226F94" bg="#EAF6FC" />
-        <KpiCard label="לידים חמים" value={hot} sub={hot > 0 ? 'דורשים מענה מיידי' : 'אין כרגע'} color="#B83434" bg="#FEECEC" />
-        <KpiCard label="ממתינים לטיפול" value={overdueCount} sub={overdueCount > 0 ? 'עבר מועד follow-up' : 'הכל מעודכן'} color="#B87A0E" bg="#FFF6E5" />
-        <KpiCard label="אחוז המרה" value={`${convRate}%`} sub={`${published} פרסמו מתוך ${leads.length}`} color="#547F23" bg="#ECFAE5" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '14px', marginBottom: '20px' }}>
+        <KpiCard
+          label="סה״כ לידים לתקופה"
+          value={newMonth}
+          color="#226F94"
+          extra={
+            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>היום: <strong style={{ color: 'var(--fg-2)' }}>{newToday}</strong></span>
+              <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>שבוע: <strong style={{ color: 'var(--fg-2)' }}>{newWeek}</strong></span>
+              <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>חודש: <strong style={{ color: 'var(--fg-2)' }}>{newMonth}</strong></span>
+            </div>
+          }
+        />
+        <KpiCard label="לידים חדשים" value={newLeads} sub="ממתינים לטיפול ראשוני" color="#1D4ED8" />
+        <KpiCard label="לידים בטיפול ומעקב" value={inProgress} sub={overdueCount > 0 ? `⚠ ${overdueCount} עברו מועד` : 'מטופלים'} color="#B87A0E" />
+        <KpiCard label="לידים שנסגרו" value={published} sub={`${convRate}% מכלל הלידים`} color="#15803D" />
+        <KpiCard label="לא רלוונטיים" value={notRelevant} sub="מרחק / אין שירות מתאים" color="#6B7280" />
+        <KpiCard label="אחוזי המרה" value={`${convRate}%`} sub={`${published} נסגרו מתוך ${leads.length}`} color="#547F23" />
       </div>
 
       {newToday > 0 && (
@@ -182,7 +203,6 @@ export default async function DashboardPage() {
                 <p style={{ color: 'var(--fg-4)', fontWeight: 600, fontSize: '13px' }}>אין לידים פעילים כרגע</p>
               </div>
             ) : priorities.map((lead, i) => {
-              const temp = TEMP_CONFIG[lead.temperature as keyof typeof TEMP_CONFIG] || TEMP_CONFIG.medium
               const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG]
               const isOverdue = lead.next_followup && new Date(lead.next_followup) < new Date()
               const daysOverdue = isOverdue ? Math.floor((Date.now() - new Date(lead.next_followup!).getTime()) / 86400000) : 0
@@ -209,9 +229,6 @@ export default async function DashboardPage() {
                         {lead.name}
                       </Link>
                       {lead.company_name && <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>· {lead.company_name}</span>}
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${temp.bg} ${temp.text}`}>
-                        {temp.emoji} {temp.label}
-                      </span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.bg} ${status.text}`}>
                         {status.label}
                       </span>

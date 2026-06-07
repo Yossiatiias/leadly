@@ -21,11 +21,6 @@ const STATUSES = [
   { value: 'not_relevant', label: 'לא רלוונטי' },
 ]
 
-const TEMPS = [
-  { value: 'hot', label: '🔴 חם', color: 'bg-red-50 text-red-600 border-red-200' },
-  { value: 'medium', label: '🟡 בינוני', color: 'bg-amber-50 text-amber-600 border-amber-200' },
-  { value: 'cold', label: '🔵 קר', color: 'bg-sky-50 text-sky-600 border-sky-200' },
-]
 
 interface Props {
   profiles: Profile[]
@@ -106,20 +101,6 @@ export default function LeadForm({ profiles, lead }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="card p-6 space-y-5">
-      {/* Temperature */}
-      <div>
-        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>טמפרטורה</label>
-        <div className="flex gap-2">
-          {TEMPS.map(({ value, label, color }) => (
-            <button key={value} type="button" onClick={() => set('temperature', value)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${form.temperature === value ? color + ' border-current' : ''}`}
-              style={form.temperature !== value ? { background: 'var(--bg-sunken)', color: 'var(--fg-4)', borderColor: 'var(--border-default)' } : {}}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Name + Phone */}
       <div className="grid grid-cols-2 gap-4">
         <div>

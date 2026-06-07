@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
-import { TEMP_CONFIG, STATUS_CONFIG, SOURCE_LABELS, type Lead } from '@/types'
+import { STATUS_CONFIG, SOURCE_LABELS, type Lead } from '@/types'
 import LeadForm from '@/components/LeadForm'
 import DeleteLeadButton from '@/components/DeleteLeadButton'
 import InteractionModal from '@/components/InteractionModal'
@@ -120,7 +120,6 @@ export default function LeadDetailPage() {
 
   if (!lead) return <div className="p-6 text-gray-400">ליד לא נמצא</div>
 
-  const temp = TEMP_CONFIG[lead.temperature as keyof typeof TEMP_CONFIG] || TEMP_CONFIG.medium
   const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG]
   const isOverdue = lead.next_followup && new Date(lead.next_followup) < new Date() && !['published', 'not_relevant'].includes(lead.status)
   const daysOverdue = isOverdue ? Math.floor((Date.now() - new Date(lead.next_followup!).getTime()) / 86400000) : 0
@@ -142,13 +141,12 @@ export default function LeadDetailPage() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Avatar */}
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-extrabold shrink-0 ${temp.bg} ${temp.text}`}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-extrabold shrink-0 bg-gray-100 text-gray-600">
               {lead.name.charAt(0)}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl font-normal text-gray-900">{lead.name}</h1>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${temp.bg} ${temp.text}`}>{temp.emoji} {temp.label}</span>
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${status.bg} ${status.text}`}>{status.label}</span>
               </div>
               <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-gray-400">

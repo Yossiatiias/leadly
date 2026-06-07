@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { TEMP_CONFIG, STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, getPriorityScore, type Lead } from '@/types'
+import { STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, getPriorityScore, type Lead } from '@/types'
 import { Search, Phone, MessageCircle, SlidersHorizontal, X, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -21,7 +21,6 @@ function formatPhone(phone: string): string {
 
 const STATUSES = ['new', 'contacted', 'in_progress', 'published', 'not_relevant']
 const SOURCES = ['backoffice', 'whatsapp', 'social', 'outreach', 'manual']
-const TEMPS = ['hot', 'medium', 'cold']
 
 export default function LeadsPage() {
   const supabase = createClient()
@@ -30,7 +29,7 @@ export default function LeadsPage() {
   const [profiles, setProfiles] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({ status: '', source: '', temperature: '', assigned: '' })
+  const [filters, setFilters] = useState({ status: '', source: '', assigned: '' })
 
   useEffect(() => {
     async function load() {
@@ -51,15 +50,14 @@ export default function LeadsPage() {
       const matchSearch = !q || l.name.toLowerCase().includes(q) || (l.phone || '').includes(q) || (l.company_name || '').toLowerCase().includes(q) || (l.email || '').toLowerCase().includes(q)
       const matchStatus = !filters.status || l.status === filters.status
       const matchSource = !filters.source || l.source === filters.source
-      const matchTemp = !filters.temperature || l.temperature === filters.temperature
       const matchAssigned = !filters.assigned || l.assigned_to === filters.assigned
-      return matchSearch && matchStatus && matchSource && matchTemp && matchAssigned
+      return matchSearch && matchStatus && matchSource && matchAssigned
     }).sort((a, b) => getPriorityScore(b) - getPriorityScore(a))
   }, [leads, search, filters])
 
   const hasFilters = Object.values(filters).some(Boolean)
 
-  function clearFilters() { setFilters({ status: '', source: '', temperature: '', assigned: '' }) }
+  function clearFilters() { setFilters({ status: '', source: '', assigned: '' }) }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -129,13 +127,6 @@ export default function LeadsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">טמפרטורה</label>
-            <select value={filters.temperature} onChange={e => setFilters(f => ({ ...f, temperature: e.target.value }))} className="input-base">
-              <option value="">הכל</option>
-              {TEMPS.map(t => <option key={t} value={t}>{TEMP_CONFIG[t as keyof typeof TEMP_CONFIG].emoji} {TEMP_CONFIG[t as keyof typeof TEMP_CONFIG].label}</option>)}
-            </select>
-          </div>
-          <div>
             <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">מקור</label>
             <select value={filters.source} onChange={e => setFilters(f => ({ ...f, source: e.target.value }))} className="input-base">
               <option value="">הכל</option>
@@ -157,7 +148,7 @@ export default function LeadsPage() {
         <table className="w-full">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-default)', background: 'var(--bg-sunken)' }}>
-              {['', 'איש קשר', 'טלפון', 'מקור', 'סטטוס', 'איש מכירות', 'follow-up', ''].map((h, i) => (
+              {['איש קשר', 'טלפון', 'מקור', 'סטטוס', 'איש מכירות', 'follow-up', ''].map((h, i) => (
                 <th key={i} style={{ textAlign: 'right', fontSize: '11px', fontWeight: 500, color: 'var(--fg-2)', padding: '10px 14px', letterSpacing: '0.03em' }}>{h}</th>
               ))}
             </tr>
@@ -171,20 +162,15 @@ export default function LeadsPage() {
               </td></tr>
             )}
             {filtered.map(lead => {
-              const temp = TEMP_CONFIG[lead.temperature as keyof typeof TEMP_CONFIG] || TEMP_CONFIG.medium
               const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG]
               const isOverdue = lead.next_followup && new Date(lead.next_followup) < new Date() && !['published', 'not_relevant'].includes(lead.status)
 
               return (
                 <tr key={lead.id} className="hover:bg-gray-50/50 transition-colors group">
-                  {/* Temp indicator */}
-                  <td className="pr-4 pl-0 py-4 w-1">
-                    <div className={`w-1.5 h-8 rounded-full mx-auto ${temp.dot}`} />
-                  </td>
                   {/* Name */}
                   <td className="px-3 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-medium shrink-0 ${temp.bg} ${temp.text}`}>
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-medium shrink-0 bg-gray-100 text-gray-600">
                         {lead.name.charAt(0)}
                       </div>
                       <div>
