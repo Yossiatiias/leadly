@@ -70,6 +70,8 @@ export default function KnowledgePage() {
   const [urlTitle,     setUrlTitle]    = useState('')
   const [urlAud,       setUrlAud]      = useState<'both'|'customer'|'staff'>('both')
   const [urlCat,       setUrlCat]      = useState('כללי')
+  const [urlManual,    setUrlManual]   = useState('')
+  const [showManual,   setShowManual]  = useState(false)
   const [saving,       setSaving]      = useState(false)
   const [msg,          setMsg]         = useState('')
 
@@ -169,7 +171,32 @@ export default function KnowledgePage() {
     })
     const json = await res.json()
     if (json.ok) { setShowModal(false); loadData() }
-    else setMsg('שגיאה: ' + json.error)
+    else if (res.status === 422 && json.error?.includes('403')) {
+      setShowManual(true)
+      setMsg('')
+    } else {
+      setMsg('שגיאה: ' + json.error)
+    }
+    setSaving(false)
+  }
+
+  async function handleManualSave() {
+    if (!urlManual.trim() || !businessId) return
+    setSaving(true); setMsg('')
+    const { error } = await supabase.from('qa_knowledge').insert({
+      business_id: businessId,
+      type: 'url',
+      title: urlTitle || urlInput,
+      question: urlTitle || urlInput,
+      answer: urlManual,
+      content: urlManual,
+      source_url: urlInput,
+      category: urlCat,
+      audience: urlAud,
+      is_active: true,
+    })
+    if (error) { setMsg('שגיאה בשמירה'); setSaving(false); return }
+    setShowModal(false); setShowManual(false); setUrlManual(''); loadData()
     setSaving(false)
   }
 
@@ -384,7 +411,7 @@ export default function KnowledgePage() {
       {/* ── Add/Edit Modal ── */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-          onClick={e => e.target === e.currentTarget && setShowModal(false)}>
+          onClick={e => { if (e.target === e.currentTarget) { setShowModal(false); setShowManual(false); setUrlManual('') } }}>
           <div style={{ background: 'var(--bg-surface)', borderRadius: '18px', width: '100%', maxWidth: '560px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
 
             {/* Modal header */}
@@ -392,7 +419,7 @@ export default function KnowledgePage() {
               <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--fg-1)' }}>
                 {editItem ? 'עריכת פריט' : step === 'type' ? 'הוסף מידע חדש' : `הוסף ${TYPE_META[addType].label}`}
               </h2>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: '4px' }}><X size={18} /></button>
+              <button onClick={() => { setShowModal(false); setShowManual(false); setUrlManual('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: '4px' }}><X size={18} /></button>
             </div>
 
             <div style={{ padding: '22px' }}>
@@ -511,7 +538,7 @@ export default function KnowledgePage() {
                   )}
 
                   {/* URL scrape */}
-                  {addType === 'url' && (
+                  {addType === 'url' && !showManual && (
                     <>
                       <div style={{ marginBottom: '12px' }}>
                         <label style={lbl}>כותרת (אופציונלי)</label>
@@ -527,6 +554,24 @@ export default function KnowledgePage() {
                     </>
                   )}
 
+                  {/* Manual paste fallback (after 403) */}
+                  {addType === 'url' && showManual && (
+                    <>
+                      <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                        <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '13px', color: '#92400E' }}>האתר חוסם גישה אוטומטית</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#B45309', lineHeight: 1.5 }}>
+                          הכנס לדף <a href={urlInput} target="_blank" rel="noreferrer" style={{ color: '#7C3AED', fontWeight: 600 }} dir="ltr">{urlInput}</a>, העתק את הטקסט והדבק כאן:
+                        </p>
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={lbl}>טקסט מהאתר</label>
+                        <textarea value={urlManual} onChange={e => setUrlManual(e.target.value)}
+                          rows={7} className="input-base" style={{ width: '100%', resize: 'vertical' }}
+                          placeholder="הדבק כאן את הטקסט מהעמוד..." />
+                      </div>
+                    </>
+                  )}
+
                   {msg && <p style={{ fontSize: '12px', color: msg.includes('שגיאה') ? '#EF4444' : '#10B981', margin: '8px 0 0', fontWeight: 600 }}>{msg}</p>}
 
                   {/* Action buttons */}
@@ -534,15 +579,20 @@ export default function KnowledgePage() {
                     {!editItem && step === 'form' && (
                       <button onClick={() => setStep('type')} className="btn-ghost" style={{ marginRight: 'auto' }}>חזור</button>
                     )}
-                    <button onClick={() => setShowModal(false)} className="btn-ghost">ביטול</button>
+                    <button onClick={() => { setShowModal(false); setShowManual(false); setUrlManual('') }} className="btn-ghost">ביטול</button>
                     {addType === 'qa' && (
                       <button onClick={saveQA} disabled={saving || !form.question.trim() || !form.answer.trim()} className="btn-primary" style={{ opacity: saving ? 0.6 : 1 }}>
                         {saving ? 'שומר...' : editItem ? 'עדכן' : 'שמור'}
                       </button>
                     )}
-                    {addType === 'url' && (
+                    {addType === 'url' && !showManual && (
                       <button onClick={handleScrape} disabled={saving || !urlInput.trim()} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: saving ? 0.6 : 1 }}>
                         <Link2 size={13} />{saving ? 'סורק...' : 'סרוק עמוד'}
+                      </button>
+                    )}
+                    {addType === 'url' && showManual && (
+                      <button onClick={handleManualSave} disabled={saving || !urlManual.trim()} className="btn-primary" style={{ opacity: saving ? 0.6 : 1 }}>
+                        {saving ? 'שומר...' : 'שמור טקסט'}
                       </button>
                     )}
                   </div>
