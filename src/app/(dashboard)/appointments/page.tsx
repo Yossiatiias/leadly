@@ -3,7 +3,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ChevronRight, ChevronLeft, Plus, X, Clock, User, Stethoscope, Check, XCircle, AlertCircle } from 'lucide-react'
-import { TREATMENT_LABELS, TREATMENT_COLORS } from '@/types'
+import { TREATMENT_LABELS, TREATMENT_COLORS, type TreatmentType } from '@/types'
+
+const T_LABELS = TREATMENT_LABELS as Record<string, string>
+const T_COLORS = TREATMENT_COLORS as Record<string, string>
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Appointment {
@@ -159,7 +162,7 @@ function AddModal({
             <label style={lbl}>סוג טיפול</label>
             <select value={form.treatment_type} onChange={e => set('treatment_type', e.target.value)} className="input-base">
               <option value="">— ללא —</option>
-              {Object.entries(TREATMENT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {Object.entries(T_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
 
@@ -204,8 +207,8 @@ const lbl: React.CSSProperties = { fontSize: '12px', fontWeight: 600, color: 'va
 // ─── Appointment Card ─────────────────────────────────────────────────────────
 function ApptCard({ appt, onStatusChange }: { appt: Appointment; onStatusChange: (id: string, status: string) => void }) {
   const cfg = STATUS_CONFIG[appt.status]
-  const tColor = appt.treatment_type ? TREATMENT_COLORS[appt.treatment_type] : '#9CA3AF'
-  const tLabel = appt.treatment_type ? TREATMENT_LABELS[appt.treatment_type as keyof typeof TREATMENT_LABELS] : ''
+  const tColor = appt.treatment_type ? T_COLORS[appt.treatment_type] : '#9CA3AF'
+  const tLabel = appt.treatment_type ? T_LABELS[appt.treatment_type] : ''
 
   return (
     <div style={{
@@ -302,7 +305,7 @@ function WeekView({ appointments, week, onAddAt }: { appointments: Appointment[]
                 }}
                   onClick={() => { const d = new Date(day); d.setHours(h); onAddAt(d) }}>
                   {dayAppts.map(a => {
-                    const color = a.treatment_type ? TREATMENT_COLORS[a.treatment_type] : '#3B82F6'
+                    const color = a.treatment_type ? T_COLORS[a.treatment_type] : '#3B82F6'
                     const cfg = STATUS_CONFIG[a.status]
                     return (
                       <div key={a.id} style={{
