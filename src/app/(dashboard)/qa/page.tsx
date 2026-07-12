@@ -129,21 +129,26 @@ export default function KnowledgePage() {
 
   async function saveQA() {
     if (!form.question.trim() || !form.answer.trim() || !businessId) return
-    setSaving(true)
+    setSaving(true); setMsg('')
+    let err: any = null
     if (editItem) {
-      await supabase.from('qa_knowledge').update({
+      const { error } = await supabase.from('qa_knowledge').update({
         title: form.question, question: form.question,
         answer: form.answer, category: form.category, audience: form.audience,
       }).eq('id', editItem.id)
+      err = error
     } else {
-      await supabase.from('qa_knowledge').insert({
+      const { error } = await supabase.from('qa_knowledge').insert({
         business_id: businessId, type: 'qa',
         title: form.question, question: form.question,
         answer: form.answer, category: form.category,
         audience: form.audience, is_active: true,
       })
+      err = error
     }
-    setSaving(false); setShowModal(false); loadData()
+    setSaving(false)
+    if (err) { setMsg('שגיאה: ' + err.message); return }
+    setShowModal(false); loadData()
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
