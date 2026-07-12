@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [profiles, setProfiles] = useState<any[]>([])
   const [recentActivities, setRecentActivities] = useState<any[]>([])
   const [userName, setUserName] = useState('')
+  const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('month')
   const [dateFrom, setDateFrom] = useState('')
@@ -99,7 +100,7 @@ export default function DashboardPage() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       const [{ data: profileData }, { data: leadsData }, { data: profilesData }, { data: activitiesData }] = await Promise.all([
-        supabase.from('profiles').select('full_name').eq('id', user!.id).single(),
+        supabase.from('profiles').select('full_name, business_id').eq('id', user!.id).single(),
         supabase.from('leads').select('*'),
         supabase.from('profiles').select('id, full_name'),
         supabase.from('lead_activities').select('*, lead:leads(name,first_name,last_name), profile:profiles(full_name)').order('created_at', { ascending: false }).limit(20),
@@ -108,6 +109,10 @@ export default function DashboardPage() {
       setAllLeads(leadsData || [])
       setProfiles(profilesData || [])
       setRecentActivities(activitiesData || [])
+      if (profileData?.business_id) {
+        const { data: biz } = await supabase.from('businesses').select('name').eq('id', profileData.business_id).single()
+        setBusinessName(biz?.name || '')
+      }
       setLoading(false)
     }
     load()
@@ -229,10 +234,14 @@ export default function DashboardPage() {
     <div style={{ padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div className="animate-in" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
-          <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fg-4)', marginBottom: '3px' }}>{getGreeting()}, {userName.split(' ')[0]}</p>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--fg-1)' }}>דשבורד</h1>
+          <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-4)', marginBottom: '4px' }}>
+            {getGreeting()}, {userName.split(' ')[0]} 👋
+          </p>
+          <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--fg-1)', margin: 0, letterSpacing: '-0.03em', lineHeight: 1 }}>
+            {businessName || 'הדשבורד שלי'}
+          </h1>
         </div>
         <div style={{ textAlign: 'left' }}>
           <p style={{ fontWeight: 600, color: 'var(--fg-2)', fontSize: '13px' }}>{dateStr}</p>
@@ -242,27 +251,22 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* AI Insights */}
+      {/* AI Insights — 3 bold bullets */}
       {insights.length > 0 && (
-        <div style={{ marginBottom: '20px' }}>
-          <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
+        <div className="animate-in stagger-1" style={{ marginBottom: '20px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 22px' }}>
+          <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '14px' }}>
             ✦ תובנות AI
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(insights.length, 4)}, 1fr)`, gap: '10px' }}>
-            {insights.map((ins, i) => {
-              const Icon = ins.icon
-              return (
-                <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 16px', display: 'flex', gap: '10px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: ins.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon size={14} style={{ color: ins.color }} />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-1)', marginBottom: '3px', lineHeight: 1.4 }}>{ins.title}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--fg-4)', lineHeight: 1.5 }}>{ins.body}</p>
-                  </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {insights.slice(0, 3).map((ins, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: ins.color, marginTop: '5px', flexShrink: 0 }} />
+                <div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--fg-1)' }}>{ins.title}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--fg-3)' }}> — {ins.body}</span>
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -298,12 +302,18 @@ export default function DashboardPage() {
 
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
-        <KpiCard label="סה״כ לידים בתקופה"   value={totalPeriod} sub={`מתוך ${allLeads.length} במערכת`}          color="var(--brand)" />
-        <KpiCard label="לידים חדשים"          value={newLeads}    sub="ממתינים לטיפול"                            color="var(--fg-2)" />
-        <KpiCard label="בטיפול ומעקב"        value={inProgress}  sub={`${notRel} לא רלוונטיים`}                  color="var(--warning)" />
-        <KpiCard label="קבעו תור"             value={published}   sub={`${convRate}% מלידי התקופה`}               color="var(--success)" />
-        <KpiCard label="אחוזי המרה"           value={`${convRate}%`} sub={`${published} נסגרו מ-${totalPeriod}`}  color={convRate >= 15 ? 'var(--success)' : 'var(--fg-2)'} />
-        <KpiCard label="לידים פעילים"         value={active.length} sub="כלל הזמן"                               color="var(--fg-2)" />
+        {[
+          { label: 'סה״כ לידים בתקופה',  value: totalPeriod,       sub: `מתוך ${allLeads.length} במערכת`,          color: 'var(--brand)' },
+          { label: 'לידים חדשים',         value: newLeads,           sub: 'ממתינים לטיפול',                          color: 'var(--fg-2)' },
+          { label: 'בטיפול ומעקב',       value: inProgress,         sub: `${notRel} לא רלוונטיים`,                  color: 'var(--warning)' },
+          { label: 'קבעו תור',            value: published,          sub: `${convRate}% מלידי התקופה`,               color: 'var(--success)' },
+          { label: 'אחוזי המרה',          value: `${convRate}%`,     sub: `${published} נסגרו מ-${totalPeriod}`,     color: convRate >= 15 ? 'var(--success)' : 'var(--fg-2)' },
+          { label: 'לידים פעילים',        value: active.length,      sub: 'כלל הזמן',                               color: 'var(--fg-2)' },
+        ].map((k, i) => (
+          <div key={k.label} className={`animate-in stagger-${i + 2}`}>
+            <KpiCard label={k.label} value={k.value} sub={k.sub} color={k.color} />
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '16px', marginBottom: '16px' }}>

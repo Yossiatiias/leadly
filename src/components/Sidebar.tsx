@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
 import { useEffect, useState } from 'react'
-import { Moon, Sun, Home, MessageSquare, Users, CalendarDays, BarChart2, BookOpen, Plug2, Settings, type LucideIcon } from 'lucide-react'
+import { Moon, Sun, Home, MessageSquare, Users, CalendarDays, BarChart2, BookOpen, Plug2, Settings, Crosshair, type LucideIcon } from 'lucide-react'
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/',               label: 'בית',            icon: Home          },
@@ -13,6 +13,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/leads',          label: 'ניהול לידים',    icon: Users         },
   { href: '/appointments',   label: 'יומן תורים',     icon: CalendarDays  },
   { href: '/analytics',      label: 'ניתוח ביצועים',  icon: BarChart2     },
+  { href: '/lead-hunting',   label: 'ציד לידים',      icon: Crosshair     },
   { href: '/qa',             label: 'מידע ארגוני',    icon: BookOpen      },
   { href: '/connections',    label: 'חיבורים',        icon: Plug2         },
   { href: '/settings',       label: 'הגדרות עסק',     icon: Settings      },
@@ -24,10 +25,23 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
   const supabase = createClient()
   const [unread, setUnread] = useState(0)
   const [dark, setDark] = useState(false)
+  const [businessName, setBusinessName] = useState('')
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains('dark'))
   }, [])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    async function loadBiz() {
+      const { data: pr } = await supabase.from('profiles').select('business_id').eq('id', profile!.id).single()
+      if (pr?.business_id) {
+        const { data: biz } = await supabase.from('businesses').select('name').eq('id', pr.business_id).single()
+        if (biz?.name) setBusinessName(biz.name)
+      }
+    }
+    loadBiz()
+  }, [profile?.id])
 
   function toggleTheme() {
     const next = !dark
@@ -128,8 +142,19 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         })}
       </nav>
 
+      {/* Business name badge */}
+      {businessName && (
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
+          <div style={{ padding: '8px 12px', borderRadius: '10px', background: 'var(--brand-soft)', textAlign: 'center' }}>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--brand)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              🏥 {businessName}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* User + Logout */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
+      <div style={{ padding: '12px 16px', borderTop: businessName ? 'none' : '1px solid var(--sidebar-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px', padding: '9px 10px', borderRadius: '10px', background: 'var(--sidebar-user-bg)' }}>
           <div style={{
             width: '32px', height: '32px', borderRadius: '50%',

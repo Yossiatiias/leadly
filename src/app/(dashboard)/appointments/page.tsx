@@ -116,6 +116,12 @@ function AddModal({
       notes:          form.notes || null,
     })
     if (err) { setError(err.message); setSaving(false); return }
+
+    // Sync lead status → published when appointment is booked
+    if (form.lead_id) {
+      await supabase.from('leads').update({ status: 'published' }).eq('id', form.lead_id)
+    }
+
     onSaved()
   }
 

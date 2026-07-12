@@ -132,62 +132,46 @@ function filterByPeriod(leads: Lead[], period: string, from: string, to: string)
 
 // ─── Funnel Chart ─────────────────────────────────────────────────────────────
 function FunnelChart({ leads }: { leads: Lead[] }) {
-  const [hovered, setHovered] = useState<typeof FUNNEL_STAGES[0] | null>(null)
-  const [mouse, setMouse] = useState({ x: 0, y: 0 })
+  const [hovered, setHovered] = useState<string | null>(null)
 
   const stages = FUNNEL_STAGES.map(s => ({ ...s, count: s.filter(leads).length }))
   const total = stages[0].count || 1
-  const W = 560
-  const segH = 52
-  const H = stages.length * segH
 
   return (
-    <div
-      style={{ overflowX: 'auto', position: 'relative' }}
-      onMouseMove={e => setMouse({ x: e.clientX, y: e.clientY })}
-    >
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`}
-        style={{ maxWidth: '560px', display: 'block', margin: '0 auto' }}>
-        <defs>
-          <filter id="txt-shadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.55" />
-          </filter>
-        </defs>
-        {stages.map((stage, i) => {
-          const n = stages.length
-          const y = i * segH
-          const indent = (i / n) * (W * 0.36)
-          const nextIndent = ((i + 1) / n) * (W * 0.36)
-          const pct = total > 0 ? Math.round((stage.count / total) * 100) : 0
-          const points = [`${indent},${y}`, `${W - indent},${y}`, `${W - nextIndent},${y + segH - 2}`, `${nextIndent},${y + segH - 2}`].join(' ')
-          const cy = y + segH / 2
-          const isHovered = hovered?.key === stage.key
-          return (
-            <g key={stage.key} filter="url(#txt-shadow)" style={{ cursor: 'pointer' }}
-              onMouseEnter={() => setHovered(stage)}
-              onMouseLeave={() => setHovered(null)}>
-              <polygon points={points} fill={stage.color} opacity={isHovered ? 0.85 : 1} />
-              <text x={W / 2} y={cy - 5} textAnchor="middle" fill="white"
-                style={{ fontSize: '13px', fontWeight: '400', fontFamily: 'Rubik, sans-serif' }}>{stage.label}</text>
-              <text x={W / 2} y={cy + 12} textAnchor="middle" fill="rgba(255,255,255,0.85)"
-                style={{ fontSize: '11px', fontWeight: '300', fontFamily: 'Rubik, sans-serif' }}>{stage.count} לידים ({pct}%)</text>
-            </g>
-          )
-        })}
-      </svg>
-      {hovered && (
-        <div style={{
-          position: 'fixed', left: mouse.x + 14, top: mouse.y - 56,
-          background: 'rgba(15, 23, 42, 0.95)', color: 'white',
-          padding: '10px 14px', borderRadius: '10px', fontSize: '12px', maxWidth: '240px',
-          zIndex: 9999, pointerEvents: 'none', lineHeight: 1.6,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-          backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.08)',
-        }}>
-          <p style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px', color: 'white' }}>{hovered.label}</p>
-          <p style={{ color: 'rgba(255,255,255,0.75)', margin: 0 }}>{hovered.tooltip}</p>
-        </div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {stages.map((stage, i) => {
+        const pct = total > 0 ? Math.round((stage.count / total) * 100) : 0
+        const isHov = hovered === stage.key
+        return (
+          <div key={stage.key}
+            onMouseEnter={() => setHovered(stage.key)}
+            onMouseLeave={() => setHovered(null)}
+            title={stage.tooltip}
+            style={{ cursor: 'default' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: isHov ? 'var(--fg-1)' : 'var(--fg-2)', transition: 'color 0.15s' }}>
+                {i + 1}. {stage.label}
+              </span>
+              <span style={{ fontSize: '12px', fontVariantNumeric: 'tabular-nums', color: 'var(--fg-1)', fontWeight: 600 }}>
+                {stage.count}{' '}
+                <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: '11px' }}>({pct}%)</span>
+              </span>
+            </div>
+            <div style={{ height: '26px', borderRadius: '8px', background: 'var(--bg-hover)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${pct}%`,
+                background: stage.color,
+                borderRadius: '8px',
+                opacity: isHov ? 1 : 0.82,
+                transition: 'width 0.5s ease, opacity 0.15s',
+                minWidth: pct > 0 ? '6px' : '0',
+              }} />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

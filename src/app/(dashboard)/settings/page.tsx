@@ -40,8 +40,15 @@ const GOALS = [
   { value: 'sale',        label: 'מכירה ישירה' },
 ]
 
-const TABS = ['כללי', 'שעות פעילות', 'בוט WhatsApp', 'שירותים', 'תורים'] as const
+const TABS = ['כללי', 'שעות פעילות', 'בוט WhatsApp', 'שירותים', 'תורים', 'עובדים'] as const
 type Tab = typeof TABS[number]
+
+interface Employee {
+  id: string
+  full_name: string | null
+  role: string | null
+  email?: string | null
+}
 
 export default function SettingsPage() {
   const supabase = createClient()
@@ -56,6 +63,9 @@ export default function SettingsPage() {
   const [bot, setBot] = useState({ greeting: '', goal: 'appointment', escalation_rule: '', auto_reply_hours: '24', description: '' })
   const [services, setServices] = useState<Service[]>([])
   const [apptSettings, setApptSettings] = useState({ default_duration: '30', booking_window_days: '60' })
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [empSaving, setEmpSaving] = useState<string | null>(null)
+  const [empSaved, setEmpSaved] = useState<string | null>(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -73,8 +83,20 @@ export default function SettingsPage() {
       setBot({ greeting: s.greeting || '', goal: s.goal || 'appointment', escalation_rule: s.escalation_rule || '', auto_reply_hours: s.auto_reply_hours || '24', description: s.description || '' })
       setServices(s.services || [])
       setApptSettings({ default_duration: s.default_duration || '30', booking_window_days: s.booking_window_days || '60' })
+
+      // Load employees (profiles linked to this business)
+      const { data: empData } = await supabase.from('profiles').select('id, full_name, role, email').eq('business_id', profile.business_id)
+      setEmployees(empData || [])
     }
     setLoading(false)
+  }
+
+  async function saveEmployee(emp: Employee) {
+    setEmpSaving(emp.id)
+    await supabase.from('profiles').update({ full_name: emp.full_name, role: emp.role }).eq('id', emp.id)
+    setEmpSaving(null)
+    setEmpSaved(emp.id)
+    setTimeout(() => setEmpSaved(null), 2000)
   }
 
   async function save() {
@@ -295,6 +317,71 @@ export default function SettingsPage() {
                   <button onClick={() => setServices(s => s.filter((_, j) => j !== i))} style={{
                     background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', alignItems: 'center',
                   }}><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── עובדים ── */}
+      {tab === 'עובדים' && (
+        <div style={sec}>
+          <div style={{ marginBottom: '18px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: 0 }}>עובדים ונציגים</h3>
+            <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '4px' }}>
+              ערוך שמות וסמלי תפקיד לנציגים הרשומים במערכת. שמות אלה יופיעו בכרטיסיות הליד.
+            </p>
+          </div>
+          {employees.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '28px', color: 'var(--fg-4)', fontSize: '13px', background: 'var(--bg-sunken)', borderRadius: '10px' }}>
+              אין עובדים רשומים עדיין
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {employees.map(emp => (
+                <div key={emp.id} style={{ background: 'var(--bg-sunken)', borderRadius: '10px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
+                    {(emp.full_name || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 160px', gap: '10px' }}>
+                    <div>
+                      <label style={{ ...lbl, marginBottom: '3px' }}>שם מלא</label>
+                      <input
+                        value={emp.full_name || ''}
+                        onChange={e => setEmployees(prev => prev.map(x => x.id === emp.id ? { ...x, full_name: e.target.value } : x))}
+                        placeholder="שם הנציג"
+                        style={inp}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...lbl, marginBottom: '3px' }}>תפקיד</label>
+                      <select
+                        value={emp.role || 'agent'}
+                        onChange={e => setEmployees(prev => prev.map(x => x.id === emp.id ? { ...x, role: e.target.value } : x))}
+                        style={inp}
+                      >
+                        <option value="admin">מנהל</option>
+                        <option value="agent">נציג מכירות</option>
+                        <option value="doctor">רופא</option>
+                        <option value="reception">קבלה</option>
+                      </select>
+                    </div>
+                  </div>
+                  {emp.email && <p style={{ fontSize: '11px', color: 'var(--fg-4)', whiteSpace: 'nowrap', flexShrink: 0 }}>{emp.email}</p>}
+                  <button
+                    onClick={() => saveEmployee(emp)}
+                    disabled={empSaving === emp.id}
+                    style={{
+                      padding: '7px 14px', borderRadius: '8px', border: 'none',
+                      background: empSaved === emp.id ? 'var(--success)' : 'var(--brand)',
+                      color: 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '12px',
+                      cursor: empSaving === emp.id ? 'default' : 'pointer', flexShrink: 0,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {empSaved === emp.id ? '✓ נשמר' : empSaving === emp.id ? '...' : 'שמור'}
+                  </button>
                 </div>
               ))}
             </div>
