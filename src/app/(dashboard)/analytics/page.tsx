@@ -196,9 +196,11 @@ function FunnelChart({ leads }: { leads: Lead[] }) {
 function TreatmentDistribution({ leads }: { leads: Lead[] }) {
   const [drilldown, setDrilldown] = useState<string | null>(null)
 
+  const bookedLeads = useMemo(() => leads.filter(l => l.status === 'published'), [leads])
+
   const distribution = useMemo(() => {
     const counts: Record<string, Lead[]> = {}
-    leads.forEach(l => {
+    bookedLeads.forEach(l => {
       const key = l.treatment_type || 'none'
       if (!counts[key]) counts[key] = []
       counts[key].push(l)
@@ -208,7 +210,7 @@ function TreatmentDistribution({ leads }: { leads: Lead[] }) {
       .sort((a, b) => b.count - a.count)
   }, [leads])
 
-  const total = leads.length || 1
+  const total = bookedLeads.length || 1
   const withTreatment = distribution.filter(d => d.key !== 'none')
 
   if (withTreatment.length === 0) return null
@@ -217,9 +219,12 @@ function TreatmentDistribution({ leads }: { leads: Lead[] }) {
 
   return (
     <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-      <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--fg-2)', marginBottom: '16px' }}>
+      <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--fg-2)', marginBottom: '4px' }}>
         פילוח לפי סוג טיפול
       </h2>
+      <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginBottom: '16px' }}>
+        מבוסס על {bookedLeads.length} לידים שנקבע להם תור בתקופה
+      </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {withTreatment.map(({ key, count }) => {
           const color = TREATMENT_COLORS[key] || '#9CA3AF'
@@ -355,7 +360,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
           border: `2px dashed ${isOver ? 'var(--brand)' : 'var(--border-default)'}`,
           borderRadius: '10px', padding: '8px 12px', minHeight: '44px',
           display: 'flex', alignItems: 'center', gap: '8px',
-          background: isOver ? 'var(--brand-sky-50)' : 'var(--bg-sunken)',
+          background: isOver ? 'var(--brand-soft)' : 'var(--bg-sunken)',
           transition: 'all 0.15s', cursor: 'default',
         }}
       >
@@ -411,7 +416,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
                   style={{
                     padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 400,
                     cursor: 'pointer', border: 'none', fontFamily: 'inherit', transition: 'all 0.15s',
-                    background: valueType === vt.key ? 'var(--brand-leaf-500)' : 'var(--bg-hover)',
+                    background: valueType === vt.key ? 'var(--brand)' : 'var(--bg-hover)',
                     color: valueType === vt.key ? 'white' : 'var(--fg-3)',
                   }}>{vt.label}</button>
               ))}
@@ -448,7 +453,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
                         <td key={c} style={{
                           padding: '8px 14px', textAlign: 'center',
                           color: val ? 'var(--fg-1)' : 'var(--fg-4)', fontWeight: val ? 500 : 400,
-                          background: val ? `rgba(63,169,220,${(val / max) * 0.18})` : 'transparent',
+                          background: val ? `rgba(43,107,232,${(val / max) * 0.18})` : 'transparent',
                         }}>{fmtCell(row, c)}</td>
                       )
                     })}
@@ -519,7 +524,7 @@ export default function AnalyticsPage() {
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg,var(--brand-sky-600),var(--brand-leaf-500))', margin: '0 auto 12px', opacity: 0.8 }} />
+        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--brand)', margin: '0 auto 12px', opacity: 0.3 }} />
         <p style={{ color: 'var(--fg-4)', fontSize: '14px' }}>טוען נתונים...</p>
       </div>
     </div>

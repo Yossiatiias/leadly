@@ -304,19 +304,22 @@ export default function ConversationsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                     <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatTime(conv.updated_at)}</span>
                     <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {!conv.bot_enabled && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E' }}>
-                          אנושי
+                      {/* bot / manual chip */}
+                      {conv.bot_enabled ? (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
+                          🤖 בוט
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid var(--warning-border)' }}>
+                          👤 ידני
                         </span>
                       )}
+                      {/* lead status chip */}
+                      {conv.lead_status === 'published' && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', fontWeight: 600 }}>✓ תור</span>
+                      )}
                       {conv.lead_status === 'in_progress' && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#DBEAFE', color: '#1E40AF' }}>בתהליך</span>
-                      )}
-                      {conv.lead_status === 'booked' && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#D1FAE5', color: '#065F46' }}>נקבע תור</span>
-                      )}
-                      {conv.bot_enabled && !conv.lead_status && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: '#E8F8EC', color: '#2E7D32' }}>סוכן פעיל</span>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--info-soft)', color: 'var(--info)' }}>בתהליך</span>
                       )}
                     </div>
                   </div>
@@ -437,7 +440,7 @@ export default function ConversationsPage() {
               disabled={sending || !draft.trim()}
               style={{
                 padding: '10px 20px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                background: sending || !draft.trim() ? '#A8D5EE' : '#3FA9DC',
+                background: sending || !draft.trim() ? 'var(--brand-soft)' : 'var(--brand)',
                 color: 'white', fontWeight: 600, fontSize: '14px', fontFamily: 'inherit',
               }}
             >

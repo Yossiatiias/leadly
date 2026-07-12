@@ -344,7 +344,7 @@ export default function ConnectionsPage() {
               disabled={saving || !form.instance_id.trim() || !form.api_token.trim()}
               style={{
                 padding: '9px 18px', borderRadius: '8px', border: 'none',
-                background: saving ? '#A8D5EE' : '#3FA9DC', color: 'white',
+                background: saving ? 'var(--brand-soft)' : 'var(--brand', color: 'white',
                 fontFamily: 'inherit', cursor: saving ? 'default' : 'pointer',
                 fontWeight: 600, fontSize: '13px',
               }}
@@ -354,6 +354,52 @@ export default function ConnectionsPage() {
           </div>
         </div>
       )}
+
+      {/* Facebook placeholder */}
+      <div style={{
+        background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px',
+        border: '1px solid var(--border-default)', marginBottom: '20px',
+        opacity: 0.7,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#1877F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>
+            f
+          </div>
+          <div>
+            <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: 0 }}>Facebook Leads</p>
+            <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '2px 0 0' }}>ייבוא לידים ממודעות פייסבוק</p>
+          </div>
+          <span style={{ marginRight: 'auto', fontSize: '11px', padding: '4px 12px', borderRadius: '99px', background: 'var(--bg-sunken)', color: 'var(--fg-4)', border: '1px solid var(--border-subtle)' }}>
+            בקרוב
+          </span>
+        </div>
+        <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: 0 }}>
+          חיבור זה יאפשר ייבוא אוטומטי של לידים מקמפיינים ב-Facebook Lead Ads ישירות למערכת.
+        </p>
+      </div>
+
+      {/* Google Calendar placeholder */}
+      <div style={{
+        background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px',
+        border: '1px solid var(--border-default)', marginBottom: '20px',
+        opacity: 0.7,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fff', border: '2px solid #E0E0E0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>
+            📅
+          </div>
+          <div>
+            <p style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: 0 }}>Google Calendar</p>
+            <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '2px 0 0' }}>סנכרון תורים דו-כיווני</p>
+          </div>
+          <span style={{ marginRight: 'auto', fontSize: '11px', padding: '4px 12px', borderRadius: '99px', background: 'var(--bg-sunken)', color: 'var(--fg-4)', border: '1px solid var(--border-subtle)' }}>
+            בקרוב
+          </span>
+        </div>
+        <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: 0 }}>
+          סנכרון דו-כיווני — תורים שנקבעים במערכת ייכנסו ליומן Google, ושינויים ביומן יתעדכנו כאן אוטומטית.
+        </p>
+      </div>
 
       {/* Instructions */}
       <div style={{
@@ -373,7 +419,7 @@ export default function ConnectionsPage() {
           <div key={num} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'flex-start' }}>
             <span style={{
               width: '22px', height: '22px', borderRadius: '50%',
-              background: '#3FA9DC', color: 'white',
+              background: 'var(--brand)', color: 'white',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '11px', fontWeight: 700, flexShrink: 0,
             }}>{num}</span>

@@ -17,6 +17,7 @@ export interface Profile {
   id: string
   full_name: string
   role: UserRole
+  business_id: string | null
   created_at: string
 }
 
@@ -25,6 +26,10 @@ export interface Lead {
   created_at: string
   updated_at: string
   name: string
+  first_name: string | null
+  last_name: string | null
+  lead_number: number | null
+  first_opened_at: string | null
   phone: string | null
   email: string | null
   source: LeadSource
@@ -40,6 +45,18 @@ export interface Lead {
   next_followup: string | null
   last_contacted: string | null
   profile?: Profile
+}
+
+export interface LeadFile {
+  id: string
+  lead_id: string
+  business_id: string
+  file_name: string
+  file_url: string
+  file_size: number | null
+  file_type: string | null
+  uploaded_by: string | null
+  created_at: string
 }
 
 export interface LeadActivity {
@@ -139,5 +156,16 @@ export function getPriorityScore(lead: Lead): number {
 }
 
 export function isNewLead(lead: Lead): boolean {
-  return Date.now() - new Date(lead.created_at).getTime() < 24 * 60 * 60 * 1000
+  return lead.first_opened_at === null
+}
+
+export function getDisplayName(lead: Lead): string {
+  if (lead.first_name) {
+    return lead.last_name ? `${lead.first_name} ${lead.last_name}` : lead.first_name
+  }
+  return lead.name || ''
+}
+
+export function getLeadNumber(lead: Lead): string {
+  return lead.lead_number ? String(lead.lead_number).padStart(5, '0') : '—'
 }

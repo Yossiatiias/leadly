@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ChevronRight, ChevronLeft, Plus, X, Clock, User, Stethoscope, Check, XCircle, AlertCircle } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Plus, X, Clock, User, Check, XCircle, Printer, Mail } from 'lucide-react'
 import { TREATMENT_LABELS, TREATMENT_COLORS, type TreatmentType } from '@/types'
 
 const T_LABELS = TREATMENT_LABELS as Record<string, string>
@@ -270,7 +270,7 @@ function WeekView({ appointments, week, onAddAt }: { appointments: Appointment[]
               padding: '10px 8px', textAlign: 'center',
               borderBottom: '1px solid var(--border-default)',
               borderRight: '1px solid var(--border-subtle)',
-              background: isToday ? 'var(--brand-sky-50)' : 'transparent',
+              background: isToday ? 'var(--brand-soft)' : 'transparent',
             }}>
               <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '0 0 2px' }}>{HEB_DAYS[i]}</p>
               <p style={{
@@ -300,7 +300,7 @@ function WeekView({ appointments, week, onAddAt }: { appointments: Appointment[]
                 <div key={`${h}-${di}`} style={{
                   height: '64px', borderBottom: '1px solid var(--border-subtle)',
                   borderRight: '1px solid var(--border-subtle)', padding: '2px',
-                  background: isToday ? 'var(--brand-sky-50)' : 'transparent',
+                  background: isToday ? 'var(--brand-soft)' : 'transparent',
                   cursor: 'pointer', position: 'relative',
                 }}
                   onClick={() => { const d = new Date(day); d.setHours(h); onAddAt(d) }}>
@@ -487,6 +487,27 @@ export default function AppointmentsPage() {
           <option value="">כל הסטטוסים</option>
           {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
         </select>
+
+        {/* Print + email */}
+        <button onClick={() => window.print()} style={{
+          display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px',
+          borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
+          color: 'var(--fg-2)', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+        }}>
+          <Printer size={13} /> הדפסה
+        </button>
+        <button onClick={() => {
+          const lines = (view === 'list' ? listAppts : view === 'day' ? dayAppts : weekAppts)
+            .map(a => `${formatDate(a.scheduled_at)} ${formatTime(a.scheduled_at)} — ${a.patient_name}${a.treatment_type ? ` (${T_LABELS[a.treatment_type]})` : ''}`)
+            .join('%0A')
+          window.location.href = `mailto:?subject=תורים&body=${lines}`
+        }} style={{
+          display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px',
+          borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
+          color: 'var(--fg-2)', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+        }}>
+          <Mail size={13} /> שלח במייל
+        </button>
 
         {/* Add button */}
         <button onClick={() => { setAddDate(currentDate); setShowAdd(true) }} style={{

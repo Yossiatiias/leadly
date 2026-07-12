@@ -5,17 +5,17 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
 import { useEffect, useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
+import { Moon, Sun, Home, MessageSquare, Users, CalendarDays, BarChart2, BookOpen, Plug2, Settings, type LucideIcon } from 'lucide-react'
 
-const navItems = [
-  { href: '/',               label: 'בית'            },
-  { href: '/conversations',  label: 'שיחות'          },
-  { href: '/leads',          label: 'ניהול לידים'    },
-  { href: '/appointments',   label: 'יומן תורים'     },
-  { href: '/analytics',      label: 'ניתוח ביצועים'  },
-  { href: '/qa',             label: 'מידע ארגוני'    },
-  { href: '/connections',    label: 'חיבורים'        },
-  { href: '/settings',       label: 'הגדרות עסק'     },
+const navItems: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: '/',               label: 'בית',            icon: Home          },
+  { href: '/conversations',  label: 'שיחות',          icon: MessageSquare },
+  { href: '/leads',          label: 'ניהול לידים',    icon: Users         },
+  { href: '/appointments',   label: 'יומן תורים',     icon: CalendarDays  },
+  { href: '/analytics',      label: 'ניתוח ביצועים',  icon: BarChart2     },
+  { href: '/qa',             label: 'מידע ארגוני',    icon: BookOpen      },
+  { href: '/connections',    label: 'חיבורים',        icon: Plug2         },
+  { href: '/settings',       label: 'הגדרות עסק',     icon: Settings      },
 ]
 
 export default function Sidebar({ profile }: { profile: Profile | null }) {
@@ -97,24 +97,9 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         </p>
       </div>
 
-      {/* New lead button */}
-      <div style={{ padding: '14px 16px 10px' }}>
-        <Link href="/leads/new" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-          padding: '10px', borderRadius: '10px', textDecoration: 'none',
-          background: 'var(--sidebar-new-btn)', color: 'white', fontWeight: 600, fontSize: '13px',
-          boxShadow: '0 2px 6px rgba(141,203,63,0.25)', transition: 'all 0.15s',
-        }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-new-btn-hover)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-new-btn)' }}
-        >
-          + ליד חדש
-        </Link>
-      </div>
-
       {/* Nav */}
-      <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        {navItems.map(({ href, label }) => {
+      <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== '/' && pathname.startsWith(href))
           const showBadge = href === '/conversations' && unread > 0 && !active
 
@@ -124,7 +109,10 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
               href={href}
               className={`sidebar-link${active ? ' active' : ''}`}
             >
-              {label}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                <Icon size={16} style={{ flexShrink: 0 }} />
+                {label}
+              </span>
               {showBadge && (
                 <span style={{
                   background: 'var(--sidebar-badge-bg)', color: 'white', borderRadius: '99px',
@@ -136,7 +124,6 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
                 </span>
               )}
             </Link>
-
           )
         })}
       </nav>

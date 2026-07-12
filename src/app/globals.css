@@ -2,15 +2,34 @@
 @import "tailwindcss";
 
 :root {
-  --brand-sky-50:  #EAF6FC;
-  --brand-sky-100: #D2ECF7;
-  --brand-sky-500: #3FA9DC;
-  --brand-sky-600: #2E8FBE;
-  --brand-sky-700: #226F94;
+  /* Blue brand (כחול-ענפר) */
+  --blue-50:  #EBF2FF;
+  --blue-100: #C7D9FC;
+  --blue-200: #9ABCFA;
+  --blue-500: #2B6BE8;
+  --blue-600: #1E55CC;
+  --blue-700: #1641A0;
 
-  --brand-leaf-50:  #F3F9E6;
-  --brand-leaf-500: #8DCB3F;
-  --brand-leaf-600: #6FA82E;
+  /* Semantic tokens */
+  --success:        #0F9E7B;
+  --success-hover:  #0C7D60;
+  --success-soft:   #EBFBF4;
+  --success-border: #8BDDC8;
+
+  --warning:        #F59E0B;
+  --warning-hover:  #D97706;
+  --warning-soft:   #FEF3C7;
+  --warning-border: #FCD34D;
+
+  --danger:        #E84B3C;
+  --danger-hover:  #CC3425;
+  --danger-soft:   #FEECEC;
+  --danger-border: #FBB4AE;
+
+  --info:        #8B5CF6;
+  --info-hover:  #7C3AED;
+  --info-soft:   #F5F0FF;
+  --info-border: #C4B5FD;
 
   --slate-0:   #FFFFFF;
   --slate-25:  #FBFCFD;
@@ -36,9 +55,10 @@
   --fg-4:        var(--slate-400);
   --border-subtle:  var(--slate-100);
   --border-default: var(--slate-200);
-  --brand:       var(--brand-sky-500);
-  --brand-hover: var(--brand-sky-600);
-  --accent:      var(--brand-leaf-500);
+  --brand:       var(--blue-500);
+  --brand-hover: var(--blue-600);
+  --brand-soft:  var(--blue-50);
+  --accent:      var(--success);
 
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -54,20 +74,18 @@
   --layout-sidebar-w: 240px;
 
   /* Sidebar tokens */
-  --sidebar-bg:              #EBF5FA;
-  --sidebar-border:          #C8E3F0;
-  --sidebar-subtitle:        #5B8FA8;
-  --sidebar-nav-fg:          #3B6F8A;
-  --sidebar-nav-active-bg:   #C8E3F0;
-  --sidebar-nav-active-fg:   #1A4F6E;
-  --sidebar-nav-hover-bg:    #D6EDF8;
-  --sidebar-badge-bg:        #3FA9DC;
-  --sidebar-user-bg:         #D6EDF8;
-  --sidebar-user-fg:         #1A4F6E;
-  --sidebar-user-role:       #5B8FA8;
-  --sidebar-logout-fg:       #7AAEC4;
-  --sidebar-new-btn:         #8DCB3F;
-  --sidebar-new-btn-hover:   #6FA82E;
+  --sidebar-bg:              #F0F4FF;
+  --sidebar-border:          #D0DBFF;
+  --sidebar-subtitle:        #5B72C0;
+  --sidebar-nav-fg:          #3D56A6;
+  --sidebar-nav-active-bg:   #D0DBFF;
+  --sidebar-nav-active-fg:   #1641A0;
+  --sidebar-nav-hover-bg:    #DDE5FF;
+  --sidebar-badge-bg:        #2B6BE8;
+  --sidebar-user-bg:         #DDE5FF;
+  --sidebar-user-fg:         #1641A0;
+  --sidebar-user-role:       #5B72C0;
+  --sidebar-logout-fg:       #8A9FD0;
 }
 
 /* ─── Dark theme ──────────────────────────────────────────── */
@@ -83,20 +101,23 @@ html.dark {
   --border-subtle:  #21262D;
   --border-default: #30363D;
 
-  --sidebar-bg:              #111827;
-  --sidebar-border:          #1F2937;
-  --sidebar-subtitle:        #6B7280;
-  --sidebar-nav-fg:          #9CA3AF;
-  --sidebar-nav-active-bg:   #1E3A5F;
-  --sidebar-nav-active-fg:   #93C5FD;
-  --sidebar-nav-hover-bg:    #1F2937;
-  --sidebar-badge-bg:        #2563EB;
-  --sidebar-user-bg:         #1F2937;
-  --sidebar-user-fg:         #E5E7EB;
-  --sidebar-user-role:       #9CA3AF;
-  --sidebar-logout-fg:       #6B7280;
-  --sidebar-new-btn:         #166534;
-  --sidebar-new-btn-hover:   #14532D;
+  --sidebar-bg:              #0F1629;
+  --sidebar-border:          #1E2D4E;
+  --sidebar-subtitle:        #5B72C0;
+  --sidebar-nav-fg:          #7B93D8;
+  --sidebar-nav-active-bg:   #1E3A6B;
+  --sidebar-nav-active-fg:   #93B4FF;
+  --sidebar-nav-hover-bg:    #1a2e50;
+  --sidebar-badge-bg:        #2B6BE8;
+  --sidebar-user-bg:         #1A2D50;
+  --sidebar-user-fg:         #C5D5FF;
+  --sidebar-user-role:       #5B72C0;
+  --sidebar-logout-fg:       #4A6098;
+  --brand-soft:              #1a2e5a;
+  --success-soft:            #0a2e22;
+  --warning-soft:            #2d1f00;
+  --danger-soft:             #2d1212;
+  --info-soft:               #1f1540;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -148,7 +169,7 @@ body {
 }
 
 .sesya-gradient {
-  background: linear-gradient(135deg, var(--brand-sky-600) 0%, var(--brand-sky-500) 100%);
+  background: linear-gradient(135deg, var(--blue-600) 0%, var(--blue-500) 100%);
 }
 
 .input-base {
@@ -167,7 +188,7 @@ body {
 .input-base:focus {
   border-color: var(--brand);
   background: var(--bg-surface);
-  box-shadow: 0 0 0 3px rgba(63,169,220,0.2);
+  box-shadow: 0 0 0 3px rgba(43,107,232,0.18);
 }
 .input-base option { background: white; color: var(--fg-1); }
 
@@ -182,9 +203,9 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   transition: all 140ms;
-  box-shadow: 0 1px 3px rgba(63,169,220,0.3);
+  box-shadow: 0 1px 3px rgba(43,107,232,0.3);
 }
-.btn-primary:hover { background: var(--brand-hover); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(63,169,220,0.35); }
+.btn-primary:hover { background: var(--brand-hover); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(43,107,232,0.35); }
 .btn-primary:active { transform: translateY(0); }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
@@ -202,17 +223,12 @@ body {
 }
 .btn-ghost:hover { background: var(--bg-hover); border-color: var(--border-subtle); color: var(--fg-1); }
 
-/* Temperature badges */
-.temp-hot    { background: #FEECEC; color: #B83434; border: 1.5px solid #FBD3D3; }
-.temp-medium { background: #FFF6E5; color: #B87A0E; border: 1.5px solid #FCE7B5; }
-.temp-cold   { background: var(--brand-sky-50); color: var(--brand-sky-700); border: 1.5px solid var(--brand-sky-100); }
-
 /* Status badges */
-.status-new          { background: var(--brand-sky-50);  color: var(--brand-sky-700);  border: 1.5px solid var(--brand-sky-100); }
-.status-contacted    { background: #FFF6E5;               color: #B87A0E;               border: 1.5px solid #FCE7B5; }
-.status-in_progress  { background: #F3F9E6;               color: #547F23;               border: 1.5px solid #D6F2C2; }
-.status-published    { background: #ECFAE5;               color: #3D5C19;               border: 1.5px solid #D6F2C2; }
-.status-not_relevant { background: var(--slate-50);       color: var(--slate-400);      border: 1.5px solid var(--slate-100); }
+.status-new          { background: var(--brand-soft);    color: var(--blue-700);      border: 1.5px solid var(--blue-100); }
+.status-contacted    { background: var(--warning-soft);   color: #B87A0E;              border: 1.5px solid var(--warning-border); }
+.status-in_progress  { background: #F3F9E6;               color: #547F23;              border: 1.5px solid #D6F2C2; }
+.status-published    { background: var(--success-soft);   color: #0C5C44;              border: 1.5px solid var(--success-border); }
+.status-not_relevant { background: var(--slate-50);       color: var(--slate-400);     border: 1.5px solid var(--slate-100); }
 
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(14px); }
@@ -309,16 +325,16 @@ html.dark .text-amber-600   { color: #FCD34D; }
 html.dark .text-amber-700   { color: #FCD34D; }
 html.dark .text-amber-800   { color: #FCD34D; }
 
-/* Sky/blue — cold temperature + new status + info banners */
-html.dark .bg-sky-50        { background: #0C2234; }
-html.dark .bg-blue-50       { background: #0C1929; }
-html.dark .border-sky-200   { border-color: #164E63; }
-html.dark .border-blue-100  { border-color: #1E3A5F; }
-html.dark .text-sky-600     { color: #7DD3FC; }
-html.dark .text-sky-700     { color: #7DD3FC; }
-html.dark .text-sky-800     { color: #7DD3FC; }
-html.dark .text-blue-500    { color: #93C5FD; }
-html.dark .text-blue-600    { color: #93C5FD; }
+/* Blue — new status + info banners */
+html.dark .bg-sky-50        { background: #1a2e5a; }
+html.dark .bg-blue-50       { background: #1a2e5a; }
+html.dark .border-sky-200   { border-color: #2B4E9A; }
+html.dark .border-blue-100  { border-color: #1E3A6B; }
+html.dark .text-sky-600     { color: #93B4FF; }
+html.dark .text-sky-700     { color: #93B4FF; }
+html.dark .text-sky-800     { color: #93B4FF; }
+html.dark .text-blue-500    { color: #93B4FF; }
+html.dark .text-blue-600    { color: #93B4FF; }
 
 /* Green/emerald/lime — statuses + action buttons */
 html.dark .bg-green-50        { background: #0A2E12; }

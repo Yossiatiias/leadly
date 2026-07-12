@@ -229,24 +229,25 @@ export default function KnowledgePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {gapCount > 0 && (
-            <button
-              onClick={() => router.push('/qa/gaps')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '7px',
-                padding: '9px 16px', borderRadius: '10px',
-                border: '1.5px solid #FCA5A5', background: '#FEF2F2',
-                color: '#DC2626', fontFamily: 'inherit', fontWeight: 600,
-                fontSize: '13px', cursor: 'pointer',
-              }}
-            >
-              <AlertCircle size={15} />
-              פערי ידע
+          <button
+            onClick={() => router.push('/qa/gaps')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '7px',
+              padding: '9px 16px', borderRadius: '10px', cursor: 'pointer',
+              border: gapCount > 0 ? '1.5px solid #FCA5A5' : '1.5px solid var(--border-default)',
+              background: gapCount > 0 ? '#FEF2F2' : 'var(--bg-surface)',
+              color: gapCount > 0 ? '#DC2626' : 'var(--fg-3)',
+              fontFamily: 'inherit', fontWeight: 600, fontSize: '13px',
+            }}
+          >
+            <AlertCircle size={15} />
+            פערי ידע
+            {gapCount > 0 && (
               <span style={{ background: '#DC2626', color: 'white', borderRadius: '99px', padding: '1px 7px', fontSize: '11px', fontWeight: 700 }}>
                 {gapCount}
               </span>
-            </button>
-          )}
+            )}
+          </button>
           <button
             onClick={openAdd}
             style={{

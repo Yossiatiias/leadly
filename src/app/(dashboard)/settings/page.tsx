@@ -2,37 +2,46 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Check, Plus, X } from 'lucide-react'
 
 interface Service {
   name: string
   price: string
   duration: string
-  description: string
+  active: boolean
+}
+
+interface WorkingDay {
+  day: string
+  open: string
+  close: string
+  closed: boolean
 }
 
 interface Business {
   id: string
-  name: string
-  industry: string | null
-  address: string | null
-  website: string | null
-  settings: {
-    description?: string
-    working_hours?: string
-    greeting?: string
-    goal?: string
-    escalation_rule?: string
-    followup_hours?: string
-    services?: Service[]
-  }
+  settings: Record<string, any>
 }
 
-const GOALS = [
-  { value: 'appointment', label: 'קביעת תור / פגישה' },
-  { value: 'lead', label: 'השארת פרטים ליצירת קשר' },
-  { value: 'info', label: 'מתן מידע בלבד' },
-  { value: 'sale', label: 'מכירה ישירה' },
+const DEFAULT_HOURS: WorkingDay[] = [
+  { day: 'ראשון',  open: '09:00', close: '18:00', closed: false },
+  { day: 'שני',    open: '09:00', close: '18:00', closed: false },
+  { day: 'שלישי', open: '09:00', close: '18:00', closed: false },
+  { day: 'רביעי', open: '09:00', close: '18:00', closed: false },
+  { day: 'חמישי', open: '09:00', close: '18:00', closed: false },
+  { day: 'שישי',  open: '09:00', close: '13:00', closed: false },
+  { day: 'שבת',   open: '',      close: '',      closed: true },
 ]
+
+const GOALS = [
+  { value: 'appointment', label: 'קביעת תור' },
+  { value: 'lead',        label: 'השארת פרטים' },
+  { value: 'info',        label: 'מתן מידע' },
+  { value: 'sale',        label: 'מכירה ישירה' },
+]
+
+const TABS = ['כללי', 'שעות פעילות', 'בוט WhatsApp', 'שירותים', 'תורים'] as const
+type Tab = typeof TABS[number]
 
 export default function SettingsPage() {
   const supabase = createClient()
@@ -40,55 +49,30 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [tab, setTab] = useState<Tab>('כללי')
+
+  const [general, setGeneral] = useState({ name: '', industry: '', address: '', phone: '', email: '', website: '' })
+  const [hours, setHours] = useState<WorkingDay[]>(DEFAULT_HOURS)
+  const [bot, setBot] = useState({ greeting: '', goal: 'appointment', escalation_rule: '', auto_reply_hours: '24', description: '' })
   const [services, setServices] = useState<Service[]>([])
-  const [form, setForm] = useState({
-    name: '',
-    industry: '',
-    address: '',
-    website: '',
-    description: '',
-    working_hours: '',
-    greeting: '',
-    goal: 'appointment',
-    escalation_rule: '',
-    followup_hours: '24',
-  })
+  const [apptSettings, setApptSettings] = useState({ default_duration: '30', booking_window_days: '60' })
 
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('business_id')
-      .eq('id', user.id)
-      .single()
-
+    const { data: profile } = await supabase.from('profiles').select('business_id').eq('id', user.id).single()
     if (!profile?.business_id) return
-
-    const { data } = await supabase
-      .from('businesses')
-      .select('*')
-      .eq('id', profile.business_id)
-      .single()
-
+    const { data } = await supabase.from('businesses').select('*').eq('id', profile.business_id).single()
     if (data) {
       setBusiness(data)
-      setForm({
-        name: data.name || '',
-        industry: data.industry || '',
-        address: data.address || '',
-        website: data.website || '',
-        description: data.settings?.description || '',
-        working_hours: data.settings?.working_hours || '',
-        greeting: data.settings?.greeting || '',
-        goal: data.settings?.goal || 'appointment',
-        escalation_rule: data.settings?.escalation_rule || '',
-        followup_hours: data.settings?.followup_hours || '24',
-      })
-      setServices(data.settings?.services || [])
+      const s = data.settings || {}
+      setGeneral({ name: data.name || '', industry: data.industry || '', address: data.address || '', phone: s.phone || '', email: s.email || '', website: data.website || '' })
+      setHours(s.working_hours_table || DEFAULT_HOURS)
+      setBot({ greeting: s.greeting || '', goal: s.goal || 'appointment', escalation_rule: s.escalation_rule || '', auto_reply_hours: s.auto_reply_hours || '24', description: s.description || '' })
+      setServices(s.services || [])
+      setApptSettings({ default_duration: s.default_duration || '30', booking_window_days: s.booking_window_days || '60' })
     }
     setLoading(false)
   }
@@ -96,247 +80,269 @@ export default function SettingsPage() {
   async function save() {
     if (!business) return
     setSaving(true)
-
     await supabase.from('businesses').update({
-      name: form.name,
-      industry: form.industry,
-      address: form.address,
-      website: form.website,
+      name: general.name,
+      industry: general.industry,
+      address: general.address,
+      website: general.website,
       settings: {
-        ...business.settings,
-        description: form.description,
-        working_hours: form.working_hours,
-        greeting: form.greeting,
-        goal: form.goal,
-        escalation_rule: form.escalation_rule,
-        followup_hours: form.followup_hours,
+        phone: general.phone,
+        email: general.email,
+        description: bot.description,
+        working_hours_table: hours,
+        greeting: bot.greeting,
+        goal: bot.goal,
+        escalation_rule: bot.escalation_rule,
+        auto_reply_hours: bot.auto_reply_hours,
         services,
+        default_duration: apptSettings.default_duration,
+        booking_window_days: apptSettings.booking_window_days,
       },
     }).eq('id', business.id)
-
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
-    loadData()
+  }
+
+  function updateHour(i: number, field: keyof WorkingDay, value: any) {
+    setHours(h => h.map((d, idx) => idx === i ? { ...d, [field]: value } : d))
   }
 
   function addService() {
-    setServices(s => [...s, { name: '', price: '', duration: '60', description: '' }])
-  }
-
-  function updateService(i: number, field: keyof Service, value: string) {
-    setServices(s => s.map((svc, idx) => idx === i ? { ...svc, [field]: value } : svc))
-  }
-
-  function removeService(i: number) {
-    setServices(s => s.filter((_, idx) => idx !== i))
+    setServices(s => [...s, { name: '', price: '', duration: '30', active: true }])
   }
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fg-3)' }}>טוען...</div>
 
-  const inputStyle = {
-    width: '100%', padding: '10px 12px', borderRadius: '8px',
-    border: '1px solid var(--border-default)', fontSize: '14px', fontFamily: 'inherit',
-    boxSizing: 'border-box' as const, outline: 'none', color: 'var(--fg-1)' as string,
-    background: 'var(--bg-sunken)' as string,
+  const inp: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: '8px',
+    border: '1px solid var(--border-default)', fontSize: '13px', fontFamily: 'inherit',
+    boxSizing: 'border-box', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none',
   }
-
-  const labelStyle = {
-    display: 'block' as const, fontSize: '13px', fontWeight: 600 as const,
-    color: 'var(--fg-2)' as string, marginBottom: '6px',
-  }
-
-  const sectionStyle = {
-    background: 'var(--bg-surface)' as string, borderRadius: '16px', padding: '24px',
-    border: '1px solid var(--border-default)', marginBottom: '20px',
-  }
+  const lbl: React.CSSProperties = { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', marginBottom: '5px' }
+  const sec: React.CSSProperties = { background: 'var(--bg-surface)', borderRadius: '14px', padding: '24px', border: '1px solid var(--border-subtle)' }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto', direction: 'rtl' }}>
-
-      <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>הגדרות עסק</h1>
-        <p style={{ fontSize: '13px', color: 'var(--fg-3)', marginTop: '4px' }}>
-          המידע הזה מוזן לסוכן ה-AI כדי שיוכל לענות ללקוחות בצורה מדויקת
-        </p>
+    <div style={{ padding: '28px', maxWidth: '760px', margin: '0 auto', direction: 'rtl' }}>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--fg-1)', margin: 0 }}>הגדרות עסק</h1>
+        <p style={{ fontSize: '12px', color: 'var(--fg-4)', marginTop: '3px' }}>מידע זה מוזן לסוכן ה-AI ומשמש לניהול העסק</p>
       </div>
 
-      {/* Basic Info */}
-      <div style={sectionStyle}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', margin: '0 0 20px' }}>פרטי עסק בסיסיים</h3>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-          <div>
-            <label style={labelStyle}>שם העסק</label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="למשל: קליניקת יוסי" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>תחום עיסוק</label>
-            <input value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
-              placeholder="קליניקה, מספרה, עורך דין..." style={inputStyle} />
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <div>
-            <label style={labelStyle}>כתובת</label>
-            <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-              placeholder="רחוב, עיר" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>אתר אינטרנט</label>
-            <input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))}
-              placeholder="https://www.example.com" style={inputStyle} />
-          </div>
-        </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: 'var(--bg-surface)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border-subtle)' }}>
+        {TABS.map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            flex: 1, padding: '7px 6px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: '12px', fontWeight: tab === t ? 600 : 400,
+            background: tab === t ? 'var(--brand)' : 'transparent',
+            color: tab === t ? 'white' : 'var(--fg-3)',
+            transition: 'all 0.12s',
+          }}>{t}</button>
+        ))}
       </div>
 
-      {/* AI Settings */}
-      <div style={sectionStyle}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', margin: '0 0 6px' }}>🤖 הגדרות סוכן AI</h3>
-        <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '0 0 20px' }}>ככל שתכתוב יותר פרטים — כך ה-AI יענה טוב יותר</p>
+      {/* ── כללי ── */}
+      {tab === 'כללי' && (
+        <div style={sec}>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 18px' }}>פרטי העסק</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={lbl}>שם העסק *</label>
+              <input value={general.name} onChange={e => setGeneral(g => ({ ...g, name: e.target.value }))} placeholder="קליניקת שיניים יוסי" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>תחום עיסוק</label>
+              <input value={general.industry} onChange={e => setGeneral(g => ({ ...g, industry: e.target.value }))} placeholder="רפואת שיניים" style={inp} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lbl}>כתובת</label>
+              <input value={general.address} onChange={e => setGeneral(g => ({ ...g, address: e.target.value }))} placeholder="רחוב הרצל 1, תל אביב" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>טלפון</label>
+              <input value={general.phone} onChange={e => setGeneral(g => ({ ...g, phone: e.target.value }))} placeholder="03-0000000" dir="ltr" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>אימייל</label>
+              <input value={general.email} onChange={e => setGeneral(g => ({ ...g, email: e.target.value }))} placeholder="info@clinic.co.il" dir="ltr" style={inp} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lbl}>אתר אינטרנט</label>
+              <input value={general.website} onChange={e => setGeneral(g => ({ ...g, website: e.target.value }))} placeholder="https://www.clinic.co.il" dir="ltr" style={inp} />
+            </div>
+          </div>
+        </div>
+      )}
 
-        {/* Goal */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={labelStyle}>מטרת הסוכן — מה הוא אמור להשיג?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {GOALS.map(g => (
-              <div
-                key={g.value}
-                onClick={() => setForm(f => ({ ...f, goal: g.value }))}
-                style={{
-                  padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
-                  border: `2px solid ${form.goal === g.value ? '#3FA9DC' : 'var(--border-default)'}`,
-                  background: form.goal === g.value ? 'var(--bg-hover)' : 'var(--bg-surface)',
-                  color: form.goal === g.value ? 'var(--fg-1)' : 'var(--fg-3)',
-                  fontSize: '13px', fontWeight: form.goal === g.value ? 700 : 500,
-                  transition: 'all 0.15s',
-                }}
-              >
-                {g.label}
+      {/* ── שעות פעילות ── */}
+      {tab === 'שעות פעילות' && (
+        <div style={sec}>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 18px' }}>שעות פעילות</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 60px', gap: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
+              {['יום', 'פתיחה', 'סגירה', 'סגור'].map(h => (
+                <span key={h} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', letterSpacing: '0.04em' }}>{h}</span>
+              ))}
+            </div>
+            {hours.map((d, i) => (
+              <div key={d.day} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 60px', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-1)' }}>{d.day}</span>
+                <input type="time" value={d.open} disabled={d.closed} onChange={e => updateHour(i, 'open', e.target.value)}
+                  style={{ ...inp, opacity: d.closed ? 0.4 : 1 }} />
+                <input type="time" value={d.close} disabled={d.closed} onChange={e => updateHour(i, 'close', e.target.value)}
+                  style={{ ...inp, opacity: d.closed ? 0.4 : 1 }} />
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <input type="checkbox" checked={d.closed} onChange={e => updateHour(i, 'closed', e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
+                </div>
               </div>
             ))}
           </div>
         </div>
+      )}
 
-        <div style={{ marginBottom: '16px' }}>
-          <label style={labelStyle}>תיאור העסק</label>
-          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="תאר את העסק שלך — מה אתה מציע, מה הייחוד שלך, לאיזה קהל אתה פונה..."
-            rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <label style={labelStyle}>שעות פעילות</label>
-          <textarea value={form.working_hours} onChange={e => setForm(f => ({ ...f, working_hours: e.target.value }))}
-            placeholder="ימים א׳-ה׳ 9:00-18:00, שישי 9:00-13:00, שבת סגור"
-            rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <label style={labelStyle}>הודעת פתיחה</label>
-          <textarea value={form.greeting} onChange={e => setForm(f => ({ ...f, greeting: e.target.value }))}
-            placeholder="שלום! אני הסוכן הוירטואלי של קליניקת יוסי. איך אוכל לעזור לך היום? 😊"
-            rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <div>
-            <label style={labelStyle}>מתי להעביר לנציג אנושי?</label>
-            <input value={form.escalation_rule} onChange={e => setForm(f => ({ ...f, escalation_rule: e.target.value }))}
-              placeholder="למשל: אם הלקוח כועס או מבקש לדבר עם אדם"
-              style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>פולואפ — כמה שעות להמתין?</label>
-            <select value={form.followup_hours} onChange={e => setForm(f => ({ ...f, followup_hours: e.target.value }))}
-              style={{ ...inputStyle }}>
-              <option value="6">6 שעות</option>
-              <option value="12">12 שעות</option>
-              <option value="24">24 שעות</option>
-              <option value="48">48 שעות</option>
-              <option value="72">72 שעות</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Services */}
-      <div style={sectionStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>💼 שירותים ומחירים</h3>
-            <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: '4px 0 0' }}>ה-AI ישתמש בזה כדי לענות על שאלות מחיר וזמן</p>
-          </div>
-          <button onClick={addService} style={{
-            padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-            background: '#3FA9DC', color: 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px',
-          }}>
-            + הוסף שירות
-          </button>
-        </div>
-
-        {services.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--fg-3)', fontSize: '13px',
-            background: 'var(--bg-sunken)', borderRadius: '10px', border: '1px dashed var(--border-default)' }}>
-            אין שירותים עדיין — לחץ "+ הוסף שירות"
-          </div>
-        )}
-
-        {services.map((svc, i) => (
-          <div key={i} style={{
-            background: 'var(--bg-sunken)', borderRadius: '10px', padding: '16px',
-            marginBottom: '12px', border: '1px solid var(--border-default)',
-          }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}>
-              <div>
-                <label style={{ ...labelStyle, fontSize: '11px' }}>שם השירות</label>
-                <input value={svc.name} onChange={e => updateService(i, 'name', e.target.value)}
-                  placeholder="למשל: טיפול גב" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
-              </div>
-              <div>
-                <label style={{ ...labelStyle, fontSize: '11px' }}>מחיר (₪)</label>
-                <input value={svc.price} onChange={e => updateService(i, 'price', e.target.value)}
-                  placeholder="250" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
-              </div>
-              <div>
-                <label style={{ ...labelStyle, fontSize: '11px' }}>משך (דקות)</label>
-                <input value={svc.duration} onChange={e => updateService(i, 'duration', e.target.value)}
-                  placeholder="60" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
-              </div>
-              <button onClick={() => removeService(i)} style={{
-                width: '32px', height: '36px', borderRadius: '6px', border: 'none',
-                background: 'var(--bg-hover)', color: '#EF4444', cursor: 'pointer', fontSize: '14px',
-                marginTop: '18px',
-              }}>✕</button>
+      {/* ── בוט WhatsApp ── */}
+      {tab === 'בוט WhatsApp' && (
+        <div style={sec}>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 18px' }}>הגדרות בוט WhatsApp</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label style={lbl}>תיאור העסק — מה ה-AI יידע</label>
+              <textarea value={bot.description} onChange={e => setBot(b => ({ ...b, description: e.target.value }))}
+                placeholder="קליניקת שיניים מתקדמת בתל אביב. מתמחים בהשתלות, ציפויים ויישור שיניים..."
+                rows={3} style={{ ...inp, resize: 'vertical' }} />
             </div>
-            <div style={{ marginTop: '10px' }}>
-              <label style={{ ...labelStyle, fontSize: '11px' }}>תיאור קצר (אופציונלי)</label>
-              <input value={svc.description} onChange={e => updateService(i, 'description', e.target.value)}
-                placeholder="תיאור קצר של השירות" style={{ ...inputStyle, background: 'var(--bg-surface)' }} />
+            <div>
+              <label style={lbl}>הודעת פתיחה</label>
+              <textarea value={bot.greeting} onChange={e => setBot(b => ({ ...b, greeting: e.target.value }))}
+                placeholder="שלום! אני הסוכן הוירטואלי של הקליניקה. כיצד אוכל לעזור? 😊"
+                rows={2} style={{ ...inp, resize: 'vertical' }} />
+            </div>
+            <div>
+              <label style={lbl}>מטרת הסוכן</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {GOALS.map(g => (
+                  <div key={g.value} onClick={() => setBot(b => ({ ...b, goal: g.value }))} style={{
+                    padding: '9px 14px', borderRadius: '8px', cursor: 'pointer',
+                    border: `2px solid ${bot.goal === g.value ? 'var(--brand)' : 'var(--border-default)'}`,
+                    background: bot.goal === g.value ? 'var(--brand-soft)' : 'transparent',
+                    color: bot.goal === g.value ? 'var(--brand)' : 'var(--fg-3)',
+                    fontSize: '13px', fontWeight: bot.goal === g.value ? 600 : 400, transition: 'all 0.12s',
+                  }}>{g.label}</div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>מתי להעביר לנציג אנושי?</label>
+              <input value={bot.escalation_rule} onChange={e => setBot(b => ({ ...b, escalation_rule: e.target.value }))}
+                placeholder="אם הלקוח כועס, מבקש לדבר עם אדם, או שואל על מחיר ספציפי" style={inp} />
+            </div>
+            <div style={{ maxWidth: '240px' }}>
+              <label style={lbl}>שעות מענה אוטומטי</label>
+              <select value={bot.auto_reply_hours} onChange={e => setBot(b => ({ ...b, auto_reply_hours: e.target.value }))} style={inp}>
+                <option value="24">24 שעות ביממה</option>
+                <option value="business">שעות פעילות בלבד</option>
+                <option value="off">כבוי</option>
+              </select>
             </div>
           </div>
-        ))}
-      </div>
-
-      {saved && (
-        <div style={{
-          padding: '12px 16px', borderRadius: '10px', background: '#E8F8EC',
-          color: '#2E7D32', fontSize: '14px', fontWeight: 600, marginBottom: '16px', textAlign: 'center',
-        }}>
-          ✓ נשמר בהצלחה
         </div>
       )}
 
-      <button onClick={save} disabled={saving || !form.name.trim()} style={{
-        width: '100%', padding: '14px', borderRadius: '10px', border: 'none',
-        background: saving ? '#A8D5EE' : '#3FA9DC', color: 'white',
-        fontFamily: 'inherit', fontWeight: 700, fontSize: '15px',
-        cursor: saving ? 'default' : 'pointer',
-      }}>
-        {saving ? 'שומר...' : 'שמור הגדרות'}
-      </button>
+      {/* ── שירותים ── */}
+      {tab === 'שירותים' && (
+        <div style={sec}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: 0 }}>שירותים ומחירים</h3>
+              <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: '3px 0 0' }}>ה-AI ישתמש בזה לענות על שאלות מחיר ומשך טיפול</p>
+            </div>
+            <button onClick={addService} style={{
+              display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px',
+              borderRadius: '8px', border: 'none', background: 'var(--brand)', color: 'white',
+              fontFamily: 'inherit', fontWeight: 600, fontSize: '12px', cursor: 'pointer',
+            }}>
+              <Plus size={12} /> הוסף שירות
+            </button>
+          </div>
+          {services.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '28px', color: 'var(--fg-4)', fontSize: '13px',
+              background: 'var(--bg-sunken)', borderRadius: '10px', border: '1px dashed var(--border-default)' }}>
+              לחץ "+ הוסף שירות" להוספת הטיפולים שאתה מציע
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* header */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 100px 100px 50px 30px', gap: '8px' }}>
+                {['שם שירות', 'מחיר (₪)', 'משך (דק׳)', 'פעיל', ''].map(h => (
+                  <span key={h} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)' }}>{h}</span>
+                ))}
+              </div>
+              {services.map((svc, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 100px 100px 50px 30px', gap: '8px', alignItems: 'center', background: 'var(--bg-sunken)', padding: '8px 10px', borderRadius: '8px' }}>
+                  <input value={svc.name} onChange={e => setServices(s => s.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                    placeholder="השתלת שן" style={{ ...inp, padding: '6px 10px', fontSize: '12px' }} />
+                  <input value={svc.price} onChange={e => setServices(s => s.map((x, j) => j === i ? { ...x, price: e.target.value } : x))}
+                    placeholder="2000" style={{ ...inp, padding: '6px 10px', fontSize: '12px' }} />
+                  <input value={svc.duration} onChange={e => setServices(s => s.map((x, j) => j === i ? { ...x, duration: e.target.value } : x))}
+                    placeholder="60" style={{ ...inp, padding: '6px 10px', fontSize: '12px' }} />
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <input type="checkbox" checked={svc.active} onChange={e => setServices(s => s.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--brand)', cursor: 'pointer' }} />
+                  </div>
+                  <button onClick={() => setServices(s => s.filter((_, j) => j !== i))} style={{
+                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', alignItems: 'center',
+                  }}><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── תורים ── */}
+      {tab === 'תורים' && (
+        <div style={sec}>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 18px' }}>הגדרות תורים</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <label style={lbl}>משך ברירת מחדל לתור (דקות)</label>
+              <select value={apptSettings.default_duration} onChange={e => setApptSettings(a => ({ ...a, default_duration: e.target.value }))} style={inp}>
+                {[15, 30, 45, 60, 90, 120].map(d => <option key={d} value={String(d)}>{d} דקות</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>חלון קביעת תורים (ימים קדימה)</label>
+              <select value={apptSettings.booking_window_days} onChange={e => setApptSettings(a => ({ ...a, booking_window_days: e.target.value }))} style={inp}>
+                {[7, 14, 30, 60, 90].map(d => <option key={d} value={String(d)}>{d} יום</option>)}
+              </select>
+            </div>
+          </div>
+          <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '16px' }}>
+            הסוכן ישתמש בהגדרות אלו בעת הצעת תורים ללקוחות בשיחות WhatsApp.
+          </p>
+        </div>
+      )}
+
+      {/* Save */}
+      <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button onClick={save} disabled={saving || !general.name.trim()} style={{
+          padding: '10px 28px', borderRadius: '10px', border: 'none',
+          background: saving ? 'var(--brand-soft)' : 'var(--brand)',
+          color: saving ? 'var(--brand)' : 'white',
+          fontFamily: 'inherit', fontWeight: 600, fontSize: '14px',
+          cursor: saving ? 'default' : 'pointer',
+        }}>
+          {saving ? 'שומר...' : 'שמור הגדרות'}
+        </button>
+        {saved && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>
+            <Check size={14} /> נשמר בהצלחה
+          </span>
+        )}
+      </div>
     </div>
   )
 }
