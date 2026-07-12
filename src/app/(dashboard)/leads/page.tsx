@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, getPriorityScore, type Lead } from '@/types'
+import { STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, TREATMENT_LABELS, TREATMENT_COLORS, getPriorityScore, isNewLead, type Lead, type TreatmentType } from '@/types'
 import { Search, Phone, MessageCircle, SlidersHorizontal, X, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -10,7 +10,7 @@ function formatPhone(phone: string): string {
   if (!phone) return '—'
   const clean = phone.replace(/\D/g, '')
   if (clean.startsWith('972') && clean.length >= 12) {
-    const local = '0' + clean.slice(3) // 0521234567
+    const local = '0' + clean.slice(3)
     return local.slice(0, 3) + '-' + local.slice(3, 6) + '-' + local.slice(6)
   }
   if (clean.startsWith('0') && clean.length === 10) {
@@ -19,8 +19,12 @@ function formatPhone(phone: string): string {
   return phone
 }
 
-const STATUSES = ['new', 'contacted', 'in_progress', 'published', 'not_relevant']
-const SOURCES = ['backoffice', 'whatsapp', 'social', 'outreach', 'manual']
+const ALL_STATUSES = [
+  'new', 'contacted', 'in_progress', 'published', 'not_relevant',
+  'no_show', 'arrived', 'quote_sent', 'quote_followup', 'closed', 'lost',
+]
+const ALL_SOURCES = ['backoffice', 'whatsapp', 'social', 'outreach', 'manual', 'scrape', 'bot']
+const ALL_TREATMENTS = ['implant', 'restorative', 'veneers', 'whitening', 'orthodontics', 'checkup', 'other']
 
 export default function LeadsPage() {
   const supabase = createClient()
@@ -29,7 +33,7 @@ export default function LeadsPage() {
   const [profiles, setProfiles] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({ status: '', source: '', assigned: '' })
+  const [filters, setFilters] = useState({ status: '', source: '', assigned: '', treatment_type: '' })
 
   useEffect(() => {
     async function load() {
@@ -51,13 +55,13 @@ export default function LeadsPage() {
       const matchStatus = !filters.status || l.status === filters.status
       const matchSource = !filters.source || l.source === filters.source
       const matchAssigned = !filters.assigned || l.assigned_to === filters.assigned
-      return matchSearch && matchStatus && matchSource && matchAssigned
+      const matchTreatment = !filters.treatment_type || l.treatment_type === filters.treatment_type
+      return matchSearch && matchStatus && matchSource && matchAssigned && matchTreatment
     }).sort((a, b) => getPriorityScore(b) - getPriorityScore(a))
   }, [leads, search, filters])
 
   const hasFilters = Object.values(filters).some(Boolean)
-
-  function clearFilters() { setFilters({ status: '', source: '', assigned: '' }) }
+  function clearFilters() { setFilters({ status: '', source: '', assigned: '', treatment_type: '' }) }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -110,8 +114,7 @@ export default function LeadsPage() {
         </button>
         {hasFilters && (
           <button onClick={clearFilters} className="text-xs text-gray-400 hover:text-red-500 transition-colors font-semibold flex items-center gap-1">
-            <X size={12} />
-            נקה
+            <X size={12} /> נקה
           </button>
         )}
       </div>
@@ -123,14 +126,21 @@ export default function LeadsPage() {
             <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">סטטוס</label>
             <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} className="input-base">
               <option value="">הכל</option>
-              {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s as keyof typeof STATUS_LABELS]}</option>)}
+              {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s as keyof typeof STATUS_LABELS]}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">מקור</label>
             <select value={filters.source} onChange={e => setFilters(f => ({ ...f, source: e.target.value }))} className="input-base">
               <option value="">הכל</option>
-              {SOURCES.map(s => <option key={s} value={s}>{SOURCE_LABELS[s as keyof typeof SOURCE_LABELS]}</option>)}
+              {ALL_SOURCES.map(s => <option key={s} value={s}>{SOURCE_LABELS[s as keyof typeof SOURCE_LABELS]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">סוג טיפול</label>
+            <select value={filters.treatment_type} onChange={e => setFilters(f => ({ ...f, treatment_type: e.target.value }))} className="input-base">
+              <option value="">הכל</option>
+              {ALL_TREATMENTS.map(t => <option key={t} value={t}>{TREATMENT_LABELS[t as TreatmentType]}</option>)}
             </select>
           </div>
           <div>
@@ -148,30 +158,43 @@ export default function LeadsPage() {
         <table className="w-full">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-default)', background: 'var(--bg-sunken)' }}>
-              {['איש קשר', 'טלפון', 'מקור', 'סטטוס', 'איש מכירות', 'follow-up', ''].map((h, i) => (
+              {['איש קשר', 'טלפון', 'סוג טיפול', 'מקור', 'סטטוס', 'איש מכירות', 'follow-up', ''].map((h, i) => (
                 <th key={i} style={{ textAlign: 'right', fontSize: '11px', fontWeight: 500, color: 'var(--fg-2)', padding: '10px 14px', letterSpacing: '0.03em' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-16">
+              <tr><td colSpan={9} className="text-center py-16">
                 <Search size={36} className="mx-auto text-gray-200 mb-3" />
                 <p className="text-gray-400 font-semibold">לא נמצאו לידים</p>
                 <p className="text-gray-300 text-sm mt-1">נסה לשנות את החיפוש או הסינון</p>
               </td></tr>
             )}
             {filtered.map(lead => {
-              const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG]
-              const isOverdue = lead.next_followup && new Date(lead.next_followup) < new Date() && !['published', 'not_relevant'].includes(lead.status)
+              const status = STATUS_CONFIG[lead.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.new
+              const isOverdue = lead.next_followup && new Date(lead.next_followup) < new Date() && !['published', 'not_relevant', 'closed', 'lost'].includes(lead.status)
+              const isNew = isNewLead(lead)
+              const treatmentColor = lead.treatment_type ? TREATMENT_COLORS[lead.treatment_type as TreatmentType] : undefined
 
               return (
                 <tr key={lead.id} className="hover:bg-gray-50/50 transition-colors group">
                   {/* Name */}
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-medium shrink-0 bg-gray-100 text-gray-600">
-                        {lead.name.charAt(0)}
+                      <div className="relative shrink-0">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-medium bg-gray-100 text-gray-600">
+                          {lead.name.charAt(0)}
+                        </div>
+                        {isNew && (
+                          <span style={{
+                            position: 'absolute', top: '-4px', right: '-4px',
+                            background: '#10B981', color: 'white',
+                            fontSize: '8px', fontWeight: 700, lineHeight: 1,
+                            padding: '2px 4px', borderRadius: '4px',
+                            letterSpacing: '0.02em',
+                          }}>חדש</span>
+                        )}
                       </div>
                       <div>
                         <Link href={`/leads/${lead.id}`} className="font-medium text-gray-800 hover:text-[#5a9030] transition-colors text-sm block">
@@ -183,23 +206,36 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   {/* Phone */}
-                  <td className="px-3 py-4 text-center" dir="ltr" style={{ fontSize: '13px', fontWeight: 400, color: 'var(--fg-3)', fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{formatPhone(lead.phone || '')}</td>
+                  <td className="px-3 py-3 text-center" dir="ltr" style={{ fontSize: '13px', fontWeight: 400, color: 'var(--fg-3)', fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>{formatPhone(lead.phone || '')}</td>
+                  {/* Treatment type */}
+                  <td className="px-3 py-3">
+                    {lead.treatment_type ? (
+                      <span style={{
+                        fontSize: '11px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px',
+                        background: treatmentColor ? `${treatmentColor}18` : 'var(--bg-hover)',
+                        color: treatmentColor || 'var(--fg-3)',
+                        border: `1px solid ${treatmentColor ? `${treatmentColor}30` : 'var(--border-subtle)'}`,
+                      }}>
+                        {TREATMENT_LABELS[lead.treatment_type as TreatmentType]}
+                      </span>
+                    ) : <span className="text-gray-300 text-xs">—</span>}
+                  </td>
                   {/* Source */}
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-3">
                     <span className="text-[11px] font-normal text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                      {SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS]}
+                      {SOURCE_LABELS[lead.source as keyof typeof SOURCE_LABELS] || lead.source}
                     </span>
                   </td>
                   {/* Status */}
-                  <td className="px-3 py-4">
-                    <span className={`text-[11px] font-normal px-2.5 py-1 rounded-full status-${lead.status}`}>
+                  <td className="px-3 py-3">
+                    <span className={`text-[11px] font-normal px-2.5 py-1 rounded-full ${status.bg} ${status.text}`}>
                       {status.label}
                     </span>
                   </td>
                   {/* Salesperson */}
-                  <td className="px-3 py-4 text-sm text-gray-500">{(lead as any).profile?.full_name || '—'}</td>
+                  <td className="px-3 py-3 text-sm text-gray-500">{(lead as any).profile?.full_name || '—'}</td>
                   {/* Follow-up */}
-                  <td className="px-3 py-4 text-sm">
+                  <td className="px-3 py-3 text-sm">
                     {lead.next_followup ? (
                       <span className={`font-normal ${isOverdue ? 'text-red-400' : 'text-gray-400'}`}>
                         {isOverdue && '⚠ '}{new Date(lead.next_followup).toLocaleDateString('he-IL')}
@@ -207,7 +243,7 @@ export default function LeadsPage() {
                     ) : <span className="text-gray-300">—</span>}
                   </td>
                   {/* Actions */}
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       {lead.phone && (
                         <a href={`tel:${lead.phone}`} className="w-8 h-8 rounded-xl bg-green-50 hover:bg-green-100 flex items-center justify-center" title="התקשר">

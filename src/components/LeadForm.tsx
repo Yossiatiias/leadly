@@ -4,23 +4,42 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Profile, Lead } from '@/types'
+import { TREATMENT_LABELS } from '@/types'
 
 const SOURCES = [
+  { value: 'manual',     label: 'הזנה ידנית' },
   { value: 'backoffice', label: 'בקאופיס' },
-  { value: 'whatsapp', label: 'וואטסאפ' },
-  { value: 'social', label: 'רשתות חברתיות' },
-  { value: 'outreach', label: 'פנייה יזומה' },
-  { value: 'manual', label: 'ידני' },
+  { value: 'whatsapp',   label: 'בוט וואטסאפ' },
+  { value: 'social',     label: 'רשתות חברתיות' },
+  { value: 'outreach',   label: 'פנייה יזומה' },
+  { value: 'scrape',     label: 'סריקה' },
+  { value: 'bot',        label: 'בוט' },
 ]
 
 const STATUSES = [
-  { value: 'new', label: 'חדש' },
-  { value: 'contacted', label: 'ביצירת קשר' },
-  { value: 'in_progress', label: 'בתהליך' },
-  { value: 'published', label: 'פורסם' },
-  { value: 'not_relevant', label: 'לא רלוונטי' },
+  { value: 'new',            label: 'חדש' },
+  { value: 'contacted',      label: 'אין מענה' },
+  { value: 'in_progress',    label: 'למעקב' },
+  { value: 'published',      label: 'נקבע תור' },
+  { value: 'no_show',        label: 'לא הגיע' },
+  { value: 'arrived',        label: 'הגיע' },
+  { value: 'quote_sent',     label: 'הצעת מחיר' },
+  { value: 'quote_followup', label: 'מעקב אחר הצעה' },
+  { value: 'closed',         label: 'נסגר' },
+  { value: 'lost',           label: 'אבוד' },
+  { value: 'not_relevant',   label: 'לא רלוונטי' },
 ]
 
+const TREATMENT_OPTIONS = [
+  { value: '',             label: '— ללא —' },
+  { value: 'implant',      label: 'השתלות' },
+  { value: 'restorative',  label: 'טיפול משמר' },
+  { value: 'veneers',      label: 'ציפויים' },
+  { value: 'whitening',    label: 'הלבנה' },
+  { value: 'orthodontics', label: 'יישור שיניים' },
+  { value: 'checkup',      label: 'בדיקה ואבחון' },
+  { value: 'other',        label: 'אחר' },
+]
 
 interface Props {
   profiles: Profile[]
@@ -37,25 +56,34 @@ export default function LeadForm({ profiles, lead }: Props) {
   defaultFollowup.setDate(defaultFollowup.getDate() + 3)
 
   const [form, setForm] = useState({
-    name: lead?.name || '',
-    phone: lead?.phone || '',
-    email: lead?.email || '',
-    source: lead?.source || 'manual',
-    status: lead?.status || 'new',
-    temperature: lead?.temperature || 'medium',
-    assigned_to: lead?.assigned_to || '',
-    notes: lead?.notes || '',
-    campaign_name: lead?.campaign_name || '',
-    company_name: lead?.company_name || '',
-    clinic_count: lead?.clinic_count?.toString() || '',
+    name:             lead?.name || '',
+    phone:            lead?.phone || '',
+    email:            lead?.email || '',
+    source:           lead?.source || 'manual',
+    status:           lead?.status || 'new',
+    temperature:      lead?.temperature || 'medium',
+    treatment_type:   lead?.treatment_type || '',
+    assigned_to:      lead?.assigned_to || '',
+    notes:            lead?.notes || '',
+    campaign_name:    lead?.campaign_name || '',
+    company_name:     lead?.company_name || '',
+    clinic_count:     lead?.clinic_count?.toString() || '',
     discount_percent: lead?.discount_percent?.toString() || '',
-    next_followup: lead?.next_followup
+    next_followup:    lead?.next_followup
       ? new Date(lead.next_followup).toISOString().split('T')[0]
       : defaultFollowup.toISOString().split('T')[0],
   })
 
   function set(field: string, value: string) {
-    setForm(f => ({ ...f, [field]: value }))
+    setForm(f => {
+      const next = { ...f, [field]: value }
+      // Auto follow-up: 24h after switching to "למעקב"
+      if (field === 'status' && value === 'in_progress') {
+        const in24h = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        next.next_followup = in24h.toISOString().split('T')[0]
+      }
+      return next
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -64,19 +92,20 @@ export default function LeadForm({ profiles, lead }: Props) {
     setError('')
 
     const payload = {
-      name: form.name,
-      phone: form.phone || null,
-      email: form.email || null,
-      source: form.source,
-      status: form.status,
-      temperature: form.temperature,
-      assigned_to: form.assigned_to || null,
-      notes: form.notes || null,
-      campaign_name: form.campaign_name || null,
-      company_name: form.company_name || null,
-      clinic_count: form.clinic_count ? parseInt(form.clinic_count) : null,
+      name:             form.name,
+      phone:            form.phone || null,
+      email:            form.email || null,
+      source:           form.source,
+      status:           form.status,
+      temperature:      form.temperature,
+      treatment_type:   form.treatment_type || null,
+      assigned_to:      form.assigned_to || null,
+      notes:            form.notes || null,
+      campaign_name:    form.campaign_name || null,
+      company_name:     form.company_name || null,
+      clinic_count:     form.clinic_count ? parseInt(form.clinic_count) : null,
       discount_percent: form.discount_percent ? parseInt(form.discount_percent) : null,
-      next_followup: form.next_followup || null,
+      next_followup:    form.next_followup || null,
     }
 
     const result = lead
@@ -87,7 +116,6 @@ export default function LeadForm({ profiles, lead }: Props) {
       setError('שגיאה בשמירה: ' + result.error.message)
       setLoading(false)
     } else {
-      // סנכרן שם ליד → שיחה אם השם השתנה
       if (lead && payload.name && payload.name !== lead.name) {
         await supabase
           .from('conversations')
@@ -147,6 +175,14 @@ export default function LeadForm({ profiles, lead }: Props) {
         </div>
       </div>
 
+      {/* Treatment type */}
+      <div>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>סוג טיפול</label>
+        <select value={form.treatment_type} onChange={e => set('treatment_type', e.target.value)} className="input-base">
+          {TREATMENT_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+      </div>
+
       {form.source === 'social' && (
         <div>
           <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>שם קמפיין</label>
@@ -164,7 +200,10 @@ export default function LeadForm({ profiles, lead }: Props) {
           </select>
         </div>
         <div>
-          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>follow-up הבא</label>
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>
+            follow-up הבא
+            {form.status === 'in_progress' && <span style={{ color: '#10B981', marginRight: '6px', fontSize: '10px', fontWeight: 400 }}>נקבע אוטומטית 24 שע׳</span>}
+          </label>
           <input type="date" value={form.next_followup} onChange={e => set('next_followup', e.target.value)} className="input-base" dir="ltr" />
         </div>
       </div>
@@ -185,7 +224,7 @@ export default function LeadForm({ profiles, lead }: Props) {
 
       <div className="flex gap-3 pt-1">
         <button type="submit" disabled={loading} className="btn-primary disabled:opacity-50">
-          {loading ? 'שומר...' : lead ? '💾 עדכן ליד' : '+ הוסף ליד'}
+          {loading ? 'שומר...' : lead ? 'עדכן ליד' : '+ הוסף ליד'}
         </button>
         <button type="button" onClick={() => router.back()} className="btn-ghost">ביטול</button>
       </div>

@@ -14,8 +14,20 @@ interface KnowledgeItem {
   file_url?: string
   source_url?: string
   category: string
+  audience: 'both' | 'customer' | 'staff'
   is_active: boolean
   created_at: string
+}
+
+const AUDIENCE_LABELS: Record<string, string> = {
+  both:     'לקוח + צוות',
+  customer: 'לקוח בלבד',
+  staff:    'צוות בלבד',
+}
+const AUDIENCE_COLORS: Record<string, string> = {
+  both:     '#6366F1',
+  customer: '#10B981',
+  staff:    '#F59E0B',
 }
 
 interface ChatMsg { role: 'user' | 'assistant'; text: string }
@@ -32,7 +44,7 @@ export default function KnowledgePage() {
   // Q&A form
   const [showQAForm, setShowQAForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [qaForm, setQAForm] = useState({ question: '', answer: '', category: 'כללי' })
+  const [qaForm, setQAForm] = useState({ question: '', answer: '', category: 'כללי', audience: 'both' })
   const [savingQA, setSavingQA] = useState(false)
 
   // File upload
@@ -76,11 +88,11 @@ export default function KnowledgePage() {
     if (!qaForm.question.trim() || !qaForm.answer.trim() || !businessId) return
     setSavingQA(true)
     if (editId) {
-      await supabase.from('qa_knowledge').update({ question: qaForm.question, answer: qaForm.answer, category: qaForm.category }).eq('id', editId)
+      await supabase.from('qa_knowledge').update({ question: qaForm.question, answer: qaForm.answer, category: qaForm.category, audience: qaForm.audience }).eq('id', editId)
     } else {
-      await supabase.from('qa_knowledge').insert({ business_id: businessId, type: 'qa', question: qaForm.question, answer: qaForm.answer, category: qaForm.category, is_active: true })
+      await supabase.from('qa_knowledge').insert({ business_id: businessId, type: 'qa', question: qaForm.question, answer: qaForm.answer, category: qaForm.category, audience: qaForm.audience, is_active: true })
     }
-    setQAForm({ question: '', answer: '', category: 'כללי' })
+    setQAForm({ question: '', answer: '', category: 'כללי', audience: 'both' })
     setEditId(null)
     setShowQAForm(false)
     setSavingQA(false)
@@ -88,7 +100,7 @@ export default function KnowledgePage() {
   }
 
   function startEditQA(item: KnowledgeItem) {
-    setQAForm({ question: item.question, answer: item.answer, category: item.category })
+    setQAForm({ question: item.question, answer: item.answer, category: item.category, audience: item.audience || 'both' })
     setEditId(item.id)
     setShowQAForm(true)
     setTab('qa')
@@ -250,11 +262,19 @@ export default function KnowledgePage() {
           {showQAForm && (
             <div style={{ background: 'var(--bg-surface)', borderRadius: '14px', padding: '24px', border: '1px solid var(--border-subtle)', marginBottom: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 600, color: 'var(--fg-1)' }}>{editId ? 'עריכת שאלה' : 'שאלה חדשה'}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', display: 'block', marginBottom: '6px' }}>קטגוריה</label>
                   <select value={qaForm.category} onChange={e => setQAForm(f => ({ ...f, category: e.target.value }))} className="input-base">
                     {QA_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', display: 'block', marginBottom: '6px' }}>קהל יעד</label>
+                  <select value={qaForm.audience} onChange={e => setQAForm(f => ({ ...f, audience: e.target.value }))} className="input-base">
+                    <option value="both">לקוח + צוות</option>
+                    <option value="customer">לקוח בלבד</option>
+                    <option value="staff">צוות בלבד</option>
                   </select>
                 </div>
                 <div>
@@ -432,6 +452,9 @@ function ItemCard({ item, onEdit, onDelete, onToggle, extra }: {
   onToggle: () => void
   extra?: React.ReactNode
 }) {
+  const audience = item.audience || 'both'
+  const audienceColor = AUDIENCE_COLORS[audience] || '#6366F1'
+
   return (
     <div style={{
       background: 'var(--bg-surface)', borderRadius: '12px', padding: '14px 16px',
@@ -440,9 +463,17 @@ function ItemCard({ item, onEdit, onDelete, onToggle, extra }: {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '13px', margin: '0 0 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {item.question || item.title}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '13px', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+              {item.question || item.title}
+            </p>
+            <span style={{
+              fontSize: '10px', fontWeight: 600, padding: '2px 7px', borderRadius: '5px', flexShrink: 0,
+              background: `${audienceColor}18`, color: audienceColor, border: `1px solid ${audienceColor}30`,
+            }}>
+              {AUDIENCE_LABELS[audience]}
+            </span>
+          </div>
           <p style={{ color: 'var(--fg-3)', fontSize: '12px', margin: 0, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {item.answer}
           </p>

@@ -8,14 +8,14 @@ import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 
 const navItems = [
-  { href: '/',             label: 'בית'              },
-  { href: '/conversations', label: 'שיחות'           },
-  { href: '/leads',        label: 'ניהול לידים'      },
-  { href: '/analytics',   label: 'ניתוח ביצועים'    },
-  { href: '/qa',           label: 'מידע ארגוני'      },
-  { href: '/connections',  label: 'חיבורים'          },
-  { href: '/reports',      label: 'דוחות'            },
-  { href: '/settings',     label: 'הגדרות עסק'       },
+  { href: '/',               label: 'בית'            },
+  { href: '/conversations',  label: 'שיחות'          },
+  { href: '/leads',          label: 'ניהול לידים'    },
+  { href: '/appointments',   label: 'יומן תורים'     },
+  { href: '/analytics',      label: 'ניתוח ביצועים'  },
+  { href: '/qa',             label: 'מידע ארגוני'    },
+  { href: '/connections',    label: 'חיבורים'        },
+  { href: '/settings',       label: 'הגדרות עסק'     },
 ]
 
 export default function Sidebar({ profile }: { profile: Profile | null }) {

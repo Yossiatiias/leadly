@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     // ─── טען נתוני עסק + Q&A + היסטוריה ──────────────────────────────────
     const [{ data: business }, { data: qaItems }, { data: recentMessages }] = await Promise.all([
       supabase.from('businesses').select('*').eq('id', businessId).single(),
-      supabase.from('qa_knowledge').select('type, title, question, answer, content, source_url').eq('business_id', businessId).eq('is_active', true),
+      supabase.from('qa_knowledge').select('type, title, question, answer, content, source_url').eq('business_id', businessId).eq('is_active', true).or('audience.eq.customer,audience.eq.both,audience.is.null'),
       supabase.from('messages')
         .select('direction, content')
         .eq('conversation_id', conversationId)

@@ -14,12 +14,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'חסרים שדות' }, { status: 400 })
     }
 
-    // טען את כל פריטי הידע הפעילים
+    // טען פריטי ידע פעילים — לצוות בלבד או לשניהם
     const { data: items } = await supabase
       .from('qa_knowledge')
       .select('type, title, question, answer, content, source_url, file_url')
       .eq('business_id', business_id)
       .eq('is_active', true)
+      .or('audience.eq.staff,audience.eq.both,audience.is.null')
       .order('created_at', { ascending: false })
 
     if (!items || items.length === 0) {
