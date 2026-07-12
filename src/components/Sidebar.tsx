@@ -12,7 +12,7 @@ const navItems = [
   { href: '/conversations', label: 'שיחות'           },
   { href: '/leads',        label: 'ניהול לידים'      },
   { href: '/analytics',   label: 'ניתוח ביצועים'    },
-  { href: '/qa',           label: 'שאלות ותשובות'   },
+  { href: '/qa',           label: 'מידע ארגוני'      },
   { href: '/connections',  label: 'חיבורים'          },
   { href: '/reports',      label: 'דוחות'            },
   { href: '/settings',     label: 'הגדרות עסק'       },

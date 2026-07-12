@@ -17,8 +17,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div style={{ background: 'var(--bg-canvas)', minHeight: '100vh' }}>
       <Sidebar profile={profile} />
-      <main style={{ marginRight: '240px', minHeight: '100vh', overflowY: 'auto', overflowX: 'hidden' }}>
-        {children}
+      <main style={{ marginRight: '240px', minHeight: '100vh', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1 }}>
+          {children}
+        </div>
+        <footer style={{ textAlign: 'center', padding: '16px', fontSize: '11px', color: 'var(--fg-4)', borderTop: '1px solid var(--border-subtle)', marginTop: '40px' }}>
+          © Leadly 2026 — כל הזכויות שמורות
+        </footer>
       </main>
     </div>
   )

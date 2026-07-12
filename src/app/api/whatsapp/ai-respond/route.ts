@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     // ─── טען נתוני עסק + Q&A + היסטוריה ──────────────────────────────────
     const [{ data: business }, { data: qaItems }, { data: recentMessages }] = await Promise.all([
       supabase.from('businesses').select('*').eq('id', businessId).single(),
-      supabase.from('qa_knowledge').select('question, answer').eq('business_id', businessId).eq('is_active', true),
+      supabase.from('qa_knowledge').select('type, title, question, answer, content, source_url').eq('business_id', businessId).eq('is_active', true),
       supabase.from('messages')
         .select('direction, content')
         .eq('conversation_id', conversationId)
@@ -95,9 +95,11 @@ export async function POST(req: NextRequest) {
       parts: [{ text: m.content }],
     }))
 
-    const qaText = (qaItems || [])
-      .map(qa => `ש: ${qa.question}\nת: ${qa.answer}`)
-      .join('\n\n')
+    const qaText = (qaItems || []).map(item => {
+      if (item.type === 'file') return `[מסמך: ${item.title}]\n${item.content || item.answer}`
+      if (item.type === 'url') return `[מאתר ${item.source_url || ''}]\n${item.content || item.answer}`
+      return `ש: ${item.question}\nת: ${item.answer}`
+    }).join('\n\n---\n\n')
 
     const servicesText = (business?.settings?.services || [])
       .map((s: { name: string; price?: string; duration?: string; description?: string }) =>
