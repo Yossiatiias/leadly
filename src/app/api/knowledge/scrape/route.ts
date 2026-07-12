@@ -8,7 +8,7 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, business_id, title } = await req.json()
+    const { url, business_id, title, audience = 'both', category = 'לינקים' } = await req.json()
 
     if (!url || !business_id) {
       return NextResponse.json({ error: 'חסרים שדות' }, { status: 400 })
@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
         answer:      text,
         content:     text,
         source_url:  url,
-        category:    'לינקים',
+        category,
+        audience,
         is_active:   true,
       })
       .select()

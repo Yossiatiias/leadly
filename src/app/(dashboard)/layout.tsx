@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import StaffChatWidget from '@/components/StaffChatWidget'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -25,6 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           © Leadly 2026 — כל הזכויות שמורות
         </footer>
       </main>
+      {profile?.business_id && <StaffChatWidget businessId={profile.business_id} />}
     </div>
   )
 }

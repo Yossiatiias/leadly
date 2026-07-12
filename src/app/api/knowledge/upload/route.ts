@@ -11,7 +11,9 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const file = formData.get('file') as File
     const businessId = formData.get('business_id') as string
-    const title = formData.get('title') as string
+    const title    = formData.get('title') as string
+    const audience = (formData.get('audience') as string) || 'both'
+    const category = (formData.get('category') as string) || 'קבצים'
 
     if (!file || !businessId) {
       return NextResponse.json({ error: 'חסרים שדות' }, { status: 400 })
@@ -55,7 +57,8 @@ export async function POST(req: NextRequest) {
         answer:       content,
         content,
         file_url:     publicUrl,
-        category:     'קבצים',
+        category,
+        audience,
         is_active:    true,
       })
       .select()

@@ -132,7 +132,7 @@ ${qaText ? `\nQ&A:\n${qaText}` : ''}
 חוקים:
 - ענה קצר וממוקד (2-3 משפטים)
 - אל תזכיר שאתה AI או בוט
-- אם אין לך תשובה — "אבדוק ואחזור אליך"
+- אם אין לך מידע מספיק — אמור: "לפרטים נוספים אנא צרו איתנו קשר ישירות${business?.phone ? ` בטלפון ${business.phone}` : ''}${business?.website ? ` או באתר ${business.website}` : ''}" — אל תמציא מידע שלא קיים. ובסוף הוסף בשורה נפרדת: GAP:[השאלה שהלקוח שאל במדויק]
 - אם הלקוח רוצה לקבוע — הצע זמנים ריאליים לפי שעות הפעילות
 ${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} — אמור "אעביר אותך לנציג שלנו"` : ''}
 
@@ -153,7 +153,25 @@ ${business?.settings?.escalation_rule ? `- ${business.settings.escalation_rule} 
     // חלץ LEAD JSON מהתשובה
     const leadMatch = rawResponse.match(/LEAD:(\{[\s\S]*?\})/m)
     const inlineAnalysis = leadMatch ? (() => { try { return JSON.parse(leadMatch[1]) } catch { return null } })() : null
-    const aiResponse = rawResponse.replace(/\nLEAD:\{[\s\S]*?\}/m, '').trim()
+
+    // זיהוי פערי ידע — GAP:[שאלה]
+    const gapMatch = rawResponse.match(/\nGAP:\[(.+?)\]/m)
+    if (gapMatch?.[1]) {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/knowledge/gaps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_id: businessId,
+          question: gapMatch[1].trim(),
+          conversation_id: conversationId,
+        }),
+      }).catch(() => {})
+    }
+
+    const aiResponse = rawResponse
+      .replace(/\nLEAD:\{[\s\S]*?\}/m, '')
+      .replace(/\nGAP:\[.+?\]/m, '')
+      .trim()
 
     if (!aiResponse) return NextResponse.json({ ok: true })
 
