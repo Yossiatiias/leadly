@@ -122,7 +122,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
               <img
                 src={logoUrl}
                 alt={businessName || 'לוגו עסק'}
-                style={{ height: '28px', maxWidth: '80px', objectFit: 'contain', borderRadius: '4px', flexShrink: 0 }}
+                style={{ height: '40px', maxWidth: '110px', objectFit: 'contain', borderRadius: '4px', flexShrink: 0 }}
                 onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
               />
             ) : (
