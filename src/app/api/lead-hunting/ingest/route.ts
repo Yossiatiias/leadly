@@ -80,10 +80,10 @@ export async function POST(req: NextRequest) {
 
     let saved = 0
     for (const item of items) {
-      const text: string = item.text || item.message || item.postText || ''
+      const text: string = item.postText || item.text || item.message || ''
       const url: string = item.url || item.postUrl || item.link || ''
-      const groupName: string = item.groupName || item.pageName || ''
-      const authorName: string = item.authorName || item.name || null
+      const groupName: string = item.groupName || item.pageName || item.groupUrl || ''
+      const authorName: string = item.authorName || item.userName || item.name || null
 
       if (!text || existingLinks.has(url)) continue
       if (!mightBeRelevant(text)) continue
