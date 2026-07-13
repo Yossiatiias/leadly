@@ -11,20 +11,29 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { id, business_id, question, answer, category, audience } = body
 
-    if (!business_id || !question?.trim() || !answer?.trim()) {
+    if (!business_id || !question?.trim()) {
       return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
     }
 
     if (id) {
       const { error } = await supabase.from('qa_knowledge').update({
-        title: question, question, answer, category: category || 'כללי', audience: audience || 'both',
+        question,
+        answer: answer || '',
+        category: category || 'כללי',
+        audience: audience || 'both',
       }).eq('id', id)
       if (error) throw error
     } else {
+      if (!answer?.trim()) {
+        return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
+      }
       const { error } = await supabase.from('qa_knowledge').insert({
-        business_id, type: 'qa',
-        title: question, question, answer,
-        category: category || 'כללי', audience: audience || 'both',
+        business_id,
+        type: 'qa',
+        question,
+        answer,
+        category: category || 'כללי',
+        audience: audience || 'both',
         is_active: true,
       })
       if (error) throw error
@@ -33,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     console.error('qa save error:', err)
-    return NextResponse.json({ error: err?.message || 'שגיאה בשמירה' }, { status: 500 })
+    return NextResponse.json({ error: err?.message || JSON.stringify(err) }, { status: 500 })
   }
 }
 
@@ -45,6 +54,6 @@ export async function DELETE(req: NextRequest) {
     if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'שגיאה במחיקה' }, { status: 500 })
+    return NextResponse.json({ error: err?.message || JSON.stringify(err) }, { status: 500 })
   }
 }

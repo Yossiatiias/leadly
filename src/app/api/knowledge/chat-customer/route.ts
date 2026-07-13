@@ -14,24 +14,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'חסרים שדות' }, { status: 400 })
     }
 
-    // טען פריטי ידע פעילים — ללקוחות בלבד או לשניהם (לא מידע פנימי של צוות)
-    const { data: items } = await supabase
+    const { data: items, error: dbError } = await supabase
       .from('qa_knowledge')
-      .select('type, title, question, answer, content, source_url, file_url')
+      .select('type, question, answer, source_url, file_url')
       .eq('business_id', business_id)
       .eq('is_active', true)
       .or('audience.eq.customer,audience.eq.both,audience.is.null')
       .order('created_at', { ascending: false })
 
+    if (dbError) throw dbError
+
     if (!items || items.length === 0) {
-      return NextResponse.json({ answer: 'אין מידע במאגר הידע עדיין. הוסף שאלות, קבצים או לינקים.' })
+      return NextResponse.json({ answer: 'אין מידע במאגר הידע עדיין.' })
     }
 
     const knowledgeContext = items.map(item => {
-      if (item.type === 'qa') return `ש: ${item.question}\nת: ${item.answer}`
-      if (item.type === 'url') return `[מאתר ${item.source_url}]:\n${item.content || item.answer}`
-      if (item.type === 'file') return `[מקובץ "${item.title}"]:\n${item.content || item.answer}`
-      return `${item.title}: ${item.answer}`
+      if (item.type === 'qa')   return `ש: ${item.question}\nת: ${item.answer}`
+      if (item.type === 'url')  return `[מאתר ${item.source_url || item.question}]:\n${item.answer}`
+      if (item.type === 'file') return `[מסמך: ${item.question}]:\n${item.answer}`
+      return `${item.question}: ${item.answer}`
     }).join('\n\n---\n\n')
 
     const systemPrompt = `אתה בוט שיחה שעונה ללקוחות.
@@ -59,13 +60,16 @@ ${knowledgeContext}`
       }),
     })
 
-    if (!res.ok) throw new Error(`Groq error: ${res.status}`)
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`Groq error ${res.status}: ${errText}`)
+    }
     const data = await res.json()
     const answer = data.choices?.[0]?.message?.content || 'לא הצלחתי לענות'
 
     return NextResponse.json({ answer })
-  } catch (err) {
+  } catch (err: any) {
     console.error('knowledge chat-customer error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: err?.message || JSON.stringify(err) }, { status: 500 })
   }
 }

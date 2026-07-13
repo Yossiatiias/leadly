@@ -11,10 +11,8 @@ import {
 interface KnowledgeItem {
   id: string
   type: 'qa' | 'file' | 'url'
-  title: string
   question: string
   answer: string
-  content?: string
   file_url?: string
   source_url?: string
   category: string
@@ -27,9 +25,9 @@ const CATEGORIES = ['הכל', 'מחירון', 'שעות ומיקום', 'שמות
 const ITEM_CATEGORIES = CATEGORIES.slice(1)
 
 const AUD = {
-  both:     { label: 'שניהם',         emoji: '⚡', bg: '#EFF6FF', color: '#1E3A8A', border: '#BFDBFE' },
-  customer: { label: 'בוט לקוחות',    emoji: '🤖', bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0' },
-  staff:    { label: 'צוות בלבד',     emoji: '🔐', bg: '#F5F3FF', color: '#4C1D95', border: '#DDD6FE' },
+  both:     { label: 'שניהם',         emoji: '◈', bg: '#EFF6FF', color: '#1E3A8A', border: '#BFDBFE' },
+  customer: { label: 'בוט לקוחות',    emoji: '◇', bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0' },
+  staff:    { label: 'צוות בלבד',     emoji: '▣', bg: '#F5F3FF', color: '#4C1D95', border: '#DDD6FE' },
 }
 
 const TYPE_META = {
@@ -122,7 +120,7 @@ export default function KnowledgePage() {
 
   function openEdit(item: KnowledgeItem) {
     setEditItem(item)
-    setForm({ question: item.question || item.title, answer: item.answer || '', category: item.category || 'כללי', audience: item.audience || 'both' })
+    setForm({ question: item.question || '', answer: item.answer || '', category: item.category || 'כללי', audience: item.audience || 'both' })
     setAddType(item.type)
     setStep('form'); setMsg(''); setShowModal(true)
   }
@@ -276,7 +274,7 @@ export default function KnowledgePage() {
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           {(['all', 'customer', 'staff', 'both'] as const).map(k => {
-            const labels: Record<string, string> = { all: 'הכל', customer: '🤖 לקוחות', staff: '🔐 צוות', both: '⚡ שניהם' }
+            const labels: Record<string, string> = { all: 'הכל', customer: '◇ לקוחות', staff: '▣ צוות', both: '◈ שניהם' }
             const active = audFilter === k
             return (
               <button key={k} onClick={() => setAudFilter(k)} style={{
@@ -362,7 +360,7 @@ export default function KnowledgePage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.title || item.question}
+                      {item.question}
                     </span>
                     <span style={{ fontSize: '10px', background: 'var(--bg-hover)', color: 'var(--fg-3)', padding: '1px 7px', borderRadius: '4px', flexShrink: 0 }}>
                       {item.category}

@@ -14,33 +14,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'חסרים שדות' }, { status: 400 })
     }
 
-    // טען פריטי ידע פעילים — לצוות בלבד או לשניהם
-    const { data: items } = await supabase
+    const { data: items, error: dbError } = await supabase
       .from('qa_knowledge')
-      .select('type, title, question, answer, content, source_url, file_url')
+      .select('type, question, answer, source_url, file_url')
       .eq('business_id', business_id)
       .eq('is_active', true)
       .or('audience.eq.staff,audience.eq.both,audience.is.null')
       .order('created_at', { ascending: false })
 
+    if (dbError) throw dbError
+
     if (!items || items.length === 0) {
       return NextResponse.json({ answer: 'אין מידע במאגר הידע עדיין. הוסף שאלות, קבצים או לינקים.' })
     }
 
-    // בנה context מכל הפריטים
     const knowledgeContext = items.map(item => {
-      if (item.type === 'qa') return `ש: ${item.question}\nת: ${item.answer}`
-      if (item.type === 'url') return `[מאתר ${item.source_url}]:\n${item.content || item.answer}`
-      if (item.type === 'file') return `[מקובץ "${item.title}"]:\n${item.content || item.answer}`
-      return `${item.title}: ${item.answer}`
+      if (item.type === 'qa')   return `ש: ${item.question}\nת: ${item.answer}`
+      if (item.type === 'url')  return `[מאתר ${item.source_url || item.question}]:\n${item.answer}`
+      if (item.type === 'file') return `[מסמך: ${item.question}]:\n${item.answer}`
+      return `${item.question}: ${item.answer}`
     }).join('\n\n---\n\n')
 
-    const systemPrompt = `אתה עוזר פנימי חכם של מערכת Leadly.
-המשתמש הוא נציג מכירות שרוצה מידע על העסק.
+    const systemPrompt = `אתה עוזר פנימי חכם. המשתמש הוא נציג מכירות שרוצה מידע על העסק.
 ענה בעברית, קצר ומדויק, בהתבסס אך ורק על המידע שלפניך.
-אם התשובה לא נמצאת במידע — אמור בכנות "לא מצאתי מידע על כך במאגר".
+אם התשובה לא נמצאת — אמור "לא מצאתי מידע על כך במאגר".
 
-מאגר הידע הארגוני:
+מאגר הידע:
 ${knowledgeContext}`
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -60,13 +59,16 @@ ${knowledgeContext}`
       }),
     })
 
-    if (!res.ok) throw new Error(`Groq error: ${res.status}`)
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`Groq error ${res.status}: ${errText}`)
+    }
     const data = await res.json()
     const answer = data.choices?.[0]?.message?.content || 'לא הצלחתי לענות'
 
     return NextResponse.json({ answer })
-  } catch (err) {
+  } catch (err: any) {
     console.error('knowledge chat error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: err?.message || JSON.stringify(err) }, { status: 500 })
   }
 }

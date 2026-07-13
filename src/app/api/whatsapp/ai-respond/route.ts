@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     // ─── טען נתוני עסק + Q&A + היסטוריה ──────────────────────────────────
     const [{ data: business }, { data: qaItems }, { data: recentMessages }] = await Promise.all([
       supabase.from('businesses').select('*').eq('id', businessId).single(),
-      supabase.from('qa_knowledge').select('type, title, question, answer, content, source_url').eq('business_id', businessId).eq('is_active', true).or('audience.eq.customer,audience.eq.both,audience.is.null'),
+      supabase.from('qa_knowledge').select('type, question, answer, source_url').eq('business_id', businessId).eq('is_active', true).or('audience.eq.customer,audience.eq.both,audience.is.null'),
       supabase.from('messages')
         .select('direction, content')
         .eq('conversation_id', conversationId)
@@ -96,8 +96,8 @@ export async function POST(req: NextRequest) {
     }))
 
     const qaText = (qaItems || []).map(item => {
-      if (item.type === 'file') return `[מסמך: ${item.title}]\n${item.content || item.answer}`
-      if (item.type === 'url') return `[מאתר ${item.source_url || ''}]\n${item.content || item.answer}`
+      if (item.type === 'file') return `[מסמך: ${item.question}]\n${item.answer}`
+      if (item.type === 'url') return `[מאתר ${item.source_url || item.question}]\n${item.answer}`
       return `ש: ${item.question}\nת: ${item.answer}`
     }).join('\n\n---\n\n')
 

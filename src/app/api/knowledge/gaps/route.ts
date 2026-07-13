@@ -107,7 +107,6 @@ export async function PATCH(req: NextRequest) {
       await service.from('qa_knowledge').insert({
         business_id: profile.business_id,
         type: 'qa',
-        title: gap?.question || 'שאלה',
         question: gap?.question || 'שאלה',
         answer,
         category: category || 'כללי',
