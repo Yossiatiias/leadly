@@ -27,6 +27,20 @@ interface HuntSource {
   type: SourceType
 }
 
+interface HuntSchedule {
+  enabled: boolean
+  interval_hours: number
+  next_scan_at: string | null
+  last_scan_at: string | null
+}
+
+const SCHEDULE_OPTIONS = [
+  { label: 'כל יום', hours: 24 },
+  { label: 'פעמיים ביום', hours: 12 },
+  { label: 'כל שעתיים', hours: 2 },
+  { label: 'כל שבוע', hours: 168 },
+]
+
 const SOURCE_TYPES: { value: SourceType; label: string; emoji: string; placeholder: string }[] = [
   { value: 'facebook',  label: 'פייסבוק',   emoji: '👥', placeholder: 'https://facebook.com/groups/...' },
   { value: 'instagram', label: 'אינסטגרם',  emoji: '📷', placeholder: 'https://instagram.com/...' },
@@ -46,6 +60,7 @@ export default function LeadHuntingPage() {
   const [newUrl, setNewUrl] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [newType, setNewType] = useState<SourceType>('facebook')
+  const [schedule, setSchedule] = useState<HuntSchedule>({ enabled: false, interval_hours: 24, next_scan_at: null, last_scan_at: null })
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [showConfig, setShowConfig] = useState(false)
@@ -68,6 +83,7 @@ export default function LeadHuntingPage() {
         type: s.type || 'facebook',
       }))
       setSources(raw)
+      if (biz?.settings?.hunt_schedule) setSchedule(biz.settings.hunt_schedule)
       await loadCandidates(profile.business_id)
     }
     load()
@@ -83,13 +99,26 @@ export default function LeadHuntingPage() {
     setCandidates(data || [])
   }
 
-  async function persistSources(updated: HuntSource[], msg: string) {
+  async function persistSettings(patch: object, msg: string) {
     if (!businessId) return
     setSaving(true)
     const { data: biz } = await supabase.from('businesses').select('settings').eq('id', businessId).single()
-    await supabase.from('businesses').update({ settings: { ...(biz?.settings || {}), hunt_sources: updated } }).eq('id', businessId)
+    await supabase.from('businesses').update({ settings: { ...(biz?.settings || {}), ...patch } }).eq('id', businessId)
     setSaving(false)
     showToast(msg)
+  }
+
+  async function persistSources(updated: HuntSource[], msg: string) {
+    await persistSettings({ hunt_sources: updated }, msg)
+  }
+
+  async function saveSchedule(updated: HuntSchedule) {
+    const next = updated.enabled
+      ? new Date(Date.now() + updated.interval_hours * 60 * 60 * 1000).toISOString()
+      : null
+    const final = { ...updated, next_scan_at: next }
+    setSchedule(final)
+    await persistSettings({ hunt_schedule: final }, updated.enabled ? 'סריקה מתוזמנת הופעלה' : 'סריקה מתוזמנת הופסקה')
   }
 
   async function addSource() {
@@ -253,8 +282,67 @@ export default function LeadHuntingPage() {
             )
           })}
 
+          {/* Scheduled scanning */}
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 2px' }}>סריקה מתוזמנת</p>
+                <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: 0 }}>הסוכן יסרוק אוטומטית לפי לוח הזמנים שקבעת</p>
+              </div>
+              {/* Toggle */}
+              <button
+                onClick={() => saveSchedule({ ...schedule, enabled: !schedule.enabled })}
+                style={{
+                  width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                  background: schedule.enabled ? 'var(--brand)' : 'var(--border-default)',
+                  position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: '3px',
+                  right: schedule.enabled ? '3px' : '21px',
+                  width: '18px', height: '18px', borderRadius: '50%', background: 'white',
+                  transition: 'right 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  display: 'block',
+                }} />
+              </button>
+            </div>
+
+            {schedule.enabled && (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {SCHEDULE_OPTIONS.map(opt => (
+                  <button key={opt.hours} onClick={() => saveSchedule({ ...schedule, interval_hours: opt.hours })} style={{
+                    padding: '5px 12px', borderRadius: '20px', border: '1px solid',
+                    borderColor: schedule.interval_hours === opt.hours ? 'var(--brand)' : 'var(--border-default)',
+                    background: schedule.interval_hours === opt.hours ? 'var(--brand-soft)' : 'var(--bg-surface)',
+                    color: schedule.interval_hours === opt.hours ? 'var(--brand)' : 'var(--fg-3)',
+                    fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+                    fontWeight: schedule.interval_hours === opt.hours ? 600 : 400,
+                  }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {schedule.enabled && (schedule.next_scan_at || schedule.last_scan_at) && (
+              <div style={{ marginTop: '10px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                {schedule.next_scan_at && (
+                  <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>
+                    ⏰ סריקה הבאה: {new Date(schedule.next_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                {schedule.last_scan_at && (
+                  <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>
+                    ✓ סריקה אחרונה: {new Date(schedule.last_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Add new source */}
-          <div style={{ marginTop: sources.length ? '16px' : '0', padding: '14px', background: 'var(--bg-sunken)', borderRadius: '10px', border: '1px dashed var(--border-default)' }}>
+          <div style={{ marginTop: '20px', padding: '14px', background: 'var(--bg-sunken)', borderRadius: '10px', border: '1px dashed var(--border-default)' }}>
             {/* Type selector tabs */}
             <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
               {SOURCE_TYPES.map(t => (
