@@ -262,10 +262,10 @@ export default function LeadForm({ profiles, lead, businessId }: Props) {
       {error && <div style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: '13px', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--danger-border)' }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
-        <button type="submit" disabled={loading} className="btn-primary" style={{ opacity: loading ? 0.6 : 1 }}>
+        <button type="submit" disabled={loading} className="btn-primary" style={{ opacity: loading ? 0.6 : 1, fontSize: '13px', padding: '7px 16px' }}>
           {loading ? 'שומר...' : lead ? 'שמור שינויים' : '+ הוסף ליד'}
         </button>
-        <button type="button" onClick={() => router.back()} className="btn-ghost">ביטול</button>
+        <button type="button" onClick={() => router.back()} className="btn-ghost" style={{ fontSize: '13px', padding: '7px 14px' }}>ביטול</button>
       </div>
     </form>
   )
