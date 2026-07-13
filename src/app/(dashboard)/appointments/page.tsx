@@ -490,7 +490,7 @@ export default function AppointmentsPage() {
             <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-2)', padding: '4px' }}>
               <ChevronRight size={18} />
             </button>
-            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--fg-1)', minWidth: '200px', textAlign: 'center' }}>{monthLabel()}</span>
+            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-1)', minWidth: '130px', textAlign: 'center', whiteSpace: 'nowrap' }}>{monthLabel()}</span>
             <button onClick={() => navigate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-2)', padding: '4px' }}>
               <ChevronLeft size={18} />
             </button>
@@ -509,11 +509,11 @@ export default function AppointmentsPage() {
 
         {/* Print + email */}
         <button onClick={() => window.print()} style={{
-          display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px',
+          display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px',
           borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
-          color: 'var(--fg-2)', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+          color: 'var(--fg-2)', fontFamily: 'inherit', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap',
         }}>
-          <Printer size={13} /> הדפסה
+          <Printer size={12} /> הדפסה
         </button>
         <button onClick={() => {
           const lines = (view === 'list' ? listAppts : view === 'day' ? dayAppts : weekAppts)
@@ -521,20 +521,20 @@ export default function AppointmentsPage() {
             .join('%0A')
           window.location.href = `mailto:?subject=תורים&body=${lines}`
         }} style={{
-          display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px',
+          display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px',
           borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
-          color: 'var(--fg-2)', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+          color: 'var(--fg-2)', fontFamily: 'inherit', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap',
         }}>
-          <Mail size={13} /> שלח במייל
+          <Mail size={12} /> שלח במייל
         </button>
 
         {/* Add button */}
         <button onClick={() => { setAddDate(currentDate); setShowAdd(true) }} style={{
-          display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px',
+          display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px',
           borderRadius: '10px', border: 'none', background: 'var(--brand)', color: 'white',
-          fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+          fontFamily: 'inherit', fontWeight: 600, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
         }}>
-          <Plus size={14} /> תור חדש
+          <Plus size={13} /> תור חדש
         </button>
       </div>
 
