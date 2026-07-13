@@ -18,8 +18,7 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           startUrls: group_urls.map((url: string) => ({ url })),
-          maxPosts: 50,
-          // Webhook fires when run succeeds → calls our ingest endpoint
+          resultsAmount: 50,
           webhooks: [{
             eventTypes: ['ACTOR.RUN.SUCCEEDED'],
             requestUrl: webhookUrl,
