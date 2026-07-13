@@ -130,24 +130,21 @@ export default function KnowledgePage() {
   async function saveQA() {
     if (!form.question.trim() || !form.answer.trim() || !businessId) return
     setSaving(true); setMsg('')
-    let err: any = null
-    if (editItem) {
-      const { error } = await supabase.from('qa_knowledge').update({
-        title: form.question, question: form.question,
-        answer: form.answer, category: form.category, audience: form.audience,
-      }).eq('id', editItem.id)
-      err = error
-    } else {
-      const { error } = await supabase.from('qa_knowledge').insert({
-        business_id: businessId, type: 'qa',
-        title: form.question, question: form.question,
-        answer: form.answer, category: form.category,
-        audience: form.audience, is_active: true,
-      })
-      err = error
-    }
+    const res = await fetch('/api/qa/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editItem?.id || null,
+        business_id: businessId,
+        question: form.question,
+        answer: form.answer,
+        category: form.category,
+        audience: form.audience,
+      }),
+    })
+    const json = await res.json()
     setSaving(false)
-    if (err) { setMsg('שגיאה: ' + err.message); return }
+    if (!json.ok) { setMsg('שגיאה: ' + json.error); return }
     setShowModal(false); loadData()
   }
 

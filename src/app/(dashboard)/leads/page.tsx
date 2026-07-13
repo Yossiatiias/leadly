@@ -266,7 +266,7 @@ export default function LeadsPage() {
                   </td>
 
                   {/* Phone */}
-                  <td style={{ padding: '12px 14px', fontSize: '12px', color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', textAlign: 'right' }}>
+                  <td style={{ padding: '12px 14px', fontSize: '12px', color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {formatPhone(lead.phone || '')}
                   </td>
 

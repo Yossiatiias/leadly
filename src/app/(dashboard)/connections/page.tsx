@@ -104,7 +104,7 @@ export default function ConnectionsPage() {
       icon: '🔗',
       bg: 'var(--brand)',
       title: 'Webhook URL',
-      subtitle: 'כתובת קבלת הודעות',
+      subtitle: 'כתובת שמזינים ב-Green API',
       status: 'info',
       statusLabel: 'פעיל',
       available: true,
@@ -264,11 +264,14 @@ export default function ConnectionsPage() {
       {/* Webhook detail panel */}
       {expanded === 'webhook' && (
         <div style={{ background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border-default)', marginBottom: '16px' }}>
-          <h3 style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: '0 0 14px' }}>
-            🔗 כתובת Webhook
+          <h3 style={{ fontWeight: 700, color: 'var(--fg-1)', fontSize: '15px', margin: '0 0 8px' }}>
+            🔗 Webhook URL
           </h3>
-          <p style={{ fontSize: '12px', color: 'var(--fg-3)', marginBottom: '10px' }}>
-            הזן כתובת זו ב-Green API: הגדרות Instance → Notifications
+          <p style={{ fontSize: '12px', color: 'var(--fg-3)', marginBottom: '6px' }}>
+            <strong>מה זה Webhook?</strong> כשמישהו שולח הודעת WhatsApp, Green API מעביר אותה לכתובת זו — כך הסוכן שלנו מקבל את ההודעה ומגיב.
+          </p>
+          <p style={{ fontSize: '12px', color: 'var(--fg-4)', marginBottom: '12px' }}>
+            <strong>איך מגדירים:</strong> היכנס ל-Green API ← בחר Instance ← Notifications ← הדבק כתובת זו בשדה "Webhook URL"
           </p>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
             <code style={{ flex: 1, fontSize: '12px', color: 'var(--fg-2)', background: 'var(--bg-sunken)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)', direction: 'ltr', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -26,6 +26,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
   const [unread, setUnread] = useState(0)
   const [dark, setDark] = useState(false)
   const [businessName, setBusinessName] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains('dark'))
@@ -36,8 +37,9 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
     async function loadBiz() {
       const { data: pr } = await supabase.from('profiles').select('business_id').eq('id', profile!.id).single()
       if (pr?.business_id) {
-        const { data: biz } = await supabase.from('businesses').select('name').eq('id', pr.business_id).single()
+        const { data: biz } = await supabase.from('businesses').select('name, settings').eq('id', pr.business_id).single()
         if (biz?.name) setBusinessName(biz.name)
+        if (biz?.settings?.logo_url) setLogoUrl(biz.settings.logo_url)
       }
     }
     loadBiz()
@@ -100,7 +102,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
           <img
             src={dark ? '/logo-dark.png' : '/logo-light.png'}
             alt="Leadly"
-            style={{ width: '130px', height: 'auto', objectFit: 'contain', transition: 'all 0.2s', mixBlendMode: dark ? 'screen' : 'multiply' }}
+            style={{ width: '108px', height: 'auto', objectFit: 'contain', transition: 'all 0.2s', mixBlendMode: dark ? 'screen' : 'multiply' }}
           />
           <button onClick={toggleTheme} className="theme-toggle" title={dark ? 'מצב בהיר' : 'מצב כהה'}>
             {dark ? <Sun size={15} /> : <Moon size={15} />}
@@ -142,14 +144,25 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         })}
       </nav>
 
-      {/* Business name badge */}
-      {businessName && (
-        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--sidebar-border)' }}>
-          <div style={{ padding: '8px 12px', borderRadius: '10px', background: 'var(--brand-soft)', textAlign: 'center' }}>
-            <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--brand)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              🏥 {businessName}
-            </p>
-          </div>
+      {/* Client branding */}
+      {(logoUrl || businessName) && (
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+          {logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={businessName || 'לוגו עסק'}
+              style={{ maxWidth: '120px', maxHeight: '48px', objectFit: 'contain', borderRadius: '6px' }}
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
+          {businessName && (
+            <div style={{ padding: '5px 10px', borderRadius: '8px', background: 'var(--brand-soft)', width: '100%', textAlign: 'center' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--brand)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {businessName}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

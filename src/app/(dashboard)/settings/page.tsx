@@ -58,7 +58,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   const [tab, setTab] = useState<Tab>('כללי')
 
-  const [general, setGeneral] = useState({ name: '', industry: '', address: '', phone: '', email: '', website: '' })
+  const [general, setGeneral] = useState({ name: '', industry: '', address: '', phone: '', email: '', website: '', logo_url: '' })
   const [hours, setHours] = useState<WorkingDay[]>(DEFAULT_HOURS)
   const [bot, setBot] = useState({ greeting: '', goal: 'appointment', escalation_rule: '', auto_reply_hours: '24', description: '' })
   const [services, setServices] = useState<Service[]>([])
@@ -66,6 +66,9 @@ export default function SettingsPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [empSaving, setEmpSaving] = useState<string | null>(null)
   const [empSaved, setEmpSaved] = useState<string | null>(null)
+  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', role: 'agent' })
+  const [inviting, setInviting] = useState(false)
+  const [inviteMsg, setInviteMsg] = useState('')
 
   useEffect(() => { loadData() }, [])
 
@@ -78,7 +81,7 @@ export default function SettingsPage() {
     if (data) {
       setBusiness(data)
       const s = data.settings || {}
-      setGeneral({ name: data.name || '', industry: data.industry || '', address: data.address || '', phone: s.phone || '', email: s.email || '', website: data.website || '' })
+      setGeneral({ name: data.name || '', industry: data.industry || '', address: data.address || '', phone: s.phone || '', email: s.email || '', website: data.website || '', logo_url: s.logo_url || '' })
       setHours(s.working_hours_table || DEFAULT_HOURS)
       setBot({ greeting: s.greeting || '', goal: s.goal || 'appointment', escalation_rule: s.escalation_rule || '', auto_reply_hours: s.auto_reply_hours || '24', description: s.description || '' })
       setServices(s.services || [])
@@ -89,6 +92,24 @@ export default function SettingsPage() {
       setEmployees(empData || [])
     }
     setLoading(false)
+  }
+
+  async function inviteEmployee() {
+    if (!inviteForm.email.trim() || !business?.id) return
+    setInviting(true); setInviteMsg('')
+    const res = await fetch('/api/employees/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...inviteForm, business_id: business.id }),
+    })
+    const json = await res.json()
+    setInviting(false)
+    if (!json.ok) { setInviteMsg('שגיאה: ' + json.error) }
+    else {
+      setInviteMsg('הזמנה נשלחה ל-' + inviteForm.email)
+      setInviteForm({ email: '', full_name: '', role: 'agent' })
+      await loadData()
+    }
   }
 
   async function saveEmployee(emp: Employee) {
@@ -116,6 +137,7 @@ export default function SettingsPage() {
         goal: bot.goal,
         escalation_rule: bot.escalation_rule,
         auto_reply_hours: bot.auto_reply_hours,
+        logo_url: general.logo_url,
         services,
         default_duration: apptSettings.default_duration,
         booking_window_days: apptSettings.booking_window_days,
@@ -192,6 +214,19 @@ export default function SettingsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={lbl}>אתר אינטרנט</label>
               <input value={general.website} onChange={e => setGeneral(g => ({ ...g, website: e.target.value }))} placeholder="https://www.clinic.co.il" dir="ltr" style={inp} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lbl}>לוגו העסק — קישור לתמונה (URL)</label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input value={general.logo_url} onChange={e => setGeneral(g => ({ ...g, logo_url: e.target.value }))} placeholder="https://example.com/logo.png" dir="ltr" style={{ ...inp, flex: 1 }} />
+                {general.logo_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={general.logo_url} alt="תצוגה מקדימה" style={{ height: '36px', width: 'auto', maxWidth: '80px', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border-default)' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                )}
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '4px' }}>הלוגו יוצג בסרגל הצד של המערכת. הדבק קישור לתמונה (PNG, JPG, SVG)</p>
             </div>
           </div>
         </div>
@@ -327,11 +362,56 @@ export default function SettingsPage() {
       {/* ── עובדים ── */}
       {tab === 'עובדים' && (
         <div style={sec}>
-          <div style={{ marginBottom: '18px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: 0 }}>עובדים ונציגים</h3>
-            <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '4px' }}>
-              ערוך שמות וסמלי תפקיד לנציגים הרשומים במערכת. שמות אלה יופיעו בכרטיסיות הליד.
-            </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: 0 }}>עובדים ונציגים</h3>
+              <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '4px' }}>
+                עובדים יקבלו אימייל הזמנה ויוכלו להתחבר למערכת.
+              </p>
+            </div>
+          </div>
+
+          {/* Invite form */}
+          <div style={{ background: 'var(--bg-sunken)', borderRadius: '12px', padding: '16px', marginBottom: '20px', border: '1px dashed var(--border-default)' }}>
+            <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={14} style={{ color: 'var(--brand)' }} /> הזמן עובד חדש
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 140px', gap: '10px', alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ ...lbl, marginBottom: '3px' }}>אימייל *</label>
+                <input value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="employee@clinic.co.il" dir="ltr" style={inp} />
+              </div>
+              <div>
+                <label style={{ ...lbl, marginBottom: '3px' }}>שם מלא</label>
+                <input value={inviteForm.full_name} onChange={e => setInviteForm(f => ({ ...f, full_name: e.target.value }))}
+                  placeholder="שם הנציג" style={inp} />
+              </div>
+              <div>
+                <label style={{ ...lbl, marginBottom: '3px' }}>תפקיד</label>
+                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))} style={inp}>
+                  <option value="admin">מנהל</option>
+                  <option value="agent">נציג מכירות</option>
+                  <option value="doctor">רופא</option>
+                  <option value="reception">קבלה</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
+              <button onClick={inviteEmployee} disabled={inviting || !inviteForm.email.trim()} style={{
+                padding: '8px 18px', borderRadius: '8px', border: 'none',
+                background: inviting ? 'var(--brand-soft)' : 'var(--brand)', color: inviting ? 'var(--brand)' : 'white',
+                fontFamily: 'inherit', fontWeight: 600, fontSize: '13px',
+                cursor: inviting || !inviteForm.email.trim() ? 'default' : 'pointer',
+              }}>
+                {inviting ? 'שולח...' : 'שלח הזמנה'}
+              </button>
+              {inviteMsg && (
+                <span style={{ fontSize: '12px', color: inviteMsg.startsWith('שגיאה') ? 'var(--danger)' : 'var(--success)', fontWeight: 500 }}>
+                  {inviteMsg}
+                </span>
+              )}
+            </div>
           </div>
           {employees.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '28px', color: 'var(--fg-4)', fontSize: '13px', background: 'var(--bg-sunken)', borderRadius: '10px' }}>

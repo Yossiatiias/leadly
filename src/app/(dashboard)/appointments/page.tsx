@@ -364,6 +364,19 @@ export default function AppointmentsPage() {
     setAppointments(appts || [])
     setLeads(leadsData || [])
     setLoading(false)
+
+    // Retroactive sync: any lead with a booked appointment → status = published
+    const leadIdsWithAppts = [...new Set(
+      (appts || [])
+        .filter(a => a.lead_id && !['cancelled', 'no_show'].includes(a.status))
+        .map(a => a.lead_id as string)
+    )]
+    if (leadIdsWithAppts.length > 0) {
+      await supabase.from('leads')
+        .update({ status: 'published' })
+        .in('id', leadIdsWithAppts)
+        .not('status', 'in', '("published","not_relevant","closed","lost")')
+    }
   }
 
   async function updateStatus(id: string, status: string) {

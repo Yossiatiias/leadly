@@ -133,18 +133,28 @@ export default function ConversationsPage() {
   }
 
   async function loadConversations(bId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('conversations')
-      .select('*, lead:leads(status)')
+      .select('*')
       .eq('business_id', bId)
       .order('updated_at', { ascending: false })
 
-    // Merge lead.status into lead_status field
-    const convs = (data || []).map((c: any) => ({
+    if (error) { console.error('conversations load error:', error); setLoading(false); return }
+
+    const convs = data || []
+
+    // Get lead statuses separately (safe — no FK required)
+    const leadIds = convs.map((c: any) => c.lead_id).filter(Boolean) as string[]
+    let leadStatusMap: Record<string, string> = {}
+    if (leadIds.length > 0) {
+      const { data: leadsData } = await supabase.from('leads').select('id, status').in('id', leadIds)
+      ;(leadsData || []).forEach((l: any) => { leadStatusMap[l.id] = l.status })
+    }
+
+    setConversations(convs.map((c: any) => ({
       ...c,
-      lead_status: c.lead?.status ?? c.lead_status ?? null,
-    }))
-    setConversations(convs)
+      lead_status: c.lead_id ? (leadStatusMap[c.lead_id] ?? c.lead_status ?? null) : (c.lead_status ?? null),
+    })))
     setLoading(false)
   }
 
