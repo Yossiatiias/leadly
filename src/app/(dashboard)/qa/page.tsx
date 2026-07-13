@@ -103,8 +103,7 @@ export default function KnowledgePage() {
     if (catFilter !== 'הכל' && i.category !== catFilter) return false
     if (search) {
       const s = search.toLowerCase()
-      return (i.title || '').toLowerCase().includes(s) ||
-             (i.question || '').toLowerCase().includes(s) ||
+      return (i.question || '').toLowerCase().includes(s) ||
              (i.answer || '').toLowerCase().includes(s)
     }
     return true
