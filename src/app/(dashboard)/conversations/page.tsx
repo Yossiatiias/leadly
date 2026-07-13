@@ -308,9 +308,17 @@ export default function ConversationsPage() {
                       {(conv.contact_name || conv.contact_phone)[0]}
                     </div>
                     <div>
-                      <p style={{ fontWeight: 400, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
-                        {conv.contact_name || conv.contact_phone}
-                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <p style={{ fontWeight: 400, color: 'var(--fg-1)', fontSize: '14px', margin: 0 }}>
+                          {conv.contact_name || conv.contact_phone}
+                        </p>
+                        {conv.lead_status === 'published' && (
+                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', fontWeight: 600, flexShrink: 0 }}>✓ תור</span>
+                        )}
+                        {conv.lead_status === 'in_progress' && (
+                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--info-soft)', color: 'var(--info)', flexShrink: 0 }}>בתהליך</span>
+                        )}
+                      </div>
                       {conv.contact_name && (
                         <p style={{ fontSize: '11px', color: 'var(--fg-3)', margin: '1px 0 0' }}>{conv.contact_phone}</p>
                       )}
@@ -318,8 +326,7 @@ export default function ConversationsPage() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                     <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatTime(conv.updated_at)}</span>
-                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {/* bot / manual chip */}
+                    <div style={{ display: 'flex', gap: '3px' }}>
                       {conv.bot_enabled ? (
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
                           🤖 בוט
@@ -328,13 +335,6 @@ export default function ConversationsPage() {
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid var(--warning-border)' }}>
                           👤 ידני
                         </span>
-                      )}
-                      {/* lead status chip */}
-                      {conv.lead_status === 'published' && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', fontWeight: 600 }}>✓ תור</span>
-                      )}
-                      {conv.lead_status === 'in_progress' && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--info-soft)', color: 'var(--info)' }}>בתהליך</span>
                       )}
                     </div>
                   </div>
