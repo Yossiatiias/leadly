@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, TREATMENT_LABELS, TREATMENT_COLORS,
   TEMP_CONFIG, isNewLead, getDisplayName, getLeadNumber,
   type Lead, type LeadStatus, type LeadSource, type TreatmentType,
 } from '@/types'
-import { Search, MessageSquare, X, Eye, ArrowUpDown, ListFilter } from 'lucide-react'
+import { Search, X, ArrowUpDown, ListFilter } from 'lucide-react'
 import Link from 'next/link'
 
 /* ─── helpers ─── */
@@ -72,6 +73,7 @@ const TD: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'top' }
 /* ─── component ─── */
 export default function LeadsPage() {
   const supabase = createClient()
+  const router   = useRouter()
   const [leads, setLeads]         = useState<Lead[]>([])
   const [loading, setLoading]     = useState(true)
   const [profiles, setProfiles]   = useState<any[]>([])
@@ -82,10 +84,8 @@ export default function LeadsPage() {
   const [analyzing, setAnalyzing] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey]     = useState<SortKey>('created_at')
   const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc')
-  const [aiPopup, setAiPopup]     = useState<{ id: string; x: number; y: number } | null>(null)
   const [colDropdown, setColDropdown] = useState<{ col: string; x: number; y: number } | null>(null)
   const analysisStarted           = useRef(false)
-  const aiHideTimer               = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -149,14 +149,6 @@ export default function LeadsPage() {
     }
   }
 
-  function openAIPopup(e: React.MouseEvent, leadId: string) {
-    if (aiHideTimer.current) clearTimeout(aiHideTimer.current)
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    setAiPopup({ id: leadId, x: rect.left + rect.width / 2, y: rect.top })
-  }
-  function scheduleCloseAI()  { aiHideTimer.current = setTimeout(() => setAiPopup(null), 200) }
-  function cancelCloseAI()    { if (aiHideTimer.current) clearTimeout(aiHideTimer.current) }
-
   function openColFilter(e: React.MouseEvent, col: string) {
     e.stopPropagation()
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -193,7 +185,6 @@ export default function LeadsPage() {
   function toggleAll() { setSelected(allSelected ? new Set() : new Set(filtered.map(l => l.id))) }
   function toggleOne(id: string) { setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
 
-  const popupLead = aiPopup ? leads.find(l => l.id === aiPopup.id) : null
   const dropdownMeta = colDropdown ? COL_FILTERS[colDropdown.col] : null
 
   /* ─── small helper: filterable TH ─── */
@@ -289,13 +280,12 @@ export default function LeadsPage() {
                   נוצר <ArrowUpDown size={10} style={{ color: sortKey === 'created_at' ? 'var(--brand)' : 'var(--fg-4)' }} />
                 </span>
               </th>
-              <th style={{ ...TH, width: '76px', textAlign: 'center' }}>פעולות</th>
             </tr>
           </thead>
 
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={13} style={{ textAlign: 'center', padding: '60px 0' }}>
+              <tr><td colSpan={12} style={{ textAlign: 'center', padding: '60px 0' }}>
                 <Search size={30} style={{ color: 'var(--fg-4)', margin: '0 auto 10px', display: 'block' }} />
                 <p style={{ color: 'var(--fg-3)', fontWeight: 500, fontSize: '14px' }}>לא נמצאו לידים</p>
                 <p style={{ color: 'var(--fg-4)', fontSize: '12px', marginTop: '3px' }}>שנה את החיפוש או הסינון</p>
@@ -307,21 +297,19 @@ export default function LeadsPage() {
               const temp        = lead.temperature ? TEMP_CONFIG[lead.temperature] : null
               const isNew       = isNewLead(lead)
               const tColor      = lead.treatment_type ? TREATMENT_COLORS[lead.treatment_type as TreatmentType] : undefined
-              const hasChatHistory = lead.phone ? convPhones.has(lead.phone) : false
-              const waPhone     = lead.phone ? '972' + lead.phone.replace(/^0/, '').replace(/-/g, '') : null
               const followup    = followupBadge(lead.next_followup)
               const isSelected  = selected.has(lead.id)
               const isAnalyzing = analyzing.has(lead.id)
-              const hasAI       = !!(lead.ai_summary || lead.ai_recommendation)
 
               return (
                 <tr key={lead.id}
-                  style={{ borderBottom: '1px solid var(--border-subtle)', background: isSelected ? 'var(--brand-soft)' : undefined, transition: 'background 0.1s' }}
+                  onClick={() => { markOpened(lead.id); router.push(`/leads/${lead.id}`) }}
+                  style={{ borderBottom: '1px solid var(--border-subtle)', background: isSelected ? 'var(--brand-soft)' : undefined, transition: 'background 0.1s', cursor: 'pointer' }}
                   onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '' }}
                 >
                   {/* ○ */}
-                  <td style={{ ...TD, paddingRight: '14px', paddingTop: '13px' }}>
+                  <td style={{ ...TD, paddingRight: '14px', paddingTop: '13px' }} onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleOne(lead.id)}
                       style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
                   </td>
@@ -336,10 +324,9 @@ export default function LeadsPage() {
 
                   {/* שם פרטי */}
                   <td style={{ ...TD, paddingTop: '12px' }}>
-                    <Link href={`/leads/${lead.id}`} onClick={() => markOpened(lead.id)}
-                      style={{ fontWeight: 500, color: 'var(--fg-1)', textDecoration: 'none', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--fg-1)', fontSize: '13px' }}>
                       {lead.first_name || lead.name || '—'}
-                    </Link>
+                    </span>
                   </td>
 
                   {/* שם משפחה */}
@@ -416,51 +403,12 @@ export default function LeadsPage() {
                     </div>
                   </td>
 
-                  {/* פעולות */}
-                  <td style={{ ...TD, textAlign: 'center', paddingTop: '11px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                      <Link href={`/leads/${lead.id}`} onClick={() => markOpened(lead.id)} title="צפה בליד"
-                        style={{ width: '26px', height: '26px', borderRadius: '7px', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Eye size={11} style={{ color: 'var(--fg-3)' }} />
-                      </Link>
-                      {waPhone && (
-                        <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer" title="WhatsApp"
-                          style={{ width: '26px', height: '26px', borderRadius: '7px', background: hasChatHistory ? '#EBFBF4' : 'var(--bg-sunken)', border: hasChatHistory ? 'none' : '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <MessageSquare size={11} style={{ color: hasChatHistory ? '#0F9E7B' : 'var(--fg-4)' }} />
-                        </a>
-                      )}
-                    </div>
-                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
-
-      {/* ─── AI Popup ─── */}
-      {aiPopup && popupLead && (popupLead.ai_summary || popupLead.ai_recommendation) && (
-        <div onMouseEnter={cancelCloseAI} onMouseLeave={scheduleCloseAI} style={{
-          position: 'fixed', top: aiPopup.y - 10, left: aiPopup.x,
-          transform: 'translate(-50%, -100%)', width: '300px',
-          background: 'var(--bg-canvas)', border: '1px solid var(--border-subtle)',
-          borderRadius: '12px', padding: '14px 16px', zIndex: 9999,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.14)', direction: 'rtl',
-        }}>
-          {popupLead.ai_summary && (
-            <div style={{ marginBottom: popupLead.ai_recommendation ? '10px' : 0 }}>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--fg-3)', marginBottom: '5px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>סיכום</p>
-              <p style={{ fontSize: '13px', color: 'var(--fg-1)', lineHeight: 1.55, margin: 0 }}>{popupLead.ai_summary}</p>
-            </div>
-          )}
-          {popupLead.ai_recommendation && (
-            <div style={{ borderTop: popupLead.ai_summary ? '1px solid var(--border-subtle)' : 'none', paddingTop: popupLead.ai_summary ? '10px' : 0 }}>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--fg-3)', marginBottom: '5px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>המלצה</p>
-              <p style={{ fontSize: '13px', color: '#5B21B6', lineHeight: 1.55, margin: 0 }}>{popupLead.ai_recommendation}</p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ─── Column Filter Dropdown ─── */}
       {colDropdown && dropdownMeta && (
