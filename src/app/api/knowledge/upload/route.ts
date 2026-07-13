@@ -50,15 +50,14 @@ export async function POST(req: NextRequest) {
       content = `[קובץ: ${file.name}] — תוכן זמין להורדה`
     }
 
+    const displayName = title || file.name
     const { data, error } = await supabase
       .from('qa_knowledge')
       .insert({
         business_id:  businessId,
         type:         'file',
-        title:        title || file.name,
-        question:     title || file.name,
+        question:     displayName,
         answer:       content,
-        content,
         file_url:     publicUrl,
         category,
         audience,
