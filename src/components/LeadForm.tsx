@@ -204,13 +204,6 @@ export default function LeadForm({ profiles, lead, businessId }: Props) {
         </select>
       </div>
 
-      {form.source === 'social' && (
-        <div>
-          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>שם קמפיין</label>
-          <input type="text" value={form.campaign_name} onChange={e => set('campaign_name', e.target.value)} className="input-base" />
-        </div>
-      )}
-
       {/* Salesperson + Follow-up */}
       <div className="grid grid-cols-2 gap-4">
         <div>

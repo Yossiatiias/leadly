@@ -7,7 +7,7 @@ import {
   TEMP_CONFIG, isNewLead, getDisplayName, getLeadNumber,
   type Lead, type LeadStatus, type LeadSource, type TreatmentType,
 } from '@/types'
-import { Search, MessageSquare, SlidersHorizontal, X, Eye, Sparkles, ArrowUpDown, ListFilter } from 'lucide-react'
+import { Search, MessageSquare, X, Eye, ArrowUpDown, ListFilter } from 'lucide-react'
 import Link from 'next/link'
 
 /* ─── helpers ─── */
@@ -67,7 +67,7 @@ const TH: React.CSSProperties = {
   fontWeight: 600, color: 'var(--fg-3)', letterSpacing: '0.05em',
   textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none',
 }
-const TD: React.CSSProperties = { padding: '10px 11px', verticalAlign: 'top' }
+const TD: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'top' }
 
 /* ─── component ─── */
 export default function LeadsPage() {
@@ -277,7 +277,6 @@ export default function LeadsPage() {
               <FilterTH col="status"         label="סטטוס"      width="112px" />
               <FilterTH col="treatment_type" label="סיבת פנייה" width="90px"  />
               <FilterTH col="source"         label="מקור"        width="74px"  />
-              <th style={{ ...TH, width: '110px' }}>הערה</th>
               <th style={{ ...TH, width: '130px' }}>סיכום AI</th>
               <th style={{ ...TH, width: '130px' }}>המלצת AI</th>
               <th style={{ ...TH, width: '84px', cursor: 'pointer' }} onClick={() => toggleSort('next_followup')}>
@@ -296,7 +295,7 @@ export default function LeadsPage() {
 
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={14} style={{ textAlign: 'center', padding: '60px 0' }}>
+              <tr><td colSpan={13} style={{ textAlign: 'center', padding: '60px 0' }}>
                 <Search size={30} style={{ color: 'var(--fg-4)', margin: '0 auto 10px', display: 'block' }} />
                 <p style={{ color: 'var(--fg-3)', fontWeight: 500, fontSize: '14px' }}>לא נמצאו לידים</p>
                 <p style={{ color: 'var(--fg-4)', fontSize: '12px', marginTop: '3px' }}>שנה את החיפוש או הסינון</p>
@@ -349,8 +348,8 @@ export default function LeadsPage() {
                   </td>
 
                   {/* טלפון */}
-                  <td style={{ ...TD, paddingTop: '12px' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', display: 'inline-block' }}>
+                  <td style={{ ...TD, paddingTop: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', display: 'inline-block', whiteSpace: 'nowrap' }}>
                       {formatPhone(lead.phone || '')}
                     </span>
                   </td>
@@ -379,14 +378,6 @@ export default function LeadsPage() {
                     <span style={{ fontSize: '11px', color: 'var(--fg-3)', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', padding: '3px 6px', borderRadius: '20px', whiteSpace: 'nowrap' }}>
                       {SOURCE_LABELS[lead.source] || lead.source}
                     </span>
-                  </td>
-
-                  {/* הערה */}
-                  <td style={{ ...TD }}>
-                    {lead.notes
-                      ? <span style={{ fontSize: '11px', color: 'var(--fg-3)', display: 'block', lineHeight: 1.45, overflow: 'hidden', maxHeight: '3.2em' }}>{lead.notes}</span>
-                      : <span style={{ color: 'var(--fg-4)', fontSize: '11px' }}>—</span>
-                    }
                   </td>
 
                   {/* סיכום AI */}
@@ -428,16 +419,6 @@ export default function LeadsPage() {
                   {/* פעולות */}
                   <td style={{ ...TD, textAlign: 'center', paddingTop: '11px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                      <button
-                        disabled={isAnalyzing}
-                        onMouseEnter={e => hasAI ? openAIPopup(e, lead.id) : undefined}
-                        onMouseLeave={scheduleCloseAI}
-                        onClick={() => !hasAI && !isAnalyzing && analyzeAI(lead.id)}
-                        title={hasAI ? 'סיכום AI' : isAnalyzing ? 'מנתח...' : 'נתח עם AI'}
-                        style={{ width: '26px', height: '26px', borderRadius: '7px', border: 'none', cursor: isAnalyzing ? 'default' : 'pointer', background: hasAI ? '#EDE9FE' : 'var(--bg-sunken)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: isAnalyzing ? 0.5 : 1, transition: 'all 0.15s' }}
-                      >
-                        <Sparkles size={11} style={{ color: hasAI ? '#7C3AED' : 'var(--fg-4)' }} />
-                      </button>
                       <Link href={`/leads/${lead.id}`} onClick={() => markOpened(lead.id)} title="צפה בליד"
                         style={{ width: '26px', height: '26px', borderRadius: '7px', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Eye size={11} style={{ color: 'var(--fg-3)' }} />

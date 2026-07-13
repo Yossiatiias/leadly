@@ -8,9 +8,9 @@ import LeadForm from '@/components/LeadForm'
 import DeleteLeadButton from '@/components/DeleteLeadButton'
 import InteractionModal from '@/components/InteractionModal'
 import {
-  ArrowRight, Phone, MessageCircle, Clock, Sparkles, Loader2,
+  ArrowRight, Phone, MessageCircle, Clock,
   CheckCircle2, XCircle, RefreshCw, PhoneOff, PartyPopper,
-  FileText, ChevronDown, ChevronUp, MessageSquare,
+  FileText, MessageSquare,
 } from 'lucide-react'
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
@@ -56,9 +56,6 @@ export default function LeadDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showForm, setShowForm] = useState(true)
-  const [aiScript, setAiScript] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [scriptOpen, setScriptOpen] = useState(false)
 
   const load = useCallback(async () => {
     const { data: profile } = await supabase.from('profiles').select('business_id').eq('id', (await supabase.auth.getUser()).data.user?.id || '').single()
@@ -84,36 +81,6 @@ export default function LeadDetailPage() {
   }, [id])
 
   useEffect(() => { load() }, [load])
-
-  async function generateScript() {
-    if (!lead) return
-    setAiLoading(true)
-    setScriptOpen(true)
-    try {
-      const lastActivity = activities[0]
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'script',
-          data: {
-            name: getDisplayName(lead),
-            source: lead.source,
-            status: lead.status,
-            notes: lead.notes,
-            history: lastActivity?.details || lastActivity?.action || '',
-            outcome: lastActivity?.outcome || '',
-          },
-        }),
-      })
-      const json = await res.json()
-      setAiScript(json.text || 'לא התקבלה תשובה מה-AI')
-    } catch {
-      setAiScript('שגיאה בחיבור ל-AI')
-    } finally {
-      setAiLoading(false)
-    }
-  }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px' }}>
@@ -173,12 +140,6 @@ export default function LeadDetailPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
-            {lead.phone && (
-              <a href={`tel:${lead.phone}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: 'var(--radius-md)', background: 'var(--success-soft)', color: 'var(--success)', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>
-                <Phone size={13} />
-                התקשר
-              </a>
-            )}
             {waPhone && (
               <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: 'var(--radius-md)', background: '#EBFBF4', color: '#0F9E7B', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>
                 <MessageCircle size={13} />
@@ -211,43 +172,26 @@ export default function LeadDetailPage() {
         )}
       </div>
 
-      {/* AI Script */}
-      <div className="card" style={{ marginBottom: '16px', overflow: 'hidden' }}>
-        <button
-          onClick={scriptOpen ? () => setScriptOpen(false) : generateScript}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'var(--info-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles size={14} style={{ color: 'var(--info)' }} />
+      {/* AI Summary + Recommendation */}
+      {(lead.ai_summary || lead.ai_recommendation) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px 20px', display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+          {lead.ai_summary && (
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '6px' }}>סיכום AI</p>
+              <p style={{ fontSize: '13px', color: 'var(--fg-2)', lineHeight: 1.65 }}>{lead.ai_summary}</p>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '13px' }}>סקריפט שיחה מותאם</p>
-              <p style={{ fontSize: '11px', color: 'var(--fg-4)' }}>AI יכתוב לך איך לפתוח את השיחה</p>
+          )}
+          {lead.ai_summary && lead.ai_recommendation && (
+            <div style={{ width: '1px', background: 'var(--border-subtle)', alignSelf: 'stretch' }} />
+          )}
+          {lead.ai_recommendation && (
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '6px' }}>המלצת AI</p>
+              <p style={{ fontSize: '13px', color: '#5B21B6', lineHeight: 1.65, fontWeight: 500 }}>{lead.ai_recommendation}</p>
             </div>
-          </div>
-          {aiLoading ? <Loader2 size={15} style={{ color: 'var(--info)', animation: 'spin 1s linear infinite' }} /> :
-           scriptOpen ? <ChevronUp size={15} style={{ color: 'var(--fg-4)' }} /> : <ChevronDown size={15} style={{ color: 'var(--fg-4)' }} />}
-        </button>
-        {scriptOpen && (
-          <div style={{ padding: '0 20px 20px' }} className="animate-slide-up">
-            {aiLoading ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--fg-4)', padding: '12px 0' }}>
-                <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
-                מכין סקריפט מותאם...
-              </div>
-            ) : (
-              <div style={{ background: 'var(--info-soft)', border: '1px solid var(--info-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px' }}>
-                <pre style={{ fontSize: '13px', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.7, color: 'var(--fg-2)' }}>{aiScript}</pre>
-                <button onClick={generateScript} style={{ marginTop: '10px', fontSize: '11px', color: 'var(--info)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontFamily: 'inherit' }}>
-                  <RefreshCw size={10} />
-                  רענן סקריפט
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
         {/* Edit form */}
