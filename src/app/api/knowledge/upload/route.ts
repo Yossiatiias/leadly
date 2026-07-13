@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import * as XLSX from 'xlsx'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,15 +40,23 @@ export async function POST(req: NextRequest) {
       .from('knowledge-files')
       .getPublicUrl(fileName)
 
-    // חילוץ טקסט בסיסי לפי סוג קובץ
+    // חילוץ טקסט לפי סוג קובץ
     let content = ''
     if (ext === 'txt') {
-      content = Buffer.from(bytes).toString('utf-8')
+      content = buffer.toString('utf-8')
     } else if (ext === 'csv') {
-      content = Buffer.from(bytes).toString('utf-8')
+      content = buffer.toString('utf-8')
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const workbook = XLSX.read(buffer, { type: 'buffer' })
+      const parts: string[] = []
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName]
+        const text = XLSX.utils.sheet_to_csv(sheet, { blankrows: false })
+        if (text.trim()) parts.push(`[גיליון: ${sheetName}]\n${text}`)
+      }
+      content = parts.join('\n\n').slice(0, 8000)
     } else {
-      // PDF/Word — שמור שם הקובץ כ-content (חילוץ מלא בשלב הבא עם pdf-parse)
-      content = `[קובץ: ${file.name}] — תוכן זמין להורדה`
+      content = `[קובץ: ${file.name}] — נא לצרף את תוכן הקובץ ידנית`
     }
 
     const displayName = title || file.name

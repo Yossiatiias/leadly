@@ -305,6 +305,17 @@ export default function SettingsPage() {
               </select>
             </div>
           </div>
+          <div style={{ marginTop: '18px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button onClick={save} disabled={saving} style={{
+              padding: '9px 24px', borderRadius: '9px', border: 'none',
+              background: saving ? 'var(--brand-soft)' : 'var(--brand)',
+              color: saving ? 'var(--brand)' : 'white',
+              fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: saving ? 'default' : 'pointer',
+            }}>
+              {saving ? 'שומר...' : 'שמור הגדרות בוט'}
+            </button>
+            {saved && <span style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>✓ נשמר</span>}
+          </div>
         </div>
       )}
 

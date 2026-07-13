@@ -27,9 +27,9 @@ const CATEGORIES = ['הכל', 'מחירון', 'שעות ומיקום', 'שמות
 const ITEM_CATEGORIES = CATEGORIES.slice(1)
 
 const AUD = {
-  both:     { label: 'שניהם',         emoji: '🔵', bg: '#EFF6FF', color: '#1E3A8A', border: '#BFDBFE' },
+  both:     { label: 'שניהם',         emoji: '⚡', bg: '#EFF6FF', color: '#1E3A8A', border: '#BFDBFE' },
   customer: { label: 'בוט לקוחות',    emoji: '🤖', bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0' },
-  staff:    { label: 'צוות בלבד',     emoji: '👥', bg: '#F5F3FF', color: '#4C1D95', border: '#DDD6FE' },
+  staff:    { label: 'צוות בלבד',     emoji: '🔐', bg: '#F5F3FF', color: '#4C1D95', border: '#DDD6FE' },
 }
 
 const TYPE_META = {
@@ -276,7 +276,7 @@ export default function KnowledgePage() {
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           {(['all', 'customer', 'staff', 'both'] as const).map(k => {
-            const labels: Record<string, string> = { all: 'הכל', customer: '🤖 לקוחות', staff: '👥 צוות', both: '🔵 שניהם' }
+            const labels: Record<string, string> = { all: 'הכל', customer: '🤖 לקוחות', staff: '🔐 צוות', both: '⚡ שניהם' }
             const active = audFilter === k
             return (
               <button key={k} onClick={() => setAudFilter(k)} style={{
@@ -482,20 +482,40 @@ export default function KnowledgePage() {
                   </div>
 
                   {/* Category */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={lbl}>קטגוריה</label>
-                    <select
-                      value={addType === 'file' ? fileCat : addType === 'url' ? urlCat : form.category}
-                      onChange={e => {
-                        if (addType === 'qa') setForm(f => ({ ...f, category: e.target.value }))
-                        else if (addType === 'file') setFileCat(e.target.value)
-                        else setUrlCat(e.target.value)
-                      }}
-                      className="input-base" style={{ width: '100%' }}
-                    >
-                      {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
+                  {(() => {
+                    const curCat = editItem ? form.category : addType === 'file' ? fileCat : addType === 'url' ? urlCat : form.category
+                    const setCat = (v: string) => {
+                      if (editItem || addType === 'qa') setForm(f => ({ ...f, category: v }))
+                      else if (addType === 'file') setFileCat(v)
+                      else setUrlCat(v)
+                    }
+                    const isCustom = !ITEM_CATEGORIES.includes(curCat)
+                    return (
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={lbl}>קטגוריה</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <select
+                            value={isCustom ? '__custom__' : curCat}
+                            onChange={e => e.target.value === '__custom__' ? setCat('') : setCat(e.target.value)}
+                            className="input-base" style={{ flex: 1 }}
+                          >
+                            {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            <option value="__custom__">+ קטגוריה חדשה...</option>
+                          </select>
+                          {isCustom && (
+                            <input
+                              autoFocus
+                              value={curCat}
+                              onChange={e => setCat(e.target.value)}
+                              placeholder="שם הקטגוריה"
+                              className="input-base"
+                              style={{ flex: 1 }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Q&A fields */}
                   {addType === 'qa' && (
