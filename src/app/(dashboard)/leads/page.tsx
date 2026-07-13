@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, TREATMENT_LABELS, TREATMENT_COLORS,
@@ -76,6 +76,7 @@ export default function LeadsPage() {
   const [analyzing, setAnalyzing] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey]   = useState<SortKey>('created_at')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
+  const analysisStarted         = useRef(false)
 
   useEffect(() => {
     async function load() {
@@ -91,6 +92,22 @@ export default function LeadsPage() {
     }
     load()
   }, [])
+
+  // Auto-analyze leads without AI data, one by one in background
+  useEffect(() => {
+    if (loading || analysisStarted.current) return
+    const unanalyzed = leads.filter(l => !l.ai_summary)
+    if (unanalyzed.length === 0) return
+    analysisStarted.current = true
+
+    async function runSequential() {
+      for (const lead of unanalyzed) {
+        await analyzeAI(lead.id)
+        await new Promise(r => setTimeout(r, 400))
+      }
+    }
+    runSequential()
+  }, [loading])
 
   const markOpened = useCallback(async (id: string) => {
     await supabase.from('leads').update({ first_opened_at: new Date().toISOString() }).eq('id', id).is('first_opened_at', null)
