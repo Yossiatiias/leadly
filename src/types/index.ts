@@ -44,6 +44,8 @@ export interface Lead {
   discount_percent: number | null
   next_followup: string | null
   last_contacted: string | null
+  ai_summary: string | null
+  ai_recommendation: string | null
   profile?: Profile
 }
 
