@@ -87,7 +87,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
   return (
     <aside style={{
       position: 'fixed', right: 0, top: 0, bottom: 0,
-      width: '240px',
+      width: '220px',
       background: 'var(--sidebar-bg)',
       borderLeft: '1px solid var(--sidebar-border)',
       display: 'flex', flexDirection: 'column',

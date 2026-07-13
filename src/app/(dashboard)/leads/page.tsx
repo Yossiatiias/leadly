@@ -68,7 +68,7 @@ const TH: React.CSSProperties = {
   fontWeight: 600, color: 'var(--fg-3)', letterSpacing: '0.05em',
   textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none',
 }
-const TD: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'top' }
+const TD: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'middle', whiteSpace: 'nowrap' }
 
 /* ─── component ─── */
 export default function LeadsPage() {
@@ -368,7 +368,7 @@ export default function LeadsPage() {
                   </td>
 
                   {/* סיכום AI */}
-                  <td style={{ ...TD }}>
+                  <td style={{ ...TD, whiteSpace: 'normal', verticalAlign: 'top' }}>
                     {isAnalyzing
                       ? <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מנתח...</span>
                       : lead.ai_summary
@@ -378,7 +378,7 @@ export default function LeadsPage() {
                   </td>
 
                   {/* המלצת AI */}
-                  <td style={{ ...TD }}>
+                  <td style={{ ...TD, whiteSpace: 'normal', verticalAlign: 'top' }}>
                     {isAnalyzing
                       ? <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מנתח...</span>
                       : lead.ai_recommendation
