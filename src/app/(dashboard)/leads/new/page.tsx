@@ -6,12 +6,14 @@ export default async function NewLeadPage() {
   const { data: profiles } = await supabase.from('profiles').select('*')
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold" style={{ color: 'var(--fg-1)' }}>ליד חדש</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--fg-3)' }}>הוסף ליד חדש למערכת</p>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px' }}>
+      <div style={{ width: '100%', maxWidth: '640px' }}>
+        <div style={{ marginBottom: '24px', textAlign: 'right' }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--fg-1)', marginBottom: '4px' }}>ליד חדש</h1>
+          <p style={{ fontSize: '13px', color: 'var(--fg-3)' }}>הוסף ליד חדש למערכת</p>
+        </div>
+        <LeadForm profiles={profiles || []} />
       </div>
-      <LeadForm profiles={profiles || []} />
     </div>
   )
 }
