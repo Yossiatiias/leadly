@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   STATUS_CONFIG, SOURCE_LABELS, STATUS_LABELS, TREATMENT_LABELS, TREATMENT_COLORS,
-  isNewLead, getDisplayName, getLeadNumber,
+  TEMP_CONFIG, isNewLead, getDisplayName, getLeadNumber,
   type Lead, type TreatmentType,
 } from '@/types'
 import { Search, Phone, MessageSquare, SlidersHorizontal, X, ChevronLeft, UserPlus } from 'lucide-react'
@@ -20,6 +20,33 @@ function formatPhone(phone: string): string {
   if (clean.startsWith('0') && clean.length === 10)
     return clean.slice(0, 3) + '-' + clean.slice(3, 6) + '-' + clean.slice(6)
   return phone
+}
+
+function formatDateShort(dateStr: string): string {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
+function formatRelative(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `לפני ${mins} דק'`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `לפני ${hours} שע'`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `לפני ${days} ימים`
+  return formatDateShort(dateStr)
+}
+
+function followupStatus(dateStr: string | null): { label: string; color: string; bg: string } | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffDays = Math.floor((d.getTime() - now.setHours(0,0,0,0)) / 86400000)
+  if (diffDays < 0)  return { label: formatDateShort(dateStr), color: '#DC2626', bg: '#FEF2F2' }
+  if (diffDays === 0) return { label: 'היום',                 color: '#D97706', bg: '#FFFBEB' }
+  if (diffDays === 1) return { label: 'מחר',                  color: '#7C3AED', bg: '#F5F3FF' }
+  return { label: formatDateShort(dateStr), color: '#2563EB', bg: '#EFF6FF' }
 }
 
 const ALL_STATUSES = [
@@ -69,6 +96,7 @@ export default function LeadsPage() {
         || displayName.toLowerCase().includes(q)
         || (l.phone || '').includes(q)
         || (l.email || '').toLowerCase().includes(q)
+        || (l.notes || '').toLowerCase().includes(q)
       const matchStatus = !filters.status || l.status === filters.status
       const matchSource = !filters.source || l.source === filters.source
       const matchAssigned = !filters.assigned || l.assigned_to === filters.assigned
@@ -90,7 +118,7 @@ export default function LeadsPage() {
   )
 
   return (
-    <div style={{ padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ padding: '28px', maxWidth: '1400px', margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -119,7 +147,7 @@ export default function LeadsPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="חיפוש לפי שם, טלפון, אימייל..."
+            placeholder="חיפוש לפי שם, טלפון, הערה..."
             className="input-base"
             style={{ paddingRight: '34px' }}
           />
@@ -177,21 +205,23 @@ export default function LeadsPage() {
       )}
 
       {/* Table */}
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div className="card" style={{ overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '960px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
               {[
-                { label: '#',           w: '56px'  },
-                { label: 'איש קשר',     w: 'auto'  },
-                { label: 'טלפון',        w: '120px' },
-                { label: 'טיפול',        w: '110px' },
-                { label: 'מקור',         w: '100px' },
-                { label: 'סטטוס',        w: '110px' },
-                { label: 'נציג',         w: '90px'  },
-                { label: '',             w: '80px'  },
+                { label: '#',            w: '52px'  },
+                { label: 'איש קשר',      w: '160px' },
+                { label: 'טלפון',         w: '110px' },
+                { label: 'סטטוס',         w: '120px' },
+                { label: 'טיפול',         w: '100px' },
+                { label: 'מקור',          w: '90px'  },
+                { label: 'הערה',          w: 'auto'  },
+                { label: 'מעקב',          w: '90px'  },
+                { label: 'נוצר',          w: '90px'  },
+                { label: '',              w: '80px'  },
               ].map((h, i) => (
-                <th key={i} style={{ textAlign: 'right', fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)', padding: '10px 14px', width: h.w, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                <th key={i} style={{ textAlign: 'right', fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)', padding: '10px 12px', width: h.w, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                   {h.label}
                 </th>
               ))}
@@ -199,7 +229,7 @@ export default function LeadsPage() {
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '60px 0' }}>
+              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '60px 0' }}>
                 <Search size={32} style={{ color: 'var(--fg-4)', margin: '0 auto 12px', display: 'block' }} />
                 <p style={{ color: 'var(--fg-3)', fontWeight: 500, fontSize: '14px' }}>לא נמצאו לידים</p>
                 <p style={{ color: 'var(--fg-4)', fontSize: '12px', marginTop: '4px' }}>שנה את החיפוש או הסינון</p>
@@ -207,33 +237,34 @@ export default function LeadsPage() {
             )}
             {filtered.map(lead => {
               const status = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
+              const temp = lead.temperature ? TEMP_CONFIG[lead.temperature] : null
               const isNew = isNewLead(lead)
               const displayName = getDisplayName(lead)
               const numStr = getLeadNumber(lead)
               const treatmentColor = lead.treatment_type ? TREATMENT_COLORS[lead.treatment_type as TreatmentType] : undefined
               const hasConversation = lead.phone ? conversationPhones.has(lead.phone) : false
               const waPhone = lead.phone ? '972' + lead.phone.replace(/^0/, '').replace(/-/g, '') : null
+              const followup = followupStatus(lead.next_followup)
 
               return (
                 <tr key={lead.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-                  className="group"
                 >
                   {/* # */}
-                  <td style={{ padding: '12px 14px', fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '11px 12px', fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                     {numStr}
                   </td>
 
                   {/* Name */}
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <td style={{ padding: '11px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                       <div style={{ position: 'relative', flexShrink: 0 }}>
                         <div style={{
-                          width: '34px', height: '34px', borderRadius: '10px',
+                          width: '32px', height: '32px', borderRadius: '9px',
                           background: 'var(--brand-soft)', color: 'var(--brand)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontWeight: 600, fontSize: '13px',
+                          fontWeight: 600, fontSize: '12px',
                         }}>
                           {displayName.charAt(0)}
                         </div>
@@ -242,39 +273,41 @@ export default function LeadsPage() {
                             position: 'absolute', top: '-5px', right: '-5px',
                             background: 'var(--brand)', color: 'white',
                             fontSize: '8px', fontWeight: 700, lineHeight: 1,
-                            padding: '2px 5px', borderRadius: '4px',
+                            padding: '2px 4px', borderRadius: '4px',
                           }}>חדש</span>
                         )}
                       </div>
-                      <div style={{ minWidth: 0 }}>
-                        <Link href={`/leads/${lead.id}`}
-                          onClick={() => markOpened(lead.id)}
-                          style={{ fontWeight: 500, color: 'var(--fg-1)', textDecoration: 'none', fontSize: '13px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                        >
-                          {displayName}
-                        </Link>
-                        {lead.notes && (
-                          <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
-                            {lead.notes.slice(0, 70)}
-                          </p>
-                        )}
-                        {!lead.notes && lead.email && (
-                          <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '1px' }}>{lead.email}</p>
-                        )}
-                      </div>
+                      <Link href={`/leads/${lead.id}`}
+                        onClick={() => markOpened(lead.id)}
+                        style={{ fontWeight: 500, color: 'var(--fg-1)', textDecoration: 'none', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', display: 'block' }}
+                      >
+                        {displayName}
+                      </Link>
                     </div>
                   </td>
 
                   {/* Phone */}
-                  <td style={{ padding: '12px 14px', fontSize: '12px', color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '11px 12px', fontSize: '12px', color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {formatPhone(lead.phone || '')}
                   </td>
 
+                  {/* Status + temperature */}
+                  <td style={{ padding: '11px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span className={`${status.bg} ${status.text}`} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        {status.label}
+                      </span>
+                      {temp && (
+                        <span title={temp.label} style={{ width: '7px', height: '7px', borderRadius: '50%', background: temp.dot, flexShrink: 0, display: 'inline-block' }} />
+                      )}
+                    </div>
+                  </td>
+
                   {/* Treatment */}
-                  <td style={{ padding: '12px 14px' }}>
+                  <td style={{ padding: '11px 12px' }}>
                     {lead.treatment_type ? (
                       <span style={{
-                        fontSize: '11px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px',
+                        fontSize: '11px', fontWeight: 500, padding: '3px 7px', borderRadius: '6px',
                         background: treatmentColor ? `${treatmentColor}18` : 'var(--bg-hover)',
                         color: treatmentColor || 'var(--fg-3)',
                         border: `1px solid ${treatmentColor ? `${treatmentColor}30` : 'var(--border-subtle)'}`,
@@ -286,59 +319,73 @@ export default function LeadsPage() {
                   </td>
 
                   {/* Source */}
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--fg-3)', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', padding: '3px 8px', borderRadius: '20px', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '11px 12px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--fg-3)', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', padding: '3px 7px', borderRadius: '20px', whiteSpace: 'nowrap' }}>
                       {SOURCE_LABELS[lead.source] || lead.source}
                     </span>
                   </td>
 
-                  {/* Status */}
-                  <td style={{ padding: '12px 14px' }}>
-                    <span className={`${status.bg} ${status.text}`} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                      {status.label}
-                    </span>
+                  {/* Notes (הערה) */}
+                  <td style={{ padding: '11px 12px', maxWidth: '220px' }}>
+                    {lead.notes ? (
+                      <span title={lead.notes} style={{ fontSize: '12px', color: 'var(--fg-3)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {lead.notes}
+                      </span>
+                    ) : <span style={{ color: 'var(--fg-4)', fontSize: '12px' }}>—</span>}
                   </td>
 
-                  {/* Assignee */}
-                  <td style={{ padding: '12px 14px', fontSize: '12px', color: 'var(--fg-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90px' }}>
-                    {(lead as any).profile?.full_name || '—'}
+                  {/* Follow-up (מעקב) */}
+                  <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
+                    {followup ? (
+                      <span style={{
+                        fontSize: '11px', fontWeight: 500, padding: '3px 8px', borderRadius: '20px',
+                        color: followup.color, background: followup.bg,
+                      }}>
+                        {followup.label}
+                      </span>
+                    ) : <span style={{ color: 'var(--fg-4)', fontSize: '12px' }}>—</span>}
+                  </td>
+
+                  {/* Created (נוצר) */}
+                  <td style={{ padding: '11px 12px', fontSize: '11px', color: 'var(--fg-4)', whiteSpace: 'nowrap' }} title={new Date(lead.created_at).toLocaleString('he-IL')}>
+                    {formatRelative(lead.created_at)}
                   </td>
 
                   {/* Actions */}
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                  <td style={{ padding: '11px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'flex-end' }}>
                       {lead.phone && (
                         <a href={`tel:${lead.phone}`} title="התקשר" style={{
-                          width: '28px', height: '28px', borderRadius: '8px',
+                          width: '27px', height: '27px', borderRadius: '7px',
                           background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          <Phone size={12} style={{ color: 'var(--success)' }} />
+                          <Phone size={11} style={{ color: 'var(--success)' }} />
                         </a>
                       )}
                       {waPhone && (
                         <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer" title="וואטסאפ" style={{
-                          width: '28px', height: '28px', borderRadius: '8px',
+                          width: '27px', height: '27px', borderRadius: '7px',
                           background: '#EBFBF4', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          <MessageSquare size={12} style={{ color: '#0F9E7B' }} />
+                          <MessageSquare size={11} style={{ color: '#0F9E7B' }} />
                         </a>
                       )}
                       <Link href={hasConversation ? `/conversations?phone=${lead.phone}` : `/conversations?phone=${lead.phone}&new=1`}
                         title={hasConversation ? 'עבור לשיחה' : 'התחל שיחה'}
                         style={{
-                          width: '28px', height: '28px', borderRadius: '8px',
+                          width: '27px', height: '27px', borderRadius: '7px',
                           background: hasConversation ? 'var(--brand-soft)' : 'var(--bg-sunken)',
                           border: hasConversation ? 'none' : '1px solid var(--border-subtle)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                        <MessageSquare size={12} style={{ color: hasConversation ? 'var(--brand)' : 'var(--fg-4)' }} />
+                        <MessageSquare size={11} style={{ color: hasConversation ? 'var(--brand)' : 'var(--fg-4)' }} />
                       </Link>
                       <Link href={`/leads/${lead.id}`} onClick={() => markOpened(lead.id)} style={{
-                        width: '28px', height: '28px', borderRadius: '8px',
+                        width: '27px', height: '27px', borderRadius: '7px',
                         background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <ChevronLeft size={13} style={{ color: 'var(--fg-3)' }} />
+                        <ChevronLeft size={12} style={{ color: 'var(--fg-3)' }} />
                       </Link>
                     </div>
                   </td>
