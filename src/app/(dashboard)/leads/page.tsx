@@ -254,7 +254,7 @@ export default function LeadsPage() {
 
       {/* ─── Table ─── */}
       <div className="card" style={{ overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1100px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
               <th style={{ ...TH, width: '38px', paddingRight: '14px' }}>
@@ -268,8 +268,8 @@ export default function LeadsPage() {
               <FilterTH col="status"         label="סטטוס"      width="112px" />
               <FilterTH col="treatment_type" label="סיבת פנייה" width="90px"  />
               <FilterTH col="source"         label="מקור"        width="74px"  />
-              <th style={{ ...TH, width: '130px' }}>סיכום AI</th>
-              <th style={{ ...TH, width: '130px' }}>המלצת AI</th>
+              <th style={{ ...TH }}>סיכום AI</th>
+              <th style={{ ...TH }}>המלצת AI</th>
               <th style={{ ...TH, width: '84px', cursor: 'pointer' }} onClick={() => toggleSort('next_followup')}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                   מעקב <ArrowUpDown size={10} style={{ color: sortKey === 'next_followup' ? 'var(--brand)' : 'var(--fg-4)' }} />

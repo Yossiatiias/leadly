@@ -95,45 +95,67 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
       transition: 'background 0.2s, border-color 0.2s',
     }}>
 
-      {/* Logo + theme toggle */}
-      <div style={{ padding: '20px 16px 14px', borderBottom: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={dark ? '/logo-dark.png' : '/logo-light.png'}
-            alt="Leadly"
-            style={{ width: '108px', height: 'auto', objectFit: 'contain', transition: 'all 0.2s', mixBlendMode: dark ? 'screen' : 'multiply' }}
-          />
-          <button onClick={toggleTheme} className="theme-toggle" title={dark ? 'מצב בהיר' : 'מצב כהה'}>
-            {dark ? <Sun size={15} /> : <Moon size={15} />}
+      {/* ── Header: Leadly logo + AI Management + theme toggle ── */}
+      <div style={{ padding: '14px 14px 12px', borderBottom: '1px solid var(--sidebar-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={dark ? '/logo-dark.png' : '/logo-light.png'}
+              alt="Leadly"
+              style={{ width: '72px', height: 'auto', objectFit: 'contain', flexShrink: 0, mixBlendMode: dark ? 'screen' : 'multiply' }}
+            />
+            <span style={{ fontSize: '9px', color: 'var(--sidebar-subtitle)', letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.3, whiteSpace: 'nowrap' }}>
+              AI<br />Management
+            </span>
+          </div>
+          <button onClick={toggleTheme} className="theme-toggle" title={dark ? 'מצב בהיר' : 'מצב כהה'} style={{ flexShrink: 0 }}>
+            {dark ? <Sun size={14} /> : <Moon size={14} />}
           </button>
         </div>
-        <p style={{ fontSize: '11px', color: 'var(--sidebar-subtitle)', fontWeight: 500, letterSpacing: '0.04em' }}>
-          AI Lead Management
-        </p>
+
+        {/* Org logo — below Leadly branding */}
+        {(logoUrl || businessName) && (
+          <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'var(--sidebar-user-bg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={businessName || 'לוגו עסק'}
+                style={{ height: '28px', maxWidth: '80px', objectFit: 'contain', borderRadius: '4px', flexShrink: 0 }}
+                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+              />
+            ) : (
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--brand)' }}>{businessName.charAt(0)}</span>
+              </div>
+            )}
+            {businessName && (
+              <p style={{ fontSize: '11px', fontWeight: 500, color: 'var(--sidebar-user-fg)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {businessName}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Nav */}
-      <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      {/* ── Nav ── */}
+      <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== '/' && pathname.startsWith(href))
           const showBadge = href === '/conversations' && unread > 0 && !active
 
           return (
-            <Link
-              key={href}
-              href={href}
-              className={`sidebar-link${active ? ' active' : ''}`}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-                <Icon size={16} style={{ flexShrink: 0 }} />
+            <Link key={href} href={href} className={`sidebar-link${active ? ' active' : ''}`}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon size={14} style={{ flexShrink: 0 }} />
                 {label}
               </span>
               {showBadge && (
                 <span style={{
                   background: 'var(--sidebar-badge-bg)', color: 'white', borderRadius: '99px',
-                  minWidth: '18px', height: '18px', padding: '0 5px',
-                  fontSize: '10px', fontWeight: 700,
+                  minWidth: '16px', height: '16px', padding: '0 4px',
+                  fontSize: '9px', fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   {unread > 9 ? '9+' : unread}
@@ -144,52 +166,32 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         })}
       </nav>
 
-      {/* Client branding */}
-      {(logoUrl || businessName) && (
-        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-          {logoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt={businessName || 'לוגו עסק'}
-              style={{ maxWidth: '120px', maxHeight: '48px', objectFit: 'contain', borderRadius: '6px' }}
-              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-            />
-          )}
-          {businessName && (
-            <div style={{ padding: '5px 10px', borderRadius: '8px', background: 'var(--brand-soft)', width: '100%', textAlign: 'center' }}>
-              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--brand)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {businessName}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* User + Logout */}
-      <div style={{ padding: '12px 16px', borderTop: businessName ? 'none' : '1px solid var(--sidebar-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px', padding: '9px 10px', borderRadius: '10px', background: 'var(--sidebar-user-bg)' }}>
+      {/* ── User ── */}
+      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', padding: '8px 10px', borderRadius: '10px', background: 'var(--sidebar-user-bg)' }}>
           <div style={{
-            width: '32px', height: '32px', borderRadius: '50%',
+            width: '28px', height: '28px', borderRadius: '50%',
             background: 'var(--brand)', color: 'white',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: '11px', flexShrink: 0,
+            fontWeight: 700, fontSize: '10px', flexShrink: 0,
           }}>
             {initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontWeight: 600, color: 'var(--sidebar-user-fg)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontWeight: 500, color: 'var(--sidebar-user-fg)', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.full_name || 'משתמש'}
             </p>
-            <p style={{ fontSize: '10px', color: 'var(--sidebar-user-role)', marginTop: '1px' }}>
-              {profile?.role === 'admin' ? 'מנהל' : 'נציג מכירות'}
-            </p>
+            {businessName && (
+              <p style={{ fontSize: '10px', color: 'var(--sidebar-subtitle)', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {businessName}
+              </p>
+            )}
           </div>
         </div>
         <button onClick={handleLogout} style={{
-          width: '100%', padding: '7px 10px', borderRadius: '8px', fontSize: '12px',
+          width: '100%', padding: '6px 10px', borderRadius: '8px', fontSize: '11px',
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'var(--sidebar-logout-fg)', fontFamily: 'inherit', fontWeight: 500,
+          color: 'var(--sidebar-logout-fg)', fontFamily: 'inherit', fontWeight: 400,
           textAlign: 'right', transition: 'all 0.12s',
         }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#EF4444'; (e.currentTarget as HTMLElement).style.background = dark ? '#2D1B1B' : '#FEF2F2' }}

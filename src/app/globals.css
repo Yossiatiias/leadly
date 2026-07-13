@@ -138,12 +138,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
   text-decoration: none;
   color: var(--sidebar-nav-fg);
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 400;
+  font-size: 12px;
   transition: all 0.12s;
 }
 .sidebar-link:hover {
@@ -153,7 +153,7 @@ body {
 .sidebar-link.active {
   background: var(--sidebar-nav-active-bg);
   color: var(--sidebar-nav-active-fg);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
