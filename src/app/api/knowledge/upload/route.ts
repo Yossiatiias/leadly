@@ -20,7 +20,10 @@ export async function POST(req: NextRequest) {
     }
 
     const ext = file.name.split('.').pop()?.toLowerCase()
-    const fileName = `${businessId}/${Date.now()}_${file.name}`
+    const safeName = file.name
+      .replace(/[^\w.\-]/g, '_')   // replace any non-ASCII / special chars with _
+      .replace(/_+/g, '_')          // collapse consecutive underscores
+    const fileName = `${businessId}/${Date.now()}_${safeName}`
 
     // העלה לסופאבייס Storage
     const bytes = await file.arrayBuffer()
