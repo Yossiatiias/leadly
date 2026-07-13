@@ -70,8 +70,9 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     return NextResponse.json({ ok: true, item: data })
-  } catch (err) {
+  } catch (err: any) {
     console.error('knowledge upload error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    const msg = err?.message || err?.error_description || JSON.stringify(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
