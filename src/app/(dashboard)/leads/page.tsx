@@ -7,7 +7,7 @@ import {
   TEMP_CONFIG, isNewLead, getDisplayName, getLeadNumber,
   type Lead, type TreatmentType,
 } from '@/types'
-import { Search, Phone, MessageSquare, SlidersHorizontal, X, Eye, Sparkles, ArrowUpDown } from 'lucide-react'
+import { Search, MessageSquare, SlidersHorizontal, X, Eye, Sparkles, ArrowUpDown } from 'lucide-react'
 import Link from 'next/link'
 
 /* ─── helpers ─── */
@@ -40,43 +40,44 @@ function fmtRelative(d: string) {
 
 function followupBadge(d: string | null) {
   if (!d) return null
-  const diff = Math.floor((new Date(d).getTime() - new Date().setHours(0,0,0,0)) / 86400000)
-  if (diff < 0)  return { label: fmtDate(d),  color: '#DC2626', bg: '#FEF2F2' }
-  if (diff === 0) return { label: 'היום',       color: '#D97706', bg: '#FFFBEB' }
-  if (diff === 1) return { label: 'מחר',         color: '#7C3AED', bg: '#F5F3FF' }
-  return           { label: fmtDate(d),          color: '#2563EB', bg: '#EFF6FF' }
+  const diff = Math.floor((new Date(d).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
+  if (diff < 0)   return { label: fmtDate(d), color: '#DC2626', bg: '#FEF2F2' }
+  if (diff === 0) return { label: 'היום',      color: '#D97706', bg: '#FFFBEB' }
+  if (diff === 1) return { label: 'מחר',        color: '#7C3AED', bg: '#F5F3FF' }
+  return            { label: fmtDate(d),         color: '#2563EB', bg: '#EFF6FF' }
 }
 
 /* ─── constants ─── */
 const ALL_STATUSES = ['new','contacted','in_progress','published','not_relevant','no_show','arrived','quote_sent','quote_followup','closed','lost']
 const ALL_SOURCES  = ['backoffice','whatsapp','social','outreach','manual','scrape','bot']
 const ALL_TREATS   = ['implant','restorative','veneers','whitening','orthodontics','checkup','other']
-
 type SortKey = 'created_at' | 'next_followup'
 
 /* ─── styles ─── */
 const TH: React.CSSProperties = {
-  textAlign: 'right', padding: '10px 14px', fontSize: '10px',
+  textAlign: 'right', padding: '9px 12px', fontSize: '10px',
   fontWeight: 600, color: 'var(--fg-3)', letterSpacing: '0.05em',
   textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none',
 }
-const TD: React.CSSProperties = { padding: '13px 14px', verticalAlign: 'middle' }
+const TD: React.CSSProperties = { padding: '11px 12px', verticalAlign: 'middle' }
 
 /* ─── component ─── */
 export default function LeadsPage() {
   const supabase = createClient()
-  const [leads, setLeads]       = useState<Lead[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [profiles, setProfiles] = useState<any[]>([])
+  const [leads, setLeads]         = useState<Lead[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [profiles, setProfiles]   = useState<any[]>([])
   const [convPhones, setConvPhones] = useState<Set<string>>(new Set())
-  const [search, setSearch]     = useState('')
+  const [search, setSearch]       = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters]   = useState({ status: '', source: '', assigned: '', treatment_type: '' })
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [filters, setFilters]     = useState({ status: '', source: '', assigned: '', treatment_type: '' })
+  const [selected, setSelected]   = useState<Set<string>>(new Set())
   const [analyzing, setAnalyzing] = useState<Set<string>>(new Set())
-  const [sortKey, setSortKey]   = useState<SortKey>('created_at')
-  const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
-  const analysisStarted         = useRef(false)
+  const [sortKey, setSortKey]     = useState<SortKey>('created_at')
+  const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc')
+  const [aiPopup, setAiPopup]     = useState<{ id: string; x: number; y: number } | null>(null)
+  const analysisStarted           = useRef(false)
+  const hideTimer                 = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -99,7 +100,6 @@ export default function LeadsPage() {
     const unanalyzed = leads.filter(l => !l.ai_summary)
     if (unanalyzed.length === 0) return
     analysisStarted.current = true
-
     async function runSequential() {
       for (const lead of unanalyzed) {
         await analyzeAI(lead.id)
@@ -133,6 +133,20 @@ export default function LeadsPage() {
     }
   }
 
+  function openAIPopup(e: React.MouseEvent, leadId: string) {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setAiPopup({ id: leadId, x: rect.left + rect.width / 2, y: rect.top })
+  }
+
+  function scheduleClosePopup() {
+    hideTimer.current = setTimeout(() => setAiPopup(null), 200)
+  }
+
+  function cancelClosePopup() {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+  }
+
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('desc') }
@@ -158,21 +172,17 @@ export default function LeadsPage() {
       })
   }, [leads, search, filters, sortKey, sortDir])
 
-  const hasFilters = Object.values(filters).some(Boolean)
+  const hasFilters  = Object.values(filters).some(Boolean)
   const allSelected = filtered.length > 0 && filtered.every(l => selected.has(l.id))
 
   function toggleAll() {
-    if (allSelected) setSelected(new Set())
-    else setSelected(new Set(filtered.map(l => l.id)))
+    setSelected(allSelected ? new Set() : new Set(filtered.map(l => l.id)))
+  }
+  function toggleOne(id: string) {
+    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   }
 
-  function toggleOne(id: string) {
-    setSelected(prev => {
-      const s = new Set(prev)
-      s.has(id) ? s.delete(id) : s.add(id)
-      return s
-    })
-  }
+  const popupLead = aiPopup ? leads.find(l => l.id === aiPopup.id) : null
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
@@ -184,56 +194,48 @@ export default function LeadsPage() {
   )
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: '1500px', margin: '0 auto' }}>
+    <div style={{ padding: '24px 28px' }}>
 
       {/* ─── Header ─── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--fg-1)', marginBottom: '3px' }}>ניהול לידים</h1>
+          <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--fg-1)', marginBottom: '3px' }}>ניהול לידים</h1>
           <p style={{ fontSize: '12px', color: 'var(--fg-4)' }}>
             {filtered.length} מוצגים{leads.length !== filtered.length ? ` מתוך ${leads.length}` : ''}
             {selected.size > 0 && ` · ${selected.size} נבחרו`}
           </p>
         </div>
         <Link href="/leads/new" style={{
-          display: 'flex', alignItems: 'center', gap: '7px',
+          display: 'flex', alignItems: 'center', gap: '6px',
           background: 'var(--brand)', color: 'white', fontWeight: 600,
-          padding: '10px 18px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
+          padding: '9px 16px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
           fontSize: '13px', boxShadow: '0 1px 4px rgba(43,107,232,0.25)',
         }}>
           + ליד חדש
         </Link>
       </div>
 
-      {/* ─── Search + Filters bar ─── */}
-      <div className="card" style={{ padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+      {/* ─── Search + Filters ─── */}
+      <div className="card" style={{ padding: '10px 14px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{ flex: 1, position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-4)' }} />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="חיפוש לפי שם, טלפון, הערה..."
-            className="input-base"
-            style={{ paddingRight: '34px' }}
-          />
+            className="input-base" style={{ paddingRight: '34px' }} />
           {search && (
             <button onClick={() => setSearch('')} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex' }}>
               <X size={13} />
             </button>
           )}
         </div>
-        <button
-          onClick={() => setShowFilters(f => !f)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 500,
-            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
-            background: showFilters || hasFilters ? 'var(--brand)' : 'var(--bg-sunken)',
-            color: showFilters || hasFilters ? 'white' : 'var(--fg-2)',
-            border: showFilters || hasFilters ? 'none' : '1.5px solid var(--border-default)',
-          }}
-        >
+        <button onClick={() => setShowFilters(f => !f)} style={{
+          display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px',
+          borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 500,
+          cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
+          background: showFilters || hasFilters ? 'var(--brand)' : 'var(--bg-sunken)',
+          color: showFilters || hasFilters ? 'white' : 'var(--fg-2)',
+          border: showFilters || hasFilters ? 'none' : '1.5px solid var(--border-default)',
+        }}>
           <SlidersHorizontal size={13} />
           סינון{hasFilters ? ` (${Object.values(filters).filter(Boolean).length})` : ''}
         </button>
@@ -245,16 +247,15 @@ export default function LeadsPage() {
         )}
       </div>
 
-      {/* ─── Filters panel ─── */}
       {showFilters && (
-        <div className="card animate-slide-up" style={{ padding: '14px 16px', marginBottom: '12px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+        <div className="card animate-slide-up" style={{ padding: '12px 14px', marginBottom: '10px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
           {[
             { key: 'status', label: 'סטטוס', opts: ALL_STATUSES, labels: STATUS_LABELS },
             { key: 'source', label: 'מקור', opts: ALL_SOURCES, labels: SOURCE_LABELS },
             { key: 'treatment_type', label: 'סיבת פנייה', opts: ALL_TREATS, labels: TREATMENT_LABELS },
           ].map(({ key, label, opts, labels }) => (
             <div key={key}>
-              <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)', marginBottom: '6px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</label>
+              <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)', marginBottom: '5px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</label>
               <select value={(filters as any)[key]} onChange={e => setFilters(f => ({ ...f, [key]: e.target.value }))} className="input-base" style={{ fontSize: '13px' }}>
                 <option value="">הכל</option>
                 {opts.map(s => <option key={s} value={s}>{(labels as any)[s]}</option>)}
@@ -262,7 +263,7 @@ export default function LeadsPage() {
             </div>
           ))}
           <div>
-            <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)', marginBottom: '6px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>נציג</label>
+            <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)', marginBottom: '5px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>נציג</label>
             <select value={filters.assigned} onChange={e => setFilters(f => ({ ...f, assigned: e.target.value }))} className="input-base" style={{ fontSize: '13px' }}>
               <option value="">הכל</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
@@ -272,68 +273,56 @@ export default function LeadsPage() {
       )}
 
       {/* ─── Table ─── */}
-      <div className="card" style={{ overflow: 'auto', borderRadius: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1100px' }}>
+      <div className="card" style={{ overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
-
-              {/* Checkbox */}
-              <th style={{ ...TH, width: '44px', paddingRight: '16px' }}>
+              <th style={{ ...TH, width: '38px', paddingRight: '14px' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                  style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
+                  style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
               </th>
-
-              <th style={{ ...TH, width: '60px' }}>מס'</th>
-              <th style={{ ...TH, width: '100px' }}>שם פרטי</th>
-              <th style={{ ...TH, width: '100px' }}>שם משפחה</th>
-              <th style={{ ...TH, width: '120px' }}>טלפון</th>
-              <th style={{ ...TH, width: '130px' }}>סטטוס</th>
-              <th style={{ ...TH, width: '110px' }}>סיבת פנייה</th>
-              <th style={{ ...TH, width: '90px' }}>מקור</th>
-              <th style={{ ...TH, minWidth: '140px' }}>הערה אחרונה</th>
-              <th style={{ ...TH, minWidth: '160px' }}>סיכום AI</th>
-              <th style={{ ...TH, minWidth: '160px' }}>המלצת AI</th>
-
-              {/* Sortable: מעקב */}
-              <th style={{ ...TH, width: '100px', cursor: 'pointer' }} onClick={() => toggleSort('next_followup')}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  מעקב
-                  <ArrowUpDown size={11} style={{ color: sortKey === 'next_followup' ? 'var(--brand)' : 'var(--fg-4)' }} />
+              <th style={{ ...TH, width: '52px' }}>מס'</th>
+              <th style={{ ...TH, width: '88px' }}>שם פרטי</th>
+              <th style={{ ...TH, width: '88px' }}>שם משפחה</th>
+              <th style={{ ...TH, width: '108px' }}>טלפון</th>
+              <th style={{ ...TH, width: '118px' }}>סטטוס</th>
+              <th style={{ ...TH, width: '92px' }}>סיבת פנייה</th>
+              <th style={{ ...TH, width: '76px' }}>מקור</th>
+              <th style={{ ...TH }}>הערה אחרונה</th>
+              <th style={{ ...TH, width: '88px', cursor: 'pointer' }} onClick={() => toggleSort('next_followup')}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  מעקב <ArrowUpDown size={10} style={{ color: sortKey === 'next_followup' ? 'var(--brand)' : 'var(--fg-4)' }} />
                 </span>
               </th>
-
-              {/* Sortable: נוצר */}
-              <th style={{ ...TH, width: '110px', cursor: 'pointer' }} onClick={() => toggleSort('created_at')}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  נוצר
-                  <ArrowUpDown size={11} style={{ color: sortKey === 'created_at' ? 'var(--brand)' : 'var(--fg-4)' }} />
+              <th style={{ ...TH, width: '96px', cursor: 'pointer' }} onClick={() => toggleSort('created_at')}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  נוצר <ArrowUpDown size={10} style={{ color: sortKey === 'created_at' ? 'var(--brand)' : 'var(--fg-4)' }} />
                 </span>
               </th>
-
               <th style={{ ...TH, width: '80px', textAlign: 'center' }}>פעולות</th>
             </tr>
           </thead>
 
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={14} style={{ textAlign: 'center', padding: '72px 0' }}>
-                <Search size={32} style={{ color: 'var(--fg-4)', margin: '0 auto 12px', display: 'block' }} />
+              <tr><td colSpan={12} style={{ textAlign: 'center', padding: '60px 0' }}>
+                <Search size={30} style={{ color: 'var(--fg-4)', margin: '0 auto 10px', display: 'block' }} />
                 <p style={{ color: 'var(--fg-3)', fontWeight: 500, fontSize: '14px' }}>לא נמצאו לידים</p>
-                <p style={{ color: 'var(--fg-4)', fontSize: '12px', marginTop: '4px' }}>שנה את החיפוש או הסינון</p>
+                <p style={{ color: 'var(--fg-4)', fontSize: '12px', marginTop: '3px' }}>שנה את החיפוש או הסינון</p>
               </td></tr>
             )}
 
             {filtered.map(lead => {
-              const status     = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
-              const temp       = lead.temperature ? TEMP_CONFIG[lead.temperature] : null
-              const isNew      = isNewLead(lead)
-              const numStr     = getLeadNumber(lead)
-              const tColor     = lead.treatment_type ? TREATMENT_COLORS[lead.treatment_type as TreatmentType] : undefined
+              const status      = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
+              const temp        = lead.temperature ? TEMP_CONFIG[lead.temperature] : null
+              const isNew       = isNewLead(lead)
+              const tColor      = lead.treatment_type ? TREATMENT_COLORS[lead.treatment_type as TreatmentType] : undefined
               const hasChatHistory = lead.phone ? convPhones.has(lead.phone) : false
-              const waPhone    = lead.phone ? '972' + lead.phone.replace(/^0/, '').replace(/-/g, '') : null
-              const followup   = followupBadge(lead.next_followup)
-              const isSelected = selected.has(lead.id)
+              const waPhone     = lead.phone ? '972' + lead.phone.replace(/^0/, '').replace(/-/g, '') : null
+              const followup    = followupBadge(lead.next_followup)
+              const isSelected  = selected.has(lead.id)
               const isAnalyzing = analyzing.has(lead.id)
+              const hasAI       = !!(lead.ai_summary || lead.ai_recommendation)
 
               return (
                 <tr key={lead.id}
@@ -345,21 +334,20 @@ export default function LeadsPage() {
                   onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '' }}
                 >
-
-                  {/* Checkbox */}
-                  <td style={{ ...TD, paddingRight: '16px' }}>
+                  {/* ○ */}
+                  <td style={{ ...TD, paddingRight: '14px' }}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleOne(lead.id)}
-                      style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
+                      style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
                   </td>
 
-                  {/* # */}
+                  {/* מס' */}
                   <td style={{ ...TD }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', fontVariantNumeric: 'tabular-nums' }}>
-                        {numStr}
+                        {getLeadNumber(lead)}
                       </span>
                       {isNew && (
-                        <span style={{ background: 'var(--brand)', color: 'white', fontSize: '8px', fontWeight: 700, padding: '2px 5px', borderRadius: '4px', lineHeight: 1 }}>
+                        <span style={{ background: 'var(--brand)', color: 'white', fontSize: '8px', fontWeight: 700, padding: '2px 4px', borderRadius: '4px', lineHeight: 1 }}>
                           חדש
                         </span>
                       )}
@@ -386,28 +374,15 @@ export default function LeadsPage() {
                     </span>
                   </td>
 
-                  {/* סטטוס + temperature dot */}
+                  {/* סטטוס */}
                   <td style={{ ...TD }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span className={`${status.bg} ${status.text}`}
-                          style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          {status.label}
-                        </span>
-                        {temp && (
-                          <span title={temp.label}
-                            style={{ width: '7px', height: '7px', borderRadius: '50%', background: temp.dot, flexShrink: 0, display: 'inline-block' }} />
-                        )}
-                      </div>
-                      {lead.ai_recommendation && (
-                        <span style={{
-                          fontSize: '10px', fontWeight: 500, color: '#6D28D9',
-                          background: '#EDE9FE', padding: '2px 7px', borderRadius: '10px',
-                          maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          display: 'block',
-                        }} title={lead.ai_recommendation}>
-                          AI ✦
-                        </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span className={`${status.bg} ${status.text}`}
+                        style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        {status.label}
+                      </span>
+                      {temp && (
+                        <span title={temp.label} style={{ width: '7px', height: '7px', borderRadius: '50%', background: temp.dot, flexShrink: 0, display: 'inline-block' }} />
                       )}
                     </div>
                   </td>
@@ -416,7 +391,7 @@ export default function LeadsPage() {
                   <td style={{ ...TD }}>
                     {lead.treatment_type ? (
                       <span style={{
-                        fontSize: '11px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px',
+                        fontSize: '11px', fontWeight: 500, padding: '3px 7px', borderRadius: '6px',
                         background: tColor ? `${tColor}18` : 'var(--bg-hover)',
                         color: tColor || 'var(--fg-3)',
                         border: `1px solid ${tColor ? `${tColor}30` : 'var(--border-subtle)'}`,
@@ -429,53 +404,25 @@ export default function LeadsPage() {
 
                   {/* מקור */}
                   <td style={{ ...TD }}>
-                    <span style={{
-                      fontSize: '11px', color: 'var(--fg-3)',
-                      background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)',
-                      padding: '3px 8px', borderRadius: '20px', whiteSpace: 'nowrap',
-                    }}>
+                    <span style={{ fontSize: '11px', color: 'var(--fg-3)', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', padding: '3px 7px', borderRadius: '20px', whiteSpace: 'nowrap' }}>
                       {SOURCE_LABELS[lead.source] || lead.source}
                     </span>
                   </td>
 
                   {/* הערה אחרונה */}
-                  <td style={{ ...TD, maxWidth: '160px' }}>
+                  <td style={{ ...TD }}>
                     {lead.notes
-                      ? <span title={lead.notes} style={{ fontSize: '12px', color: 'var(--fg-3)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      ? <span style={{ fontSize: '12px', color: 'var(--fg-3)', display: 'block', overflow: 'hidden', maxHeight: '2.8em', lineHeight: 1.4 }}>
                           {lead.notes}
                         </span>
                       : <span style={{ color: 'var(--fg-4)', fontSize: '12px' }}>—</span>
                     }
                   </td>
 
-                  {/* סיכום AI */}
-                  <td style={{ ...TD, maxWidth: '180px' }}>
-                    {isAnalyzing
-                      ? <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מנתח...</span>
-                      : lead.ai_summary
-                        ? <span title={lead.ai_summary} style={{ fontSize: '12px', color: 'var(--fg-2)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {lead.ai_summary}
-                          </span>
-                        : <span style={{ color: 'var(--fg-4)', fontSize: '12px' }}>—</span>
-                    }
-                  </td>
-
-                  {/* המלצת AI */}
-                  <td style={{ ...TD, maxWidth: '180px' }}>
-                    {isAnalyzing
-                      ? <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מנתח...</span>
-                      : lead.ai_recommendation
-                        ? <span title={lead.ai_recommendation} style={{ fontSize: '12px', color: '#5B21B6', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {lead.ai_recommendation}
-                          </span>
-                        : <span style={{ color: 'var(--fg-4)', fontSize: '12px' }}>—</span>
-                    }
-                  </td>
-
                   {/* מעקב */}
                   <td style={{ ...TD }}>
                     {followup
-                      ? <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 9px', borderRadius: '20px', color: followup.color, background: followup.bg, whiteSpace: 'nowrap' }}>
+                      ? <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 8px', borderRadius: '20px', color: followup.color, background: followup.bg, whiteSpace: 'nowrap' }}>
                           {followup.label}
                         </span>
                       : <span style={{ color: 'var(--fg-4)', fontSize: '12px' }}>—</span>
@@ -496,56 +443,100 @@ export default function LeadsPage() {
 
                   {/* פעולות */}
                   <td style={{ ...TD, textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
 
-                      {/* AI analyze */}
+                      {/* ✦ AI hover popup */}
                       <button
-                        onClick={() => analyzeAI(lead.id)}
                         disabled={isAnalyzing}
-                        title={lead.ai_summary ? 'ניתוח AI מחדש' : 'ניתוח AI'}
+                        onMouseEnter={e => hasAI ? openAIPopup(e, lead.id) : undefined}
+                        onMouseLeave={scheduleClosePopup}
+                        onClick={() => !hasAI && !isAnalyzing && analyzeAI(lead.id)}
+                        title={hasAI ? 'סיכום AI' : isAnalyzing ? 'מנתח...' : 'נתח עם AI'}
                         style={{
-                          width: '28px', height: '28px', borderRadius: '8px', border: 'none', cursor: isAnalyzing ? 'default' : 'pointer',
-                          background: lead.ai_summary ? '#EDE9FE' : 'var(--bg-sunken)',
+                          width: '27px', height: '27px', borderRadius: '7px', border: 'none',
+                          cursor: isAnalyzing ? 'default' : 'pointer',
+                          background: hasAI ? '#EDE9FE' : 'var(--bg-sunken)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           opacity: isAnalyzing ? 0.5 : 1,
                           transition: 'all 0.15s',
                         }}
                       >
-                        <Sparkles size={12} style={{ color: lead.ai_summary ? '#7C3AED' : 'var(--fg-4)' }} />
+                        <Sparkles size={11} style={{ color: hasAI ? '#7C3AED' : 'var(--fg-4)' }} />
                       </button>
 
-                      {/* View lead */}
-                      <Link href={`/leads/${lead.id}`} onClick={() => markOpened(lead.id)}
-                        title="צפה בליד"
+                      {/* 👁 צפה */}
+                      <Link href={`/leads/${lead.id}`} onClick={() => markOpened(lead.id)} title="צפה בליד"
                         style={{
-                          width: '28px', height: '28px', borderRadius: '8px',
+                          width: '27px', height: '27px', borderRadius: '7px',
                           background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                        <Eye size={12} style={{ color: 'var(--fg-3)' }} />
+                        <Eye size={11} style={{ color: 'var(--fg-3)' }} />
                       </Link>
 
                       {/* WhatsApp */}
                       {waPhone && (
                         <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer" title="WhatsApp"
                           style={{
-                            width: '28px', height: '28px', borderRadius: '8px',
+                            width: '27px', height: '27px', borderRadius: '7px',
                             background: hasChatHistory ? '#EBFBF4' : 'var(--bg-sunken)',
                             border: hasChatHistory ? 'none' : '1px solid var(--border-subtle)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>
-                          <MessageSquare size={12} style={{ color: hasChatHistory ? '#0F9E7B' : 'var(--fg-4)' }} />
+                          <MessageSquare size={11} style={{ color: hasChatHistory ? '#0F9E7B' : 'var(--fg-4)' }} />
                         </a>
                       )}
                     </div>
                   </td>
-
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {/* ─── AI Popup (fixed, outside table overflow) ─── */}
+      {aiPopup && popupLead && (popupLead.ai_summary || popupLead.ai_recommendation) && (
+        <div
+          onMouseEnter={cancelClosePopup}
+          onMouseLeave={scheduleClosePopup}
+          style={{
+            position: 'fixed',
+            top: aiPopup.y - 12,
+            left: aiPopup.x,
+            transform: 'translate(-50%, -100%)',
+            width: '300px',
+            background: 'var(--bg-canvas)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            zIndex: 9999,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+            direction: 'rtl',
+          }}
+        >
+          {popupLead.ai_summary && (
+            <div style={{ marginBottom: popupLead.ai_recommendation ? '10px' : 0 }}>
+              <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--fg-3)', marginBottom: '5px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                סיכום
+              </p>
+              <p style={{ fontSize: '13px', color: 'var(--fg-1)', lineHeight: 1.55, margin: 0 }}>
+                {popupLead.ai_summary}
+              </p>
+            </div>
+          )}
+          {popupLead.ai_recommendation && (
+            <div style={{ borderTop: popupLead.ai_summary ? '1px solid var(--border-subtle)' : 'none', paddingTop: popupLead.ai_summary ? '10px' : 0 }}>
+              <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--fg-3)', marginBottom: '5px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                המלצה
+              </p>
+              <p style={{ fontSize: '13px', color: '#5B21B6', lineHeight: 1.55, margin: 0 }}>
+                {popupLead.ai_recommendation}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
