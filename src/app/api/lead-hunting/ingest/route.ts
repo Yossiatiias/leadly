@@ -82,8 +82,8 @@ export async function POST(req: NextRequest) {
     for (const item of items) {
       const text: string = item.postText || item.text || item.message || ''
       const url: string = item.url || item.postUrl || item.link || ''
-      const groupName: string = item.groupName || item.pageName || item.groupUrl || ''
-      const authorName: string = item.authorName || item.userName || item.name || null
+      const groupName: string = item.groupName || item.pageName || ''
+      const authorName: string = item.author?.name || item.authorName || item.userName || null
 
       if (!text || existingLinks.has(url)) continue
       if (!mightBeRelevant(text)) continue
