@@ -601,8 +601,8 @@ export default function KnowledgePage() {
                       <button onClick={() => setStep('type')} className="btn-ghost" style={{ marginRight: 'auto' }}>חזור</button>
                     )}
                     <button onClick={() => { setShowModal(false); setShowManual(false); setUrlManual('') }} className="btn-ghost">ביטול</button>
-                    {addType === 'qa' && (
-                      <button onClick={saveQA} disabled={saving || !form.question.trim() || !form.answer.trim()} className="btn-primary" style={{ opacity: saving ? 0.6 : 1 }}>
+                    {(addType === 'qa' || (addType === 'file' && editItem)) && (
+                      <button onClick={saveQA} disabled={saving || !form.question.trim()} className="btn-primary" style={{ opacity: saving ? 0.6 : 1 }}>
                         {saving ? 'שומר...' : editItem ? 'עדכן' : 'שמור'}
                       </button>
                     )}
