@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Check, X, Crosshair, Settings2, Play, Phone, Mail, ExternalLink, Clock, Trash2 } from 'lucide-react'
+import { Plus, Check, X, Crosshair, Settings2, Play, ExternalLink, Clock, Trash2, MessageSquare } from 'lucide-react'
 
 interface Candidate {
   id: string
   business_id: string
   source_url: string
+  source_link: string | null
+  source_name: string | null
+  summary: string | null
   name: string | null
   phone: string | null
   email: string | null
+  raw_text: string | null
   status: 'pending' | 'approved' | 'rejected'
   found_at: string
 }
@@ -33,6 +37,7 @@ export default function LeadHuntingPage() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [tab, setTab] = useState<'pending' | 'approved' | 'rejected'>('pending')
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -41,11 +46,8 @@ export default function LeadHuntingPage() {
       const { data: profile } = await supabase.from('profiles').select('business_id').eq('id', user.id).single()
       if (!profile?.business_id) return
       setBusinessId(profile.business_id)
-
-      // Load sources from business settings
       const { data: biz } = await supabase.from('businesses').select('settings').eq('id', profile.business_id).single()
       setSources(biz?.settings?.hunt_sources || [])
-
       await loadCandidates(profile.business_id)
     }
     load()
@@ -78,44 +80,47 @@ export default function LeadHuntingPage() {
     setNewUrl(''); setNewLabel('')
   }
 
-  async function scanSource(url: string) {
-    if (!businessId) return
-    setScanning(true); setScanMsg(`סורק: ${url}`)
+  async function scanAll() {
+    if (!businessId || sources.length === 0) return
+    setScanning(true)
+    setScanMsg('מפעיל סריקה ב-Apify...')
     try {
-      const res = await fetch('/api/lead-hunting', {
+      const res = await fetch('/api/lead-hunting/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, business_id: businessId, save: true }),
+        body: JSON.stringify({
+          group_urls: sources.map(s => s.url),
+          business_id: businessId,
+        }),
       })
       const data = await res.json()
-      if (data.error) { setScanMsg('שגיאה: ' + data.error) }
-      else {
-        setScanMsg(`נמצאו ${data.saved || 0} מועמדים חדשים מ-${url}`)
-        await loadCandidates(businessId)
+      if (data.error) {
+        setScanMsg('שגיאה: ' + data.error)
+      } else {
+        setScanMsg(`✓ הסריקה הופעלה (Run ID: ${data.runId?.slice(0, 8)}...). מועמדים יופיעו בעוד כמה דקות.`)
       }
-    } catch { setScanMsg('שגיאת חיבור') }
-    setScanning(false)
-  }
-
-  async function scanAll() {
-    for (const src of sources) {
-      await scanSource(src.url)
+    } catch {
+      setScanMsg('שגיאת חיבור')
     }
+    setScanning(false)
   }
 
   async function approveCandidate(c: Candidate) {
     if (!businessId) return
-    // Create lead
     await supabase.from('leads').insert({
       business_id: businessId,
-      name: c.name || c.phone || c.email || 'ליד מציד',
+      name: c.name || c.summary?.slice(0, 30) || 'ליד מציד',
       phone: c.phone || null,
       email: c.email || null,
       source: 'scrape',
       status: 'new',
-      notes: `מקור ציד: ${c.source_url}`,
+      notes: [
+        c.summary ? `סיכום: ${c.summary}` : '',
+        c.source_name ? `קבוצה: ${c.source_name}` : '',
+        c.source_link ? `קישור: ${c.source_link}` : '',
+        c.raw_text ? `\nפוסט מקורי:\n${c.raw_text.slice(0, 500)}` : '',
+      ].filter(Boolean).join('\n'),
     })
-    // Mark approved
     await supabase.from('lead_candidates').update({ status: 'approved' }).eq('id', c.id)
     setCandidates(prev => prev.map(x => x.id === c.id ? { ...x, status: 'approved' } : x))
     showToast('✓ ליד נוסף למערכת')
@@ -158,7 +163,7 @@ export default function LeadHuntingPage() {
           </div>
           <div>
             <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>ציד לידים</h1>
-            <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '2px 0 0' }}>סוכן AI שסורק דפים ומביא מועמדים לאישורך</p>
+            <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '2px 0 0' }}>סוכן AI שמנטר קבוצות ומזהה מי מחפש טיפול שיניים</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -169,16 +174,17 @@ export default function LeadHuntingPage() {
             color: showConfig ? 'var(--brand)' : 'var(--fg-2)',
             fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer',
           }}>
-            <Settings2 size={14} /> הגדרות
+            <Settings2 size={14} /> קבוצות
           </button>
           <button onClick={scanAll} disabled={scanning || sources.length === 0} style={{
             display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px',
             borderRadius: '9px', border: 'none',
             background: scanning ? 'var(--brand-soft)' : 'var(--brand)',
             color: scanning ? 'var(--brand)' : 'white',
-            fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanning || sources.length === 0 ? 'default' : 'pointer',
+            fontFamily: 'inherit', fontWeight: 600, fontSize: '13px',
+            cursor: scanning || sources.length === 0 ? 'default' : 'pointer',
           }}>
-            <Play size={14} /> {scanning ? 'סורק...' : 'סרוק עכשיו'}
+            <Play size={14} /> {scanning ? 'מפעיל...' : 'סרוק עכשיו'}
           </button>
         </div>
       </div>
@@ -193,30 +199,23 @@ export default function LeadHuntingPage() {
       {/* Config panel */}
       {showConfig && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '14px', padding: '20px', marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 14px' }}>
-            דפים וקבוצות לסריקה
-          </h3>
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 8px' }}>קבוצות פייסבוק לניטור</h3>
           <p style={{ fontSize: '12px', color: 'var(--fg-4)', marginBottom: '14px' }}>
-            הסוכן יסרוק דפים אלה ויביא מועמדים לאישורך. מתאים לדפי פייסבוק ציבוריים, Yad2, אתרי עסקים וכל URL פומבי.
+            הסוכן יסרוק את הקבוצות, ימצא פוסטים שמחפשים טיפול שיניים, ויביא אותם לאישורך.
           </p>
 
-          {/* Source list */}
           {sources.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '8px' }}>
               <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', flex: 1 }}>{s.label}</span>
-              <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px', whiteSpace: 'nowrap' }}>{s.url}</span>
-              <button onClick={() => { scanSource(s.url) }} disabled={scanning} style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', background: 'var(--brand)', color: 'white', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' }}>
-                סרוק
-              </button>
+              <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px', whiteSpace: 'nowrap' }}>{s.url}</span>
               <button onClick={() => setSources(prev => prev.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex' }}>
                 <X size={14} />
               </button>
             </div>
           ))}
 
-          {/* Add source */}
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="שם (למשל: פייסבוק קבוצה א)" style={{ width: '160px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
+            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="שם הקבוצה" style={{ width: '160px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
             <input value={newUrl} onChange={e => setNewUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSource()} placeholder="https://facebook.com/groups/..." dir="ltr" style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
             <button onClick={addSource} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
               <Plus size={13} /> הוסף
@@ -225,7 +224,7 @@ export default function LeadHuntingPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
             <button onClick={saveSources} disabled={saving} style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-              {saving ? 'שומר...' : 'שמור הגדרות'}
+              {saving ? 'שומר...' : 'שמור'}
             </button>
           </div>
         </div>
@@ -247,7 +246,6 @@ export default function LeadHuntingPage() {
               background: tab === t.key ? 'var(--bg-surface)' : 'transparent',
               color: tab === t.key ? t.color : 'var(--fg-4)',
               borderBottom: tab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
-              transition: 'all 0.15s',
             }}>
               {t.label}
               {t.count > 0 && (
@@ -267,7 +265,7 @@ export default function LeadHuntingPage() {
               {tab === 'pending' ? 'אין מועמדים ממתינים' : tab === 'approved' ? 'טרם אושרו מועמדים' : 'אין מועמדים שנדחו'}
             </p>
             {tab === 'pending' && sources.length === 0 && (
-              <p style={{ fontSize: '12px', marginTop: '6px' }}>הוסף דפים בהגדרות ולחץ "סרוק עכשיו"</p>
+              <p style={{ fontSize: '12px', marginTop: '6px' }}>הוסף קבוצות פייסבוק ולחץ "סרוק עכשיו"</p>
             )}
             {tab === 'pending' && sources.length > 0 && (
               <button onClick={scanAll} disabled={scanning} style={{ marginTop: '14px', padding: '8px 20px', borderRadius: '9px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
@@ -276,82 +274,88 @@ export default function LeadHuntingPage() {
             )}
           </div>
         ) : (
-          shown.map((c, i) => (
-            <div key={c.id} style={{
-              padding: '14px 20px',
-              borderBottom: i < shown.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-              display: 'flex', alignItems: 'center', gap: '14px',
-            }}>
-              {/* Avatar */}
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
-                {c.phone ? '📱' : c.email ? '✉️' : '👤'}
-              </div>
+          shown.map((c, i) => {
+            const isExpanded = expanded === c.id
+            return (
+              <div key={c.id} style={{
+                borderBottom: i < shown.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+              }}>
+                {/* Main row */}
+                <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
 
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  {c.name && <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)' }}>{c.name}</span>}
-                  {c.phone && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--fg-2)', direction: 'ltr' }}>
-                      <Phone size={12} style={{ color: 'var(--success)' }} /> {c.phone}
-                    </span>
+                  {/* Avatar */}
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0, marginTop: '2px' }}>
+                    🦷
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Summary — the main content */}
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px', lineHeight: 1.4 }}>
+                      {c.summary || c.name || 'מועמד ללא סיכום'}
+                    </p>
+
+                    {/* Meta row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      {c.source_name && (
+                        <span style={{ fontSize: '12px', color: 'var(--fg-3)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          👥 {c.source_name}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>
+                        {new Date(c.found_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {c.source_link && (
+                        <a href={c.source_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--brand)', display: 'flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
+                          onClick={e => e.stopPropagation()}>
+                          <ExternalLink size={10} /> קישור לפוסט
+                        </a>
+                      )}
+                      {c.raw_text && (
+                        <button onClick={() => setExpanded(isExpanded ? null : c.id)} style={{ fontSize: '11px', color: 'var(--fg-4)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontFamily: 'inherit', padding: 0 }}>
+                          <MessageSquare size={10} /> {isExpanded ? 'הסתר פוסט' : 'הצג פוסט מקורי'}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Expanded raw text */}
+                    {isExpanded && c.raw_text && (
+                      <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', fontSize: '12px', color: 'var(--fg-2)', lineHeight: 1.6, maxHeight: '140px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                        {c.raw_text.slice(0, 800)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  {tab === 'pending' && (
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0, marginTop: '2px' }}>
+                      <button onClick={() => approveCandidate(c)} style={{
+                        display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px',
+                        borderRadius: '8px', border: 'none', background: 'var(--success)', color: 'white',
+                        fontFamily: 'inherit', fontWeight: 600, fontSize: '12px', cursor: 'pointer',
+                      }}>
+                        <Check size={12} /> אשר
+                      </button>
+                      <button onClick={() => rejectCandidate(c.id)} style={{
+                        display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px',
+                        borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
+                        color: 'var(--fg-3)', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+                      }}>
+                        <X size={12} /> דחה
+                      </button>
+                    </div>
                   )}
-                  {c.email && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--fg-3)' }}>
-                      <Mail size={12} style={{ color: 'var(--brand)' }} /> {c.email}
-                    </span>
+                  {tab !== 'pending' && (
+                    <button onClick={() => deleteCandidate(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', padding: '4px', marginTop: '2px' }}>
+                      <Trash2 size={14} />
+                    </button>
                   )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-                  <ExternalLink size={10} style={{ color: 'var(--fg-4)' }} />
-                  <span style={{ fontSize: '11px', color: 'var(--fg-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px', direction: 'ltr' }}>
-                    {c.source_url}
-                  </span>
-                  <span style={{ fontSize: '10px', color: 'var(--fg-4)' }}>·</span>
-                  <span style={{ fontSize: '10px', color: 'var(--fg-4)' }}>
-                    {new Date(c.found_at).toLocaleDateString('he-IL')}
-                  </span>
                 </div>
               </div>
-
-              {/* Actions */}
-              {tab === 'pending' && (
-                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                  <button onClick={() => approveCandidate(c)} style={{
-                    display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px',
-                    borderRadius: '8px', border: 'none', background: 'var(--success)', color: 'white',
-                    fontFamily: 'inherit', fontWeight: 600, fontSize: '12px', cursor: 'pointer',
-                  }}>
-                    <Check size={12} /> אשר
-                  </button>
-                  <button onClick={() => rejectCandidate(c.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 14px',
-                    borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
-                    color: 'var(--fg-3)', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
-                  }}>
-                    <X size={12} /> דחה
-                  </button>
-                </div>
-              )}
-              {tab !== 'pending' && (
-                <button onClick={() => deleteCandidate(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', padding: '4px' }}>
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-          ))
+            )
+          })
         )}
       </div>
-
-      {/* SQL note */}
-      {candidates.length === 0 && !showConfig && (
-        <div style={{ marginTop: '16px', padding: '14px 16px', background: 'var(--warning-soft)', border: '1px solid var(--warning-border)', borderRadius: '10px', fontSize: '12px', color: 'var(--warning)' }}>
-          <strong>הערה:</strong> הפעם הראשונה שמשתמשים בתכונה זו, יש להריץ בסופאבייס:<br />
-          <code style={{ fontSize: '11px', display: 'block', marginTop: '6px', background: 'rgba(0,0,0,0.06)', padding: '6px 10px', borderRadius: '6px', direction: 'ltr' }}>
-            {`CREATE TABLE IF NOT EXISTS lead_candidates (id UUID DEFAULT gen_random_uuid() PRIMARY KEY, business_id UUID, source_url TEXT, name TEXT, phone TEXT, email TEXT, status TEXT DEFAULT 'pending', found_at TIMESTAMPTZ DEFAULT NOW());`}
-          </code>
-        </div>
-      )}
     </div>
   )
 }
