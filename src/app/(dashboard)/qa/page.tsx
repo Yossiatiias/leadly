@@ -382,12 +382,10 @@ export default function KnowledgePage() {
                     style={{ width: '30px', height: '30px', borderRadius: '7px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: item.is_active ? '#DCFCE7' : 'var(--bg-hover)', color: item.is_active ? '#16A34A' : 'var(--fg-4)' }}>
                     {item.is_active ? <Check size={13} /> : <X size={13} />}
                   </button>
-                  {item.type === 'qa' && (
-                    <button onClick={() => openEdit(item)}
-                      style={{ width: '30px', height: '30px', borderRadius: '7px', border: 'none', background: 'var(--bg-hover)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)' }}>
-                      <Edit2 size={12} />
-                    </button>
-                  )}
+                  <button onClick={() => openEdit(item)}
+                    style={{ width: '30px', height: '30px', borderRadius: '7px', border: 'none', background: 'var(--bg-hover)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)' }}>
+                    <Edit2 size={12} />
+                  </button>
                   {item.type === 'url' && item.source_url && (
                     <a href={item.source_url} target="_blank"
                       style={{ width: '30px', height: '30px', borderRadius: '7px', border: 'none', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)', textDecoration: 'none' }}>
@@ -465,11 +463,11 @@ export default function KnowledgePage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '18px' }}>
                     {(['both', 'customer', 'staff'] as const).map(a => {
                       const A = AUD[a]
-                      const curAud = addType === 'file' ? fileAud : addType === 'url' ? urlAud : form.audience
+                      const curAud = editItem ? form.audience : addType === 'file' ? fileAud : addType === 'url' ? urlAud : form.audience
                       const sel = curAud === a
                       return (
                         <button key={a} onClick={() => {
-                          if (addType === 'qa') setForm(f => ({ ...f, audience: a }))
+                          if (editItem || addType === 'qa') setForm(f => ({ ...f, audience: a }))
                           else if (addType === 'file') setFileAud(a)
                           else setUrlAud(a)
                         }} style={{
