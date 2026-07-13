@@ -115,26 +115,15 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
         </div>
 
         {/* Org logo — below Leadly branding */}
-        {(logoUrl || businessName) && (
-          <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'var(--sidebar-user-bg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoUrl}
-                alt={businessName || 'לוגו עסק'}
-                style={{ height: '40px', maxWidth: '110px', objectFit: 'contain', borderRadius: '4px', flexShrink: 0 }}
-                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-              />
-            ) : (
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--brand)' }}>{businessName.charAt(0)}</span>
-              </div>
-            )}
-            {businessName && (
-              <p style={{ fontSize: '11px', fontWeight: 500, color: 'var(--sidebar-user-fg)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {businessName}
-              </p>
-            )}
+        {logoUrl && (
+          <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'var(--sidebar-user-bg)', display: 'flex', justifyContent: 'center' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt={businessName || 'לוגו עסק'}
+              style={{ height: '40px', maxWidth: '110px', objectFit: 'contain', borderRadius: '4px' }}
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
           </div>
         )}
       </div>
