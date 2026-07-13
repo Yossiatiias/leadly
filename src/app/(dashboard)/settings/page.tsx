@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Check, Plus, X } from 'lucide-react'
+import { Check, Plus, X, Upload, Loader2 } from 'lucide-react'
 
 interface Service {
   name: string
@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [logoUploading, setLogoUploading] = useState(false)
   const [tab, setTab] = useState<Tab>('כללי')
 
   const [general, setGeneral] = useState({ name: '', industry: '', address: '', phone: '', email: '', website: '', logo_url: '' })
@@ -118,6 +119,18 @@ export default function SettingsPage() {
     setEmpSaving(null)
     setEmpSaved(emp.id)
     setTimeout(() => setEmpSaved(null), 2000)
+  }
+
+  async function uploadLogo(file: File) {
+    if (!business?.id) return
+    setLogoUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('business_id', business.id)
+    const res = await fetch('/api/settings/upload-logo', { method: 'POST', body: fd })
+    const data = await res.json()
+    if (data.url) setGeneral(g => ({ ...g, logo_url: data.url }))
+    setLogoUploading(false)
   }
 
   async function save() {
@@ -216,17 +229,29 @@ export default function SettingsPage() {
               <input value={general.website} onChange={e => setGeneral(g => ({ ...g, website: e.target.value }))} placeholder="https://www.clinic.co.il" dir="ltr" style={inp} />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={lbl}>לוגו העסק — קישור לתמונה (URL)</label>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <input value={general.logo_url} onChange={e => setGeneral(g => ({ ...g, logo_url: e.target.value }))} placeholder="https://example.com/logo.png" dir="ltr" style={{ ...inp, flex: 1 }} />
-                {general.logo_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={general.logo_url} alt="תצוגה מקדימה" style={{ height: '36px', width: 'auto', maxWidth: '80px', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border-default)' }}
-                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                  />
-                )}
+              <label style={lbl}>לוגו העסק</label>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                {/* Preview */}
+                {general.logo_url ? (
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={general.logo_url} alt="לוגו" style={{ height: '52px', width: 'auto', maxWidth: '120px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border-default)', padding: '4px', background: 'white' }}
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                    <button onClick={() => setGeneral(g => ({ ...g, logo_url: '' }))}
+                      style={{ position: 'absolute', top: '-6px', left: '-6px', width: '18px', height: '18px', borderRadius: '50%', background: '#EF4444', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>
+                      <X size={10} />
+                    </button>
+                  </div>
+                ) : null}
+                {/* Upload button */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: 'var(--radius-md)', border: '1.5px dashed var(--border-default)', cursor: logoUploading ? 'default' : 'pointer', color: 'var(--fg-3)', fontSize: '13px', fontWeight: 500, background: 'var(--bg-sunken)', transition: 'all 0.15s' }}>
+                  {logoUploading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={14} />}
+                  {logoUploading ? 'מעלה...' : general.logo_url ? 'החלף לוגו' : 'העלה לוגו'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} disabled={logoUploading}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
+                </label>
               </div>
-              <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '4px' }}>הלוגו יוצג בסרגל הצד של המערכת. הדבק קישור לתמונה (PNG, JPG, SVG)</p>
+              <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginTop: '6px' }}>PNG, JPG או SVG — יוצג בסרגל הצד</p>
             </div>
           </div>
         </div>
