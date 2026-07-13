@@ -185,10 +185,8 @@ export default function KnowledgePage() {
     const { error } = await supabase.from('qa_knowledge').insert({
       business_id: businessId,
       type: 'url',
-      title: urlTitle || urlInput,
       question: urlTitle || urlInput,
       answer: urlManual,
-      content: urlManual,
       source_url: urlInput,
       category: urlCat,
       audience: urlAud,
@@ -366,7 +364,7 @@ export default function KnowledgePage() {
                     </span>
                   </div>
                   <p style={{ fontSize: '12px', color: 'var(--fg-3)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.type === 'url' ? (item.source_url || '') : (item.answer || item.content || '')}
+                    {item.type === 'url' ? (item.source_url || '') : (item.answer || '')}
                   </p>
                 </div>
 
