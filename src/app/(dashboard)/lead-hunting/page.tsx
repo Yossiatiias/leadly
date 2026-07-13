@@ -19,9 +19,23 @@ interface Candidate {
   found_at: string
 }
 
+type SourceType = 'facebook' | 'website' | 'instagram' | 'other'
+
 interface HuntSource {
   url: string
   label: string
+  type: SourceType
+}
+
+const SOURCE_TYPES: { value: SourceType; label: string; emoji: string; placeholder: string }[] = [
+  { value: 'facebook',  label: 'פייסבוק',   emoji: '👥', placeholder: 'https://facebook.com/groups/...' },
+  { value: 'instagram', label: 'אינסטגרם',  emoji: '📷', placeholder: 'https://instagram.com/...' },
+  { value: 'website',   label: 'אתר',       emoji: '🌐', placeholder: 'https://example.com' },
+  { value: 'other',     label: 'אחר',       emoji: '📋', placeholder: 'URL או שם המאגר' },
+]
+
+function getTypeMeta(type: SourceType) {
+  return SOURCE_TYPES.find(t => t.value === type) || SOURCE_TYPES[3]
 }
 
 export default function LeadHuntingPage() {
@@ -31,6 +45,7 @@ export default function LeadHuntingPage() {
   const [sources, setSources] = useState<HuntSource[]>([])
   const [newUrl, setNewUrl] = useState('')
   const [newLabel, setNewLabel] = useState('')
+  const [newType, setNewType] = useState<SourceType>('facebook')
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [showConfig, setShowConfig] = useState(false)
@@ -47,7 +62,12 @@ export default function LeadHuntingPage() {
       if (!profile?.business_id) return
       setBusinessId(profile.business_id)
       const { data: biz } = await supabase.from('businesses').select('settings').eq('id', profile.business_id).single()
-      setSources(biz?.settings?.hunt_sources || [])
+      const raw: HuntSource[] = (biz?.settings?.hunt_sources || []).map((s: any) => ({
+        url: s.url,
+        label: s.label,
+        type: s.type || 'facebook',
+      }))
+      setSources(raw)
       await loadCandidates(profile.business_id)
     }
     load()
@@ -63,21 +83,32 @@ export default function LeadHuntingPage() {
     setCandidates(data || [])
   }
 
-  async function saveSources() {
+  async function persistSources(updated: HuntSource[], msg: string) {
     if (!businessId) return
     setSaving(true)
     const { data: biz } = await supabase.from('businesses').select('settings').eq('id', businessId).single()
-    await supabase.from('businesses').update({ settings: { ...(biz?.settings || {}), hunt_sources: sources } }).eq('id', businessId)
+    await supabase.from('businesses').update({ settings: { ...(biz?.settings || {}), hunt_sources: updated } }).eq('id', businessId)
     setSaving(false)
-    showToast('הגדרות נשמרו')
-    setShowConfig(false)
+    showToast(msg)
   }
 
-  function addSource() {
+  async function addSource() {
     if (!newUrl.trim()) return
-    const label = newLabel.trim() || new URL(newUrl.startsWith('http') ? newUrl : 'https://' + newUrl).hostname
-    setSources(prev => [...prev, { url: newUrl.trim(), label }])
+    let label = newLabel.trim()
+    if (!label) {
+      try { label = new URL(newUrl.startsWith('http') ? newUrl : 'https://' + newUrl).hostname }
+      catch { label = newUrl.trim() }
+    }
+    const updated: HuntSource[] = [...sources, { url: newUrl.trim(), label, type: newType }]
+    setSources(updated)
     setNewUrl(''); setNewLabel('')
+    await persistSources(updated, 'מקור נוסף ונשמר')
+  }
+
+  async function removeSource(i: number) {
+    const updated = sources.filter((_, j) => j !== i)
+    setSources(updated)
+    await persistSources(updated, 'מקור הוסר')
   }
 
   async function scanAll() {
@@ -109,7 +140,7 @@ export default function LeadHuntingPage() {
     if (!businessId) return
     await supabase.from('leads').insert({
       business_id: businessId,
-      name: c.name || c.summary?.slice(0, 30) || 'ליד מציד',
+      name: c.name || c.summary?.slice(0, 30) || 'ליד מצייד',
       phone: c.phone || null,
       email: c.email || null,
       source: 'scrape',
@@ -145,6 +176,8 @@ export default function LeadHuntingPage() {
   const rejected = candidates.filter(c => c.status === 'rejected')
   const shown    = tab === 'pending' ? pending : tab === 'approved' ? approved : rejected
 
+  const currentTypeMeta = getTypeMeta(newType)
+
   return (
     <div style={{ padding: '28px', maxWidth: '900px', margin: '0 auto', direction: 'rtl' }}>
 
@@ -162,8 +195,8 @@ export default function LeadHuntingPage() {
             <Crosshair size={20} style={{ color: 'var(--brand)' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>ציד לידים</h1>
-            <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '2px 0 0' }}>סוכן AI שמנטר קבוצות ומזהה מי מחפש טיפול שיניים</p>
+            <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>צייד לידים</h1>
+            <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '2px 0 0' }}>סוכן AI שמנטר מקורות ומזהה מי מחפש טיפול שיניים</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -174,7 +207,7 @@ export default function LeadHuntingPage() {
             color: showConfig ? 'var(--brand)' : 'var(--fg-2)',
             fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer',
           }}>
-            <Settings2 size={14} /> קבוצות
+            <Settings2 size={14} /> מקורות
           </button>
           <button onClick={scanAll} disabled={scanning || sources.length === 0} style={{
             display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px',
@@ -199,33 +232,71 @@ export default function LeadHuntingPage() {
       {/* Config panel */}
       {showConfig && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '14px', padding: '20px', marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 8px' }}>קבוצות פייסבוק לניטור</h3>
-          <p style={{ fontSize: '12px', color: 'var(--fg-4)', marginBottom: '14px' }}>
-            הסוכן יסרוק את הקבוצות, ימצא פוסטים שמחפשים טיפול שיניים, ויביא אותם לאישורך.
+          <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 6px' }}>מקורות לניטור</h3>
+          <p style={{ fontSize: '12px', color: 'var(--fg-4)', marginBottom: '16px' }}>
+            הסוכן יסרוק פייסבוק, אינסטגרם, אתרים ומאגרי מידע — וימצא מי מחפש טיפול שיניים.
           </p>
 
-          {sources.map((s, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', flex: 1 }}>{s.label}</span>
-              <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px', whiteSpace: 'nowrap' }}>{s.url}</span>
-              <button onClick={() => setSources(prev => prev.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex' }}>
-                <X size={14} />
+          {/* Existing sources */}
+          {sources.map((s, i) => {
+            const meta = getTypeMeta(s.type)
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', flexShrink: 0 }}>{meta.emoji}</span>
+                <span style={{ fontSize: '11px', color: 'var(--fg-4)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '5px', padding: '2px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>{meta.label}</span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
+                <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px', whiteSpace: 'nowrap' }}>{s.url}</span>
+                <button onClick={() => removeSource(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0 }}>
+                  <X size={14} />
+                </button>
+              </div>
+            )
+          })}
+
+          {/* Add new source */}
+          <div style={{ marginTop: sources.length ? '16px' : '0', padding: '14px', background: 'var(--bg-sunken)', borderRadius: '10px', border: '1px dashed var(--border-default)' }}>
+            {/* Type selector tabs */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+              {SOURCE_TYPES.map(t => (
+                <button key={t.value} onClick={() => setNewType(t.value)} style={{
+                  padding: '5px 12px', borderRadius: '20px', border: '1px solid',
+                  borderColor: newType === t.value ? 'var(--brand)' : 'var(--border-default)',
+                  background: newType === t.value ? 'var(--brand-soft)' : 'var(--bg-surface)',
+                  color: newType === t.value ? 'var(--brand)' : 'var(--fg-3)',
+                  fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  fontWeight: newType === t.value ? 600 : 400,
+                }}>
+                  {t.emoji} {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                value={newLabel}
+                onChange={e => setNewLabel(e.target.value)}
+                placeholder={`שם ה${currentTypeMeta.label}`}
+                style={{ width: '160px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }}
+              />
+              <input
+                value={newUrl}
+                onChange={e => setNewUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addSource()}
+                placeholder={currentTypeMeta.placeholder}
+                dir="ltr"
+                style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }}
+              />
+              <button onClick={addSource} disabled={saving || !newUrl.trim()} style={{
+                padding: '8px 14px', borderRadius: '8px', border: 'none',
+                background: saving || !newUrl.trim() ? 'var(--brand-soft)' : 'var(--brand)',
+                color: saving || !newUrl.trim() ? 'var(--brand)' : 'white',
+                fontFamily: 'inherit', fontSize: '12px', cursor: saving || !newUrl.trim() ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap',
+              }}>
+                <Plus size={13} /> {saving ? 'שומר...' : 'הוסף'}
               </button>
             </div>
-          ))}
-
-          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="שם הקבוצה" style={{ width: '160px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
-            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSource()} placeholder="https://facebook.com/groups/..." dir="ltr" style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-sunken)', color: 'var(--fg-1)', outline: 'none' }} />
-            <button onClick={addSource} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Plus size={13} /> הוסף
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-            <button onClick={saveSources} disabled={saving} style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-              {saving ? 'שומר...' : 'שמור'}
-            </button>
           </div>
         </div>
       )}
@@ -265,7 +336,7 @@ export default function LeadHuntingPage() {
               {tab === 'pending' ? 'אין מועמדים ממתינים' : tab === 'approved' ? 'טרם אושרו מועמדים' : 'אין מועמדים שנדחו'}
             </p>
             {tab === 'pending' && sources.length === 0 && (
-              <p style={{ fontSize: '12px', marginTop: '6px' }}>הוסף קבוצות פייסבוק ולחץ "סרוק עכשיו"</p>
+              <p style={{ fontSize: '12px', marginTop: '6px' }}>הוסף מקורות ולחץ "סרוק עכשיו"</p>
             )}
             {tab === 'pending' && sources.length > 0 && (
               <button onClick={scanAll} disabled={scanning} style={{ marginTop: '14px', padding: '8px 20px', borderRadius: '9px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
@@ -290,12 +361,10 @@ export default function LeadHuntingPage() {
 
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {/* Summary — the main content */}
                     <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px', lineHeight: 1.4 }}>
                       {c.summary || c.name || 'מועמד ללא סיכום'}
                     </p>
 
-                    {/* Meta row */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       {c.source_name && (
                         <span style={{ fontSize: '12px', color: 'var(--fg-3)', display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -318,7 +387,6 @@ export default function LeadHuntingPage() {
                       )}
                     </div>
 
-                    {/* Expanded raw text */}
                     {isExpanded && c.raw_text && (
                       <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', fontSize: '12px', color: 'var(--fg-2)', lineHeight: 1.6, maxHeight: '140px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
                         {c.raw_text.slice(0, 800)}

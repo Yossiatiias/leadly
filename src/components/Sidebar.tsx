@@ -13,7 +13,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/leads',          label: 'ניהול לידים',    icon: Users         },
   { href: '/appointments',   label: 'יומן תורים',     icon: CalendarDays  },
   { href: '/analytics',      label: 'ניתוח ביצועים',  icon: BarChart2     },
-  { href: '/lead-hunting',   label: 'ציד לידים',      icon: Crosshair     },
+  { href: '/lead-hunting',   label: 'צייד לידים',     icon: Crosshair     },
   { href: '/qa',             label: 'מידע ארגוני',    icon: BookOpen      },
   { href: '/connections',    label: 'חיבורים',        icon: Plug2         },
   { href: '/settings',       label: 'הגדרות עסק',     icon: Settings      },
