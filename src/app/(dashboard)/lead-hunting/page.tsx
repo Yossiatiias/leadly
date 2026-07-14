@@ -73,10 +73,30 @@ export default function LeadHuntingPage() {
   const [toast, setToast]             = useState('')
   const [tab, setTab]                 = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [expanded, setExpanded]       = useState<string | null>(null)
+  const [fetchingTitle, setFetchingTitle] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editLabel, setEditLabel]       = useState('')
   const [editUrl, setEditUrl]           = useState('')
   const [editType, setEditType]         = useState<SourceType>('facebook')
+
+  useEffect(() => {
+    if (!newUrl.trim() || newUrl.length < 8) return
+    const timer = setTimeout(async () => {
+      if (newLabel.trim()) return
+      setFetchingTitle(true)
+      try {
+        const res = await fetch('/api/lead-hunting/fetch-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: newUrl }),
+        })
+        const { title } = await res.json()
+        if (title && !newLabel.trim()) setNewLabel(title)
+      } catch {}
+      setFetchingTitle(false)
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [newUrl])
 
   useEffect(() => {
     async function load() {
@@ -343,8 +363,8 @@ export default function LeadHuntingPage() {
             <input
               value={newLabel}
               onChange={e => setNewLabel(e.target.value)}
-              placeholder={`שם ה${currentTypeMeta.label}`}
-              style={{ width: '140px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }}
+              placeholder={fetchingTitle ? 'מזהה שם...' : `שם ה${currentTypeMeta.label}`}
+              style={{ width: '140px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none', opacity: fetchingTitle ? 0.6 : 1 }}
             />
             <input
               value={newUrl}
