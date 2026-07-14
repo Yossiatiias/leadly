@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   const { data: biz } = await supabase.from('businesses').select('settings').eq('id', business_id).single()
   await supabase.from('businesses').update({
-    settings: { ...(biz?.settings || {}), scan_requested: true }
+    settings: { ...(biz?.settings || {}), scan_requested: true, scan_started_at: new Date().toISOString() }
   }).eq('id', business_id)
 
   return NextResponse.json({ ok: true })

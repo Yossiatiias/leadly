@@ -149,6 +149,16 @@ export default function LeadHuntingPage() {
       if (biz?.settings?.hunt_schedule) {
         setSchedule({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null, ...biz.settings.hunt_schedule })
       }
+      // restore scan pending state after page refresh
+      const startedAt: string | undefined = biz?.settings?.scan_started_at
+      const lastScanAt: string | undefined = biz?.settings?.hunt_schedule?.last_scan_at
+      const scanStillPending = biz?.settings?.scan_requested ||
+        (startedAt && (!lastScanAt || lastScanAt < startedAt))
+      if (scanStillPending && startedAt) {
+        setScanPending(true)
+        setScanStartedAt(startedAt)
+        setScanMsg('ממתין לתוצאות הסריקה...')
+      }
       await loadCandidates(profile.business_id)
     }
     load()
