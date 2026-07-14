@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Check, X, Crosshair, Play, ExternalLink, Clock, Trash2, MessageSquare } from 'lucide-react'
+import { Plus, Check, X, Crosshair, Play, ExternalLink, Clock, Trash2, MessageSquare, Pencil } from 'lucide-react'
 
 interface Candidate {
   id: string
@@ -73,6 +73,10 @@ export default function LeadHuntingPage() {
   const [toast, setToast]             = useState('')
   const [tab, setTab]                 = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [expanded, setExpanded]       = useState<string | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editLabel, setEditLabel]       = useState('')
+  const [editUrl, setEditUrl]           = useState('')
+  const [editType, setEditType]         = useState<SourceType>('facebook')
 
   useEffect(() => {
     async function load() {
@@ -124,17 +128,43 @@ export default function LeadHuntingPage() {
     await persistSettings({ hunt_schedule: final }, updated.enabled ? 'סריקה מתוזמנת הופעלה' : 'סריקה מתוזמנת הופסקה')
   }
 
+  function extractLabel(url: string): string {
+    try {
+      const u = new URL(url.startsWith('http') ? url : 'https://' + url)
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'groups' && parts[1]) return decodeURIComponent(parts[1]).replace(/-/g, ' ')
+      if (parts[0]?.startsWith('@')) return parts[0]
+      if (parts[0] && parts[0].length > 1) return decodeURIComponent(parts[0]).replace(/-/g, ' ')
+      return u.hostname.replace('www.', '')
+    } catch { return url.trim() }
+  }
+
   async function addSource() {
     if (!newUrl.trim()) return
-    let label = newLabel.trim()
-    if (!label) {
-      try { label = new URL(newUrl.startsWith('http') ? newUrl : 'https://' + newUrl).hostname }
-      catch { label = newUrl.trim() }
-    }
+    const label = newLabel.trim() || extractLabel(newUrl.trim())
     const updated: HuntSource[] = [...sources, { url: newUrl.trim(), label, type: newType }]
     setSources(updated)
     setNewUrl(''); setNewLabel('')
     await persistSettings({ hunt_sources: updated }, 'מקור נוסף ונשמר')
+  }
+
+  function startEdit(i: number) {
+    setEditingIndex(i)
+    setEditLabel(sources[i].label)
+    setEditUrl(sources[i].url)
+    setEditType(sources[i].type)
+  }
+
+  async function saveEdit() {
+    if (editingIndex === null) return
+    const s = sources[editingIndex]
+    const updated = sources.map((src, i) => i === editingIndex
+      ? { url: editUrl.trim() || src.url, label: editLabel.trim() || extractLabel(editUrl.trim()) || src.label, type: editType }
+      : src
+    )
+    setSources(updated)
+    setEditingIndex(null)
+    await persistSettings({ hunt_sources: updated }, 'מקור עודכן')
   }
 
   async function removeSource(i: number) {
@@ -237,12 +267,46 @@ export default function LeadHuntingPage() {
           ) : (
             sources.map((s, i) => {
               const meta = getTypeMeta(s.type)
+              const isEditing = editingIndex === i
+
+              if (isEditing) {
+                return (
+                  <div key={i} style={{ background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', gap: '5px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                      {SOURCE_TYPES.map(t => (
+                        <button key={t.value} onClick={() => setEditType(t.value)} style={{
+                          padding: '3px 10px', borderRadius: '20px', border: '1px solid',
+                          borderColor: editType === t.value ? t.color : 'var(--border-default)',
+                          background: editType === t.value ? t.color + '18' : 'var(--bg-surface)',
+                          color: editType === t.value ? t.color : 'var(--fg-3)',
+                          fontFamily: 'inherit', fontSize: '11px', cursor: 'pointer',
+                          fontWeight: editType === t.value ? 600 : 400,
+                        }}>
+                          {t.emoji} {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input value={editLabel} onChange={e => setEditLabel(e.target.value)} placeholder="שם" style={{ width: '130px', padding: '6px 9px', borderRadius: '7px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }} />
+                      <input value={editUrl} onChange={e => setEditUrl(e.target.value)} dir="ltr" placeholder="URL" style={{ flex: 1, padding: '6px 9px', borderRadius: '7px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }} />
+                      <button onClick={saveEdit} style={{ padding: '6px 12px', borderRadius: '7px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>שמור</button>
+                      <button onClick={() => setEditingIndex(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', padding: '4px', flexShrink: 0 }}><X size={14} /></button>
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: meta.color, background: meta.color + '18', borderRadius: '5px', padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>{meta.emoji} {meta.label}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', whiteSpace: 'nowrap' }}>{s.url}</span>
-                  <button onClick={() => removeSource(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>{s.url}</div>
+                  </div>
+                  <button onClick={() => startEdit(i)} title="ערוך" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
+                    <Pencil size={13} />
+                  </button>
+                  <button onClick={() => removeSource(i)} title="הסר" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
                     <X size={14} />
                   </button>
                 </div>
