@@ -30,16 +30,15 @@ interface HuntSource {
 interface HuntSchedule {
   enabled: boolean
   interval_hours: number
+  scan_hour: number
   next_scan_at: string | null
   last_scan_at: string | null
 }
 
-const SCHEDULE_OPTIONS = [
-  { label: 'כל יום', hours: 24 },
-  { label: 'פעמיים ביום', hours: 12 },
-  { label: 'כל שעתיים', hours: 2 },
-  { label: 'כל שבוע', hours: 168 },
-]
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
+  value: i,
+  label: `${String(i).padStart(2, '0')}:00`,
+}))
 
 const SOURCE_TYPES: { value: SourceType; label: string; emoji: string; placeholder: string }[] = [
   { value: 'facebook',  label: 'פייסבוק',   emoji: '👥', placeholder: 'https://facebook.com/groups/...' },
@@ -60,7 +59,7 @@ export default function LeadHuntingPage() {
   const [newUrl, setNewUrl] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [newType, setNewType] = useState<SourceType>('facebook')
-  const [schedule, setSchedule] = useState<HuntSchedule>({ enabled: false, interval_hours: 24, next_scan_at: null, last_scan_at: null })
+  const [schedule, setSchedule] = useState<HuntSchedule>({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null })
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [showConfig, setShowConfig] = useState(false)
@@ -83,7 +82,10 @@ export default function LeadHuntingPage() {
         type: s.type || 'facebook',
       }))
       setSources(raw)
-      if (biz?.settings?.hunt_schedule) setSchedule(biz.settings.hunt_schedule)
+      if (biz?.settings?.hunt_schedule) {
+        const s = biz.settings.hunt_schedule
+        setSchedule({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null, ...s })
+      }
       await loadCandidates(profile.business_id)
     }
     load()
@@ -113,9 +115,14 @@ export default function LeadHuntingPage() {
   }
 
   async function saveSchedule(updated: HuntSchedule) {
-    const next = updated.enabled
-      ? new Date(Date.now() + updated.interval_hours * 60 * 60 * 1000).toISOString()
-      : null
+    let next: string | null = null
+    if (updated.enabled) {
+      const now = new Date()
+      const candidate = new Date()
+      candidate.setHours(updated.scan_hour, 0, 0, 0)
+      if (candidate <= now) candidate.setDate(candidate.getDate() + 1)
+      next = candidate.toISOString()
+    }
     const final = { ...updated, next_scan_at: next }
     setSchedule(final)
     await persistSettings({ hunt_schedule: final }, updated.enabled ? 'סריקה מתוזמנת הופעלה' : 'סריקה מתוזמנת הופסקה')
@@ -302,19 +309,24 @@ export default function LeadHuntingPage() {
             </div>
 
             {schedule.enabled && (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                {SCHEDULE_OPTIONS.map(opt => (
-                  <button key={opt.hours} onClick={() => saveSchedule({ ...schedule, interval_hours: opt.hours })} style={{
-                    padding: '5px 12px', borderRadius: '20px', border: '1px solid',
-                    borderColor: schedule.interval_hours === opt.hours ? 'var(--brand)' : 'var(--border-default)',
-                    background: schedule.interval_hours === opt.hours ? 'var(--brand-soft)' : 'var(--bg-surface)',
-                    color: schedule.interval_hours === opt.hours ? 'var(--brand)' : 'var(--fg-3)',
-                    fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
-                    fontWeight: schedule.interval_hours === opt.hours ? 600 : 400,
-                  }}>
-                    {opt.label}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--fg-3)', whiteSpace: 'nowrap' }}>שעת סריקה יומית:</span>
+                <select
+                  value={schedule.scan_hour}
+                  onChange={e => saveSchedule({ ...schedule, scan_hour: Number(e.target.value) })}
+                  style={{
+                    padding: '5px 10px', borderRadius: '8px',
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-surface)', color: 'var(--fg-1)',
+                    fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+                    cursor: 'pointer', direction: 'ltr',
+                  }}
+                >
+                  {HOUR_OPTIONS.map(h => (
+                    <option key={h.value} value={h.value}>{h.label}</option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>בכל יום</span>
               </div>
             )}
 
