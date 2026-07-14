@@ -300,7 +300,11 @@ export default function LeadHuntingPage() {
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: meta.color, background: meta.color + '18', borderRadius: '5px', padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>{meta.emoji} {meta.label}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label || extractLabel(s.url)}</div>
+                    {s.label ? (
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</div>
+                    ) : (
+                      <button onClick={() => startEdit(i)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', color: 'var(--warning)', fontFamily: 'inherit', fontWeight: 600 }}>+ הוסף שם</button>
+                    )}
                     <div style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>{s.url}</div>
                   </div>
                   <button onClick={() => startEdit(i)} title="ערוך" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
@@ -350,11 +354,11 @@ export default function LeadHuntingPage() {
               dir="ltr"
               style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }}
             />
-            <button onClick={addSource} disabled={saving || !newUrl.trim()} style={{
+            <button onClick={addSource} disabled={saving || !newUrl.trim() || !newLabel.trim()} style={{
               padding: '8px 14px', borderRadius: '8px', border: 'none',
-              background: saving || !newUrl.trim() ? 'var(--brand-soft)' : 'var(--brand)',
-              color: saving || !newUrl.trim() ? 'var(--brand)' : 'white',
-              fontFamily: 'inherit', fontSize: '12px', cursor: saving || !newUrl.trim() ? 'default' : 'pointer',
+              background: saving || !newUrl.trim() || !newLabel.trim() ? 'var(--brand-soft)' : 'var(--brand)',
+              color: saving || !newUrl.trim() || !newLabel.trim() ? 'var(--brand)' : 'white',
+              fontFamily: 'inherit', fontSize: '12px', cursor: saving || !newUrl.trim() || !newLabel.trim() ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap',
             }}>
               <Plus size={13} /> {saving ? 'שומר...' : 'הוסף'}
