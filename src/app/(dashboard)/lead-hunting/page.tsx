@@ -230,24 +230,22 @@ export default function LeadHuntingPage() {
   }
 
   async function scanAll() {
-    if (!businessId || sources.length === 0) return
-    setScanning(true)
-    setScanMsg('')
+    if (!businessId || sources.length === 0 || scanPending) return
+    setScanPending(true)
     setScanResult(null)
+    setScanMsg('שולח בקשה...')
     try {
-      await fetch('/api/lead-hunting/scan-request', {
+      const res = await fetch('/api/lead-hunting/scan-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: businessId }),
       })
-      const now = new Date().toISOString()
-      setScanStartedAt(now)
-      setScanPending(true)
-      setScanMsg('הבקשה נשלחה — ממתין לתוצאות הסריקה...')
+      if (!res.ok) throw new Error()
+      setScanStartedAt(new Date().toISOString())
+      setScanMsg('ממתין לתוצאות הסריקה...')
     } catch {
+      setScanPending(false)
       setScanMsg('שגיאה בשליחת הבקשה — נסה שוב.')
-    } finally {
-      setScanning(false)
     }
   }
 
@@ -480,10 +478,10 @@ export default function LeadHuntingPage() {
 
               <button
               onClick={scanAll}
-              disabled={scanning || scanPending || sources.length === 0}
-              style={{ width: '100%', padding: '10px', borderRadius: '9px', border: 'none', background: scanning || scanPending || sources.length === 0 ? 'var(--brand-soft)' : 'var(--brand)', color: scanning || scanPending || sources.length === 0 ? 'var(--brand)' : 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanning || scanPending || sources.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', marginBottom: '10px' }}
+              disabled={scanPending || sources.length === 0}
+              style={{ width: '100%', padding: '10px', borderRadius: '9px', border: 'none', background: scanPending || sources.length === 0 ? 'var(--brand-soft)' : 'var(--brand)', color: scanPending || sources.length === 0 ? 'var(--brand)' : 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanPending || sources.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', marginBottom: '10px' }}
             >
-              <Play size={14} /> {scanning ? 'שולח...' : scanPending ? 'סורק...' : 'סרוק עכשיו'}
+              <Play size={14} /> {scanPending ? 'סורק...' : 'סרוק עכשיו'}
             </button>
 
             {scanMsg && !scanResult && (
