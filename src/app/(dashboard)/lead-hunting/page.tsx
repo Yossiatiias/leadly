@@ -218,7 +218,7 @@ export default function LeadHuntingPage() {
           </div>
           <div>
             <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--fg-1)', margin: 0 }}>צייד לידים</h1>
-            <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '2px 0 0' }}>סוכן AI שמנטר מקורות ומזהה מי מחפש טיפול שיניים</p>
+            <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '2px 0 0' }}>סוכן AI שמנטר קבוצות פייסבוק ומזהה מי מחפש טיפול שיניים</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
