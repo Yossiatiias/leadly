@@ -149,19 +149,19 @@ export default function LeadHuntingPage() {
 
   async function scanAll() {
     if (!businessId || sources.length === 0) return
-    const nonFacebook = sources.filter(s => s.type && s.type !== 'facebook')
-    const facebookCount = sources.length - nonFacebook.length
-
-    // Facebook groups are scanned by leadly-scout (local/server Node.js process)
-    if (facebookCount > 0 && nonFacebook.length === 0) {
-      setScanMsg(`קבוצות פייסבוק נסרקות אוטומטית על ידי leadly-scout — הלידים יופיעו כאן לאחר הסריקה הבאה.`)
-      return
-    }
-
-    // Website / Instagram / Other sources — scan via Vercel (coming soon)
-    if (nonFacebook.length > 0) {
-      setScanMsg('סריקת אתרים ופורומים — בקרוב.')
-      return
+    setScanning(true)
+    setScanMsg('')
+    try {
+      await fetch('/api/lead-hunting/scan-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId }),
+      })
+      setScanMsg('בקשת הסריקה נשלחה — leadly-scout יסרוק בדקות הקרובות והלידים יופיעו כאן.')
+    } catch {
+      setScanMsg('שגיאה בשליחת הבקשה — נסה שוב.')
+    } finally {
+      setScanning(false)
     }
   }
 
