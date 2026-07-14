@@ -40,11 +40,11 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
   label: `${String(i).padStart(2, '0')}:00`,
 }))
 
-const SOURCE_TYPES: { value: SourceType; label: string; emoji: string; placeholder: string }[] = [
-  { value: 'facebook',  label: 'פייסבוק',  emoji: '👥', placeholder: 'https://facebook.com/groups/...' },
-  { value: 'instagram', label: 'אינסטגרם', emoji: '📷', placeholder: 'https://instagram.com/...' },
-  { value: 'website',   label: 'אתר',      emoji: '🌐', placeholder: 'https://example.com' },
-  { value: 'other',     label: 'אחר',      emoji: '📋', placeholder: 'URL או שם המאגר' },
+const SOURCE_TYPES: { value: SourceType; label: string; emoji: string; color: string; placeholder: string }[] = [
+  { value: 'facebook',  label: 'פייסבוק',  emoji: '◉', color: '#1877f2', placeholder: 'https://facebook.com/groups/...' },
+  { value: 'instagram', label: 'אינסטגרם', emoji: '◉', color: '#c13584', placeholder: 'https://instagram.com/...' },
+  { value: 'website',   label: 'אתר',      emoji: '◉', color: '#16a34a', placeholder: 'https://example.com' },
+  { value: 'other',     label: 'אחר',      emoji: '◉', color: '#6b7280', placeholder: 'URL או שם המאגר' },
 ]
 
 function getTypeMeta(type: SourceType) {
@@ -238,10 +238,9 @@ export default function LeadHuntingPage() {
             sources.map((s, i) => {
               const meta = getTypeMeta(s.type)
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '14px', flexShrink: 0 }}>{meta.emoji}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--fg-4)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '5px', padding: '2px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>{meta.label}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: meta.color, background: meta.color + '18', borderRadius: '5px', padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>{meta.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
                   <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', whiteSpace: 'nowrap' }}>{s.url}</span>
                   <button onClick={() => removeSource(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
                     <X size={14} />
@@ -260,14 +259,14 @@ export default function LeadHuntingPage() {
           <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
             {SOURCE_TYPES.map(t => (
               <button key={t.value} onClick={() => setNewType(t.value)} style={{
-                padding: '4px 11px', borderRadius: '20px', border: '1px solid',
-                borderColor: newType === t.value ? 'var(--brand)' : 'var(--border-default)',
-                background: newType === t.value ? 'var(--brand-soft)' : 'var(--bg-surface)',
-                color: newType === t.value ? 'var(--brand)' : 'var(--fg-3)',
+                padding: '4px 12px', borderRadius: '20px', border: '1px solid',
+                borderColor: newType === t.value ? t.color : 'var(--border-default)',
+                background: newType === t.value ? t.color + '18' : 'var(--bg-surface)',
+                color: newType === t.value ? t.color : 'var(--fg-3)',
                 fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
                 fontWeight: newType === t.value ? 600 : 400,
               }}>
-                {t.emoji} {t.label}
+                {t.label}
               </button>
             ))}
           </div>
@@ -332,14 +331,15 @@ export default function LeadHuntingPage() {
                   ))}
                 </select>
 
-                <div style={{ fontSize: '11px', color: 'var(--fg-4)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--fg-4)', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
                   {schedule.next_scan_at && (
-                    <span>⏰ הבאה: {new Date(schedule.next_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>סריקה הבאה: {new Date(schedule.next_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   )}
                   {schedule.last_scan_at && (
-                    <span>✓ אחרונה: {new Date(schedule.last_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>סריקה אחרונה: {new Date(schedule.last_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   )}
                 </div>
+                <p style={{ fontSize: '11px', color: 'var(--fg-4)', lineHeight: 1.5 }}>מומלץ לבחור שעה שבה המחשב בדרך כלל דולק</p>
               </>
             )}
           </div>
@@ -350,22 +350,22 @@ export default function LeadHuntingPage() {
             <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '0 0 12px' }}>שלח בקשה לסריקה עכשיו</p>
 
             {scanMsg && (
-              <div style={{ fontSize: '12px', color: 'var(--info)', background: 'var(--info-soft)', border: '1px solid var(--info-border)', borderRadius: '8px', padding: '8px 10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Clock size={12} /> {scanMsg}
-              </div>
+              <p style={{ fontSize: '12px', color: 'var(--info)', marginBottom: '10px' }}>{scanMsg}</p>
             )}
 
             <button
               onClick={scanAll}
               disabled={scanning || sources.length === 0}
-              style={{ width: '100%', padding: '10px', borderRadius: '9px', border: 'none', background: scanning || sources.length === 0 ? 'var(--brand-soft)' : 'var(--brand)', color: scanning || sources.length === 0 ? 'var(--brand)' : 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanning || sources.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}
+              style={{ width: '100%', padding: '10px', borderRadius: '9px', border: 'none', background: scanning || sources.length === 0 ? 'var(--brand-soft)' : 'var(--brand)', color: scanning || sources.length === 0 ? 'var(--brand)' : 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanning || sources.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', marginBottom: '10px' }}
             >
               <Play size={14} /> {scanning ? 'שולח בקשה...' : 'סרוק עכשיו'}
             </button>
 
-            {sources.length === 0 && (
-              <p style={{ fontSize: '11px', color: 'var(--fg-4)', textAlign: 'center', marginTop: '8px' }}>הוסף מקור כדי להתחיל</p>
-            )}
+            <p style={{ fontSize: '11px', color: 'var(--fg-4)', lineHeight: 1.5 }}>
+              {sources.length === 0
+                ? 'הוסף מקור כדי להתחיל'
+                : 'שימוש תכוף עלול לגרום לחסימה — מומלץ עד פעמיים ביום'}
+            </p>
           </div>
 
         </div>
