@@ -73,7 +73,10 @@ export default function LeadHuntingPage() {
   const [toast, setToast]             = useState('')
   const [tab, setTab]                 = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [expanded, setExpanded]       = useState<string | null>(null)
-  const [fetchingTitle, setFetchingTitle] = useState(false)
+  const [fetchingTitle, setFetchingTitle]   = useState(false)
+  const [scanPending, setScanPending]       = useState(false)
+  const [scanStartedAt, setScanStartedAt]   = useState<string | null>(null)
+  const [scanResult, setScanResult]         = useState<{ at: string; newLeads: number } | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editLabel, setEditLabel]       = useState('')
   const [editUrl, setEditUrl]           = useState('')
@@ -105,6 +108,31 @@ export default function LeadHuntingPage() {
     }, 700)
     return () => clearTimeout(timer)
   }, [newUrl])
+
+  useEffect(() => {
+    if (!scanPending || !businessId || !scanStartedAt) return
+    const interval = setInterval(async () => {
+      const { data: biz } = await supabase.from('businesses').select('settings').eq('id', businessId).single()
+      const lastScanAt = biz?.settings?.hunt_schedule?.last_scan_at
+      if (lastScanAt && lastScanAt > scanStartedAt) {
+        clearInterval(interval)
+        clearTimeout(timeout)
+        setScanPending(false)
+        const { data: newCands } = await supabase
+          .from('lead_candidates').select('id')
+          .eq('business_id', businessId)
+          .gt('found_at', scanStartedAt)
+        setScanResult({ at: lastScanAt, newLeads: newCands?.length || 0 })
+        await loadCandidates(businessId)
+      }
+    }, 30000)
+    const timeout = setTimeout(() => {
+      clearInterval(interval)
+      setScanPending(false)
+      setScanMsg('הסריקה לא הסתיימה בזמן הצפוי — ייתכן שהמחשב לא דולק או leadly-scout לא רץ')
+    }, 20 * 60 * 1000)
+    return () => { clearInterval(interval); clearTimeout(timeout) }
+  }, [scanPending, businessId, scanStartedAt])
 
   useEffect(() => {
     async function load() {
@@ -205,13 +233,17 @@ export default function LeadHuntingPage() {
     if (!businessId || sources.length === 0) return
     setScanning(true)
     setScanMsg('')
+    setScanResult(null)
     try {
       await fetch('/api/lead-hunting/scan-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: businessId }),
       })
-      setScanMsg('הבקשה נשלחה — הסריקה תתחיל בדקות הקרובות.')
+      const now = new Date().toISOString()
+      setScanStartedAt(now)
+      setScanPending(true)
+      setScanMsg('הבקשה נשלחה — ממתין לתוצאות הסריקה...')
     } catch {
       setScanMsg('שגיאה בשליחת הבקשה — נסה שוב.')
     } finally {
@@ -446,17 +478,31 @@ export default function LeadHuntingPage() {
             <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>⚡ סריקה מיידית</p>
             <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '0 0 12px' }}>שלח בקשה לסריקה עכשיו</p>
 
-            {scanMsg && (
-              <p style={{ fontSize: '12px', color: 'var(--info)', marginBottom: '10px' }}>{scanMsg}</p>
+              <button
+              onClick={scanAll}
+              disabled={scanning || scanPending || sources.length === 0}
+              style={{ width: '100%', padding: '10px', borderRadius: '9px', border: 'none', background: scanning || scanPending || sources.length === 0 ? 'var(--brand-soft)' : 'var(--brand)', color: scanning || scanPending || sources.length === 0 ? 'var(--brand)' : 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanning || scanPending || sources.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', marginBottom: '10px' }}
+            >
+              <Play size={14} /> {scanning ? 'שולח...' : scanPending ? 'סורק...' : 'סרוק עכשיו'}
+            </button>
+
+            {scanMsg && !scanResult && (
+              <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginBottom: '8px', lineHeight: 1.5 }}>{scanMsg}</p>
             )}
 
-            <button
-              onClick={scanAll}
-              disabled={scanning || sources.length === 0}
-              style={{ width: '100%', padding: '10px', borderRadius: '9px', border: 'none', background: scanning || sources.length === 0 ? 'var(--brand-soft)' : 'var(--brand)', color: scanning || sources.length === 0 ? 'var(--brand)' : 'white', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: scanning || sources.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', marginBottom: '10px' }}
-            >
-              <Play size={14} /> {scanning ? 'שולח בקשה...' : 'סרוק עכשיו'}
-            </button>
+            {scanResult && (
+              <div style={{ background: 'var(--bg-sunken)', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px' }}>
+                <p style={{ fontSize: '12px', fontWeight: 700, color: scanResult.newLeads > 0 ? 'var(--success)' : 'var(--fg-2)', margin: '0 0 5px' }}>
+                  {scanResult.newLeads > 0 ? `✅ נמצאו ${scanResult.newLeads} לידים חדשים` : '✅ הסריקה הושלמה — לא נמצאו לידים חדשים'}
+                </p>
+                <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: '0 0 2px' }}>
+                  🕐 {new Date(scanResult.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  📡 {sources.map(s => s.label || s.url).join(' · ')}
+                </p>
+              </div>
+            )}
 
             <p style={{ fontSize: '11px', color: 'var(--fg-4)', lineHeight: 1.5 }}>
               {sources.length === 0
