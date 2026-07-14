@@ -142,7 +142,7 @@ export default function LeadHuntingPage() {
 
   async function scanAll() {
     if (!businessId || sources.length === 0) return
-    const nonFacebook = sources.filter(s => s.type !== 'facebook')
+    const nonFacebook = sources.filter(s => s.type && s.type !== 'facebook')
     const facebookCount = sources.length - nonFacebook.length
 
     // Facebook groups are scanned by leadly-scout (local/server Node.js process)
