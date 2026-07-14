@@ -84,6 +84,7 @@ export default function LeadHuntingPage() {
     const timer = setTimeout(async () => {
       if (newLabel.trim()) return
       setFetchingTitle(true)
+      let detected: string | null = null
       try {
         const res = await fetch('/api/lead-hunting/fetch-title', {
           method: 'POST',
@@ -91,8 +92,15 @@ export default function LeadHuntingPage() {
           body: JSON.stringify({ url: newUrl }),
         })
         const { title } = await res.json()
-        if (title && !newLabel.trim()) setNewLabel(title)
+        detected = title || null
       } catch {}
+      if (!detected) {
+        try {
+          const u = new URL(newUrl.startsWith('http') ? newUrl : 'https://' + newUrl)
+          detected = u.hostname.replace('www.', '')
+        } catch {}
+      }
+      if (detected && !newLabel.trim()) setNewLabel(detected)
       setFetchingTitle(false)
     }, 700)
     return () => clearTimeout(timer)
