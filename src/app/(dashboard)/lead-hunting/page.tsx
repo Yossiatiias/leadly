@@ -281,15 +281,63 @@ export default function LeadHuntingPage() {
         </div>
       </div>
 
+      {/* ── Add source card (top) ── */}
+      <div style={{ ...card, marginBottom: '16px' }}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 12px' }}>➕ הוסף מקור לסריקה</p>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+          {SOURCE_TYPES.map(t => (
+            <button key={t.value} onClick={() => setNewType(t.value)} style={{
+              padding: '4px 14px', borderRadius: '20px', border: '1px solid',
+              borderColor: newType === t.value ? t.color : 'var(--border-default)',
+              background: newType === t.value ? t.color + '18' : 'var(--bg-surface)',
+              color: newType === t.value ? t.color : 'var(--fg-3)',
+              fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
+              fontWeight: newType === t.value ? 600 : 400,
+            }}>
+              {t.emoji} {t.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            placeholder={fetchingTitle ? 'מזהה שם...' : `שם ה${currentTypeMeta.label}`}
+            style={{ width: '180px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none', opacity: fetchingTitle ? 0.6 : 1 }}
+          />
+          <input
+            value={newUrl}
+            onChange={e => {
+              const val = e.target.value
+              setNewUrl(val)
+              if (val.includes('facebook.com')) setNewType('facebook')
+              else if (val.includes('instagram.com')) setNewType('instagram')
+              else if (val.length > 5) setNewType('website')
+            }}
+            onKeyDown={e => e.key === 'Enter' && addSource()}
+            placeholder={currentTypeMeta.placeholder}
+            dir="ltr"
+            style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }}
+          />
+          <button onClick={addSource} disabled={saving || !newUrl.trim() || !newLabel.trim()} style={{
+            padding: '8px 18px', borderRadius: '8px', border: 'none',
+            background: saving || !newUrl.trim() || !newLabel.trim() ? 'var(--brand-soft)' : 'var(--brand)',
+            color: saving || !newUrl.trim() || !newLabel.trim() ? 'var(--brand)' : 'white',
+            fontFamily: 'inherit', fontSize: '12px', fontWeight: 600, cursor: saving || !newUrl.trim() || !newLabel.trim() ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap',
+          }}>
+            <Plus size={13} /> {saving ? 'שומר...' : 'הוסף'}
+          </button>
+        </div>
+      </div>
+
       {/* Two-column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', marginBottom: '20px' }}>
 
         {/* ── Sources card ── */}
         <div style={card}>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>📡 מקורות לסריקה</p>
-          <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '0 0 14px' }}>הקבוצות והאתרים שהסוכן עוקב אחריהם</p>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 14px' }}>📡 מאגר המקורות</p>
 
-          {/* Source list */}
           {sources.length === 0 ? (
             <p style={{ fontSize: '12px', color: 'var(--fg-4)', padding: '12px 0' }}>עדיין לא הוספת מקורות</p>
           ) : (
@@ -345,59 +393,6 @@ export default function LeadHuntingPage() {
               )
             })
           )}
-
-          {/* Divider */}
-          <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '14px 0' }} />
-
-          {/* Add source */}
-          <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg-2)', margin: '0 0 8px' }}>הוסף מקור</p>
-
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
-            {SOURCE_TYPES.map(t => (
-              <button key={t.value} onClick={() => setNewType(t.value)} style={{
-                padding: '4px 12px', borderRadius: '20px', border: '1px solid',
-                borderColor: newType === t.value ? t.color : 'var(--border-default)',
-                background: newType === t.value ? t.color + '18' : 'var(--bg-surface)',
-                color: newType === t.value ? t.color : 'var(--fg-3)',
-                fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
-                fontWeight: newType === t.value ? 600 : 400,
-              }}>
-                {t.emoji} {t.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              value={newLabel}
-              onChange={e => setNewLabel(e.target.value)}
-              placeholder={fetchingTitle ? 'מזהה שם...' : `שם ה${currentTypeMeta.label}`}
-              style={{ width: '140px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none', opacity: fetchingTitle ? 0.6 : 1 }}
-            />
-            <input
-              value={newUrl}
-              onChange={e => {
-                const val = e.target.value
-                setNewUrl(val)
-                if (val.includes('facebook.com')) setNewType('facebook')
-                else if (val.includes('instagram.com')) setNewType('instagram')
-                else if (val.length > 5) setNewType('website')
-              }}
-              onKeyDown={e => e.key === 'Enter' && addSource()}
-              placeholder={currentTypeMeta.placeholder}
-              dir="ltr"
-              style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }}
-            />
-            <button onClick={addSource} disabled={saving || !newUrl.trim() || !newLabel.trim()} style={{
-              padding: '8px 14px', borderRadius: '8px', border: 'none',
-              background: saving || !newUrl.trim() || !newLabel.trim() ? 'var(--brand-soft)' : 'var(--brand)',
-              color: saving || !newUrl.trim() || !newLabel.trim() ? 'var(--brand)' : 'white',
-              fontFamily: 'inherit', fontSize: '12px', cursor: saving || !newUrl.trim() || !newLabel.trim() ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap',
-            }}>
-              <Plus size={13} /> {saving ? 'שומר...' : 'הוסף'}
-            </button>
-          </div>
         </div>
 
         {/* ── Right column: Schedule + Scan ── */}
