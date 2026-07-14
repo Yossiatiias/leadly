@@ -348,7 +348,13 @@ export default function LeadHuntingPage() {
             />
             <input
               value={newUrl}
-              onChange={e => setNewUrl(e.target.value)}
+              onChange={e => {
+                const val = e.target.value
+                setNewUrl(val)
+                if (val.includes('facebook.com')) setNewType('facebook')
+                else if (val.includes('instagram.com')) setNewType('instagram')
+                else if (val.length > 5) setNewType('website')
+              }}
               onKeyDown={e => e.key === 'Enter' && addSource()}
               placeholder={currentTypeMeta.placeholder}
               dir="ltr"
