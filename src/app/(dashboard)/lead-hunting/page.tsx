@@ -41,10 +41,10 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
 }))
 
 const SOURCE_TYPES: { value: SourceType; label: string; emoji: string; color: string; placeholder: string }[] = [
-  { value: 'facebook',  label: 'פייסבוק',  emoji: '◉', color: '#1877f2', placeholder: 'https://facebook.com/groups/...' },
-  { value: 'instagram', label: 'אינסטגרם', emoji: '◉', color: '#c13584', placeholder: 'https://instagram.com/...' },
-  { value: 'website',   label: 'אתר',      emoji: '◉', color: '#16a34a', placeholder: 'https://example.com' },
-  { value: 'other',     label: 'אחר',      emoji: '◉', color: '#6b7280', placeholder: 'URL או שם המאגר' },
+  { value: 'facebook',  label: 'פייסבוק',  emoji: '📘', color: '#1877f2', placeholder: 'https://facebook.com/groups/...' },
+  { value: 'instagram', label: 'אינסטגרם', emoji: '📷', color: '#c13584', placeholder: 'https://instagram.com/...' },
+  { value: 'website',   label: 'אתר',      emoji: '🌐', color: '#16a34a', placeholder: 'https://example.com' },
+  { value: 'other',     label: 'אחר',      emoji: '📌', color: '#6b7280', placeholder: 'URL או שם המאגר' },
 ]
 
 function getTypeMeta(type: SourceType) {
@@ -228,7 +228,7 @@ export default function LeadHuntingPage() {
 
         {/* ── Sources card ── */}
         <div style={card}>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>מקורות לסריקה</p>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>📡 מקורות לסריקה</p>
           <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '0 0 14px' }}>הקבוצות והאתרים שהסוכן עוקב אחריהם</p>
 
           {/* Source list */}
@@ -239,7 +239,7 @@ export default function LeadHuntingPage() {
               const meta = getTypeMeta(s.type)
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: meta.color, background: meta.color + '18', borderRadius: '5px', padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>{meta.label}</span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: meta.color, background: meta.color + '18', borderRadius: '5px', padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>{meta.emoji} {meta.label}</span>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
                   <span style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', whiteSpace: 'nowrap' }}>{s.url}</span>
                   <button onClick={() => removeSource(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
@@ -266,7 +266,7 @@ export default function LeadHuntingPage() {
                 fontFamily: 'inherit', fontSize: '12px', cursor: 'pointer',
                 fontWeight: newType === t.value ? 600 : 400,
               }}>
-                {t.label}
+                {t.emoji} {t.label}
               </button>
             ))}
           </div>
@@ -303,7 +303,7 @@ export default function LeadHuntingPage() {
 
           {/* Schedule card */}
           <div style={card}>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>תזמון אוטומטי</p>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>⏰ תזמון אוטומטי</p>
             <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '0 0 14px' }}>הסוכן יסרוק כל יום בשעה שתבחר</p>
 
             {/* Toggle */}
@@ -346,7 +346,7 @@ export default function LeadHuntingPage() {
 
           {/* Scan now card */}
           <div style={card}>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>סריקה מיידית</p>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 4px' }}>⚡ סריקה מיידית</p>
             <p style={{ fontSize: '12px', color: 'var(--fg-4)', margin: '0 0 12px' }}>שלח בקשה לסריקה עכשיו</p>
 
             {scanMsg && (
