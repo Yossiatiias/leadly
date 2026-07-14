@@ -299,10 +299,7 @@ export default function LeadHuntingPage() {
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-sunken)', borderRadius: '8px', marginBottom: '6px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: meta.color, background: meta.color + '18', borderRadius: '5px', padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>{meta.emoji} {meta.label}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--fg-4)', direction: 'ltr', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>{s.url}</div>
-                  </div>
+                  <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
                   <button onClick={() => startEdit(i)} title="ערוך" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', flexShrink: 0, padding: '2px' }}>
                     <Pencil size={13} />
                   </button>
