@@ -201,6 +201,27 @@ export function extractMentionedDoctorId(
   return null
 }
 
+// ─── רופא/ה שהלקוח **עצמו** ביקש בשם — לא שה-LLM הזכיר/בחר מיוזמתו ──────────
+// (יוסי, 31/08): ההבחנה הזו קריטית ואסור לנחש אותה מתוך טקסט תשובת ה-AI —
+// היא חייבת להתבסס על מי בפועל כתב את השם. נבדל בכוונה מ-extractMentionedDoctorId
+// למעלה (סורקת רק הודעות **יוצאות** של הבוט — "מה כבר הובטח") — כאן סורקים
+// רק הודעות **נכנסות** מהלקוח. אם הלקוח מעולם לא הזכיר שם רופא בעצמו,
+// כל אזכור שם בהצעה הוא יוזמה של המודל, לא בקשה שלו — מותר לתקן אותו
+// בשקט בלי להעביר לנציג (ראה השימוש ב-ai-respond/route.ts)
+export function extractCustomerRequestedDoctorId(
+  messages: { direction: string; content: string }[],
+  doctorsById: Record<string, string>,
+): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.direction !== 'inbound') continue
+    for (const [uid, name] of Object.entries(doctorsById)) {
+      if (name && m.content.includes(name)) return uid
+    }
+  }
+  return null
+}
+
 // כינויים נפוצים לאותו טיפול: לקוחות מתארים טיפול במילים יומיומיות
 // ("יישור שיניים") שלא בהכרח מכילות מילולית את שם השירות הפורמלי שהעסק
 // הגדיר ברשימת השירותים שלו ("אורתודנטיה"). קרה בפועל: אי-ההתאמה גרמה

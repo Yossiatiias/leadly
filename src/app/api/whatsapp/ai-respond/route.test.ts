@@ -707,6 +707,130 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     })
   })
 
+  // ─── תיקון ממוקד: LLM מזכיר רופא שגוי בהצעה, כשיש רופא אחר מוסמך+פנוי ──────
+  // (יוסי, 31/08) — ההבחנה הקריטית: האם הלקוח עצמו ביקש רופא ספציפי
+  // (בהודעה נכנסת), או שה-LLM הזכיר/בחר את השם מיוזמתו
+  describe('offer-grounding corrects an LLM-mentioned wrong doctor name, but never silently swaps a doctor the customer explicitly asked for', () => {
+    function seedTwoDoctorsOneBusy() {
+      fakeDb.seed('profiles', [
+        { id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+        { id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' },
+      ])
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+        docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+      const tuesday = '2026-09-01'
+      fakeDb.seed('appointments', [
+        { id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
+      ])
+      return tuesday
+    }
+
+    // Regression test 1
+    it('offers doctor B (the one actually free) instead of escalating, when the customer never asked for a specific doctor and the LLM just happened to mention the busy one', async () => {
+      seedBaseline()
+      const tuesday = seedTwoDoctorsOneBusy()
+      // הלקוח לא מזכיר שום שם רופא בעצמו
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'רוצה תור להשתלות ביום שלישי ב-10:00',
+      }]
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00 עם ד"ר גבי סמל. האם זה מתאים לך? 😊\nLEAD:{"reason":"השתלות"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'רוצה תור להשתלות ביום שלישי ב-10:00',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      // התור עדיין מוצע (לא נחסם/מוסלם) — עם השם המתוקן
+      expect(sendCall!.body.message).toContain('10:00')
+      expect(sendCall!.body.message).toContain('ד"ר עלא יונס')
+      expect(sendCall!.body.message).not.toContain('ד"ר גבי סמל')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // Regression test 2
+    it('does NOT silently substitute doctor B when the customer explicitly asked for doctor A by name — falls back to the existing escalation path', async () => {
+      seedBaseline()
+      const tuesday = seedTwoDoctorsOneBusy()
+      // הלקוח מבקש במפורש את ד"ר גבי סמל (docA) בעצמו, בהודעה נכנסת
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'אני רוצה תור אצל ד"ר גבי סמל להשתלות ביום שלישי ב-10:00',
+      }]
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00 עם ד"ר גבי סמל. האם זה מתאים לך? 😊\nLEAD:{"reason":"השתלות"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה תור אצל ד"ר גבי סמל להשתלות ביום שלישי ב-10:00',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      // לא הוחלף בשקט לד"ר עלא יונס — מסלול ההעברה לנציג הקיים
+      expect(sendCall!.body.message).not.toContain('ד"ר עלא יונס')
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // Regression test 3
+    it('sends the offer through untouched when the LLM does not mention any doctor name at all', async () => {
+      seedBaseline()
+      const tuesday = seedTwoDoctorsOneBusy()
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'רוצה תור להשתלות ביום שלישי ב-10:00',
+      }]
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"השתלות"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'רוצה תור להשתלות ביום שלישי ב-10:00',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('10:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // Regression test 4
+    it('escalates to a human rep exactly as before when no qualified doctor is free at all, regardless of which name the LLM mentioned', async () => {
+      seedBaseline()
+      fakeDb.seed('profiles', [
+        { id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+        { id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' },
+      ])
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+        docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+      const tuesday = '2026-09-01'
+      fakeDb.seed('appointments', [
+        { id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 1', patient_phone: '972500000001', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
+        { id: 'existing2', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 2', patient_phone: '972500000002', assigned_to: 'docB', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
+      ])
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'רוצה תור להשתלות ביום שלישי ב-10:00',
+      }]
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00 עם ד"ר גבי סמל. האם זה מתאים לך? 😊\nLEAD:{"reason":"השתלות"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'רוצה תור להשתלות ביום שלישי ב-10:00',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+  })
+
   it('refuses to send at all when the business has no active WhatsApp connection (no silent cross-tenant fallback)', async () => {
     seedBaseline()
     fakeDb.tables.whatsapp_connections = [] // אין חיבור בכלל

@@ -10,7 +10,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -610,16 +610,32 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
           if (slotCheck.status === 'unavailable') {
             exactSlotBlocked = true
           } else if (slotCheck.status === 'available') {
-            // אם ההצעה מזכירה שם רופא/ה ספציפי/ת שאינו/ה מי שבאמת נמצא/ת
-            // פנוי/ה בשעה הזו — אותה סתירה בדיוק כמו שם רופא שגוי בקביעה
-            // בפועל. חוסמים גם כאן, לא רק אחרי שכבר נקבע תור
+            // ההצעה עשויה להזכיר שם רופא/ה ספציפי/ת שאינו/ה מי שבאמת נמצא/ת
+            // פנוי/ה בשעה הזו. יש הבדל קריטי בין שני מקרים (יוסי, 31/08):
+            // (א) ה-LLM הזכיר/בחר את השם מיוזמתו — הלקוח לא ביקש רופא/ה
+            //     ספציפי/ת בעצמו. יש כבר רופא/ה אמיתי/ת פנוי/ה (slotCheck.doctorId)
+            //     — מתקנים רק את השם בטקסט, לא מעבירים לנציג על לא-כלום.
+            // (ב) הלקוח **בעצמו** ביקש את הרופא/ה הזה/ו בשם, בהודעה נכנסת
+            //     משלו — לא מחליפים בשקט, שומרים על מסלול ההעברה לנציג
+            //     הקיים. ההבחנה מבוססת על מי בפועל כתב את השם
+            //     (extractCustomerRequestedDoctorId סורק רק הודעות נכנסות),
+            //     לא ניחוש מטקסט תשובת ה-AI
             const trueDoctorName = profileMap[slotCheck.doctorId] || null
             const allDoctorNames = Object.values(profileMap)
-            if (allDoctorNames.length > 0 && textMentionsWrongDoctor(aiResponse, trueDoctorName, allDoctorNames)) {
-              exactSlotBlocked = true
-              console.error('[ai-respond] RELIABILITY BLOCK — offer named a doctor who is not actually free at that exact time, replacing with an honest answer:', JSON.stringify({
-                conversationId, offered, trueDoctorName,
-              }))
+            const wrongName = allDoctorNames.find(name => name && aiResponse.includes(name) && name !== trueDoctorName)
+            if (wrongName) {
+              const customerRequestedDoctorId = extractCustomerRequestedDoctorId(msgs, profileMap)
+              if (customerRequestedDoctorId && customerRequestedDoctorId !== slotCheck.doctorId) {
+                exactSlotBlocked = true
+                console.error('[ai-respond] RELIABILITY BLOCK — customer explicitly requested a doctor who is not actually free at that exact time, not silently substituting:', JSON.stringify({
+                  conversationId, offered, requestedDoctorId: customerRequestedDoctorId, trueDoctorName,
+                }))
+              } else {
+                aiResponse = aiResponse.split(wrongName).join(trueDoctorName || wrongName)
+                console.log('[ai-respond] corrected an LLM-mentioned doctor name in a free-text offer to the doctor actually found available (customer never requested a specific doctor):', JSON.stringify({
+                  conversationId, offered, wrongName, trueDoctorName,
+                }))
+              }
             }
           }
         }
