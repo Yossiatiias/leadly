@@ -3,11 +3,11 @@ export type LeadStatus =
   | 'no_show' | 'arrived' | 'quote_sent' | 'quote_followup' | 'closed' | 'lost'
 
 export type LeadSource =
-  | 'backoffice' | 'whatsapp' | 'social' | 'outreach' | 'manual' | 'scrape' | 'bot'
+  | 'whatsapp' | 'manual' | 'backoffice' | 'website' | 'scrape' | 'facebook' | 'instagram' | 'social' | 'other'
 
 export type LeadTemperature = 'hot' | 'medium' | 'cold'
 export type ActivityType = 'call' | 'whatsapp' | 'note' | 'status_change'
-export type UserRole = 'admin' | 'sales'
+export type UserRole = 'superadmin' | 'admin' | 'sales' | 'agent'
 
 export type TreatmentType =
   | 'implant' | 'restorative' | 'veneers' | 'whitening'
@@ -36,6 +36,7 @@ export interface Lead {
   status: LeadStatus
   temperature: LeadTemperature
   treatment_type: TreatmentType | null
+  treatment_type_locked?: boolean
   assigned_to: string | null
   notes: string | null
   campaign_name: string | null
@@ -46,6 +47,9 @@ export interface Lead {
   last_contacted: string | null
   ai_summary: string | null
   ai_recommendation: string | null
+  last_interaction_summary: string | null
+  last_interaction_summarized_at: string | null
+  deleted_at?: string | null
   profile?: Profile
 }
 
@@ -88,13 +92,29 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
 }
 
 export const SOURCE_LABELS: Record<LeadSource, string> = {
-  backoffice: 'בקאופיס',
-  whatsapp:   'בוט וואטסאפ',
-  social:     'רשתות חברתיות',
-  outreach:   'פנייה יזומה',
+  whatsapp:   'סוכן',
   manual:     'הזנה ידנית',
-  scrape:     'סריקה',
-  bot:        'בוט',
+  backoffice: 'טלפוני',
+  website:    'אתר',
+  scrape:     'צייד לידים',
+  facebook:   'פייסבוק',
+  instagram:  'אינסטגרם',
+  social:     'סושיאל',
+  other:      'אחר',
+}
+
+// צבע לכל מקור — טוקני האתר איפה שיש, הקס גולמי (כמו TREATMENT_COLORS)
+// איפה שאין טוקן מתאים. סוכן = סגול, לפי בקשה מפורשת
+export const SOURCE_COLORS: Record<LeadSource, string> = {
+  whatsapp:   '#8B5CF6', // סוכן — סגול (info)
+  manual:     '#6B7484', // הזנה ידנית — אפור ניטרלי
+  backoffice: '#F59E0B', // טלפוני — כתום
+  website:    '#2B6BE8', // אתר — כחול המותג
+  scrape:     '#14B8A6', // צייד לידים — טורקיז
+  facebook:   '#1877F2', // פייסבוק — הכחול הרשמי שלהם
+  instagram:  '#E1306C', // אינסטגרם — הוורוד הרשמי שלהם
+  social:     '#EC4899', // סושיאל כללי — פוקסיה
+  other:      '#9CA3AF', // אחר — אפור בהיר
 }
 
 export const TREATMENT_LABELS: Record<TreatmentType, string> = {
@@ -169,5 +189,5 @@ export function getDisplayName(lead: Lead): string {
 }
 
 export function getLeadNumber(lead: Lead): string {
-  return lead.lead_number ? String(lead.lead_number).padStart(5, '0') : '—'
+  return lead.lead_number ? `A${lead.lead_number}` : '—'
 }

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { splitName } from '@/lib/leads'
 import { NextResponse } from 'next/server'
 
 const SECRET = 'sesya2026'
@@ -32,8 +33,11 @@ export async function POST(req: Request) {
       }
 
       // Create new lead
+      const { firstName, lastName } = splitName(name)
       const { data, error } = await supabase.from('leads').insert({
         name,
+        first_name: firstName,
+        last_name: lastName,
         email: email || null,
         phone: phone || null,
         source: 'backoffice',

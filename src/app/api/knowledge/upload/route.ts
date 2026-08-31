@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
+import mammoth from 'mammoth'
+import pdfParse from 'pdf-parse'
+
+const MAX_CHARS = 12000 // הגבלת אורך כדי לא לנפח את הפרומפט של הבוט
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     // חילוץ טקסט לפי סוג קובץ
     let content = ''
-    if (ext === 'txt') {
+    if (ext === 'txt' || ext === 'md') {
       content = buffer.toString('utf-8')
     } else if (ext === 'csv') {
       content = buffer.toString('utf-8')
@@ -54,10 +58,18 @@ export async function POST(req: NextRequest) {
         const text = XLSX.utils.sheet_to_csv(sheet, { blankrows: false })
         if (text.trim()) parts.push(`[גיליון: ${sheetName}]\n${text}`)
       }
-      content = parts.join('\n\n').slice(0, 8000)
+      content = parts.join('\n\n')
+    } else if (ext === 'docx') {
+      const result = await mammoth.extractRawText({ buffer })
+      content = result.value
+    } else if (ext === 'pdf') {
+      const result = await pdfParse(buffer)
+      content = result.text
     } else {
-      content = `[קובץ: ${file.name}] — נא לצרף את תוכן הקובץ ידנית`
+      content = `[קובץ: ${file.name}] — סוג קובץ לא נתמך לחילוץ טקסט אוטומטי (נתמכים: docx, pdf, xlsx, csv, txt)`
     }
+
+    content = content.trim().slice(0, MAX_CHARS)
 
     const displayName = title || file.name
     const { data, error } = await supabase

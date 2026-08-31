@@ -2,21 +2,42 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { X, Sparkles, Phone, MessageCircle, FileText, Loader2 } from 'lucide-react'
+import { X, Sparkles, Phone, MessageCircle, FileText, Loader2, Save } from 'lucide-react'
 
+// צבעים לפי טוקני העיצוב של האתר (לא Tailwind קשיח) — כדי שיתאימו גם למצב כהה
 const TYPES = [
-  { value: 'call',     label: 'שיחה',    icon: Phone,          color: 'bg-green-50 text-green-600 border-green-200' },
-  { value: 'whatsapp', label: 'וואטסאפ', icon: MessageCircle,  color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  { value: 'note',     label: 'הערה',    icon: FileText,        color: 'bg-blue-50 text-blue-600 border-blue-200' },
+  { value: 'call',     label: 'שיחה',    icon: Phone,         bg: 'var(--brand-soft)',   fg: 'var(--blue-700)', border: 'var(--blue-100)' },
+  { value: 'whatsapp', label: 'וואטסאפ', icon: MessageCircle, bg: 'var(--success-soft)', fg: 'var(--success)',  border: 'var(--success-border)' },
+  { value: 'note',     label: 'הערה',    icon: FileText,      bg: 'var(--info-soft)',    fg: 'var(--info)',     border: 'var(--info-border)' },
 ]
 
 const OUTCOMES = [
-  { value: 'interested',     label: '✅ מעוניין' },
-  { value: 'not_interested', label: '❌ לא מעוניין' },
-  { value: 'follow_up',      label: '🔄 לחזור' },
-  { value: 'no_answer',      label: '📵 לא ענה' },
-  { value: 'published',      label: '🎉 פרסם!' },
+  { value: 'interested',     emoji: '✅', label: 'מעוניין',      bg: 'var(--success-soft)', fg: 'var(--success)', border: 'var(--success-border)' },
+  { value: 'not_interested', emoji: '❌', label: 'לא מעוניין',   bg: 'var(--danger-soft)',  fg: 'var(--danger)',  border: 'var(--danger-border)' },
+  { value: 'follow_up',      emoji: '🔄', label: 'לחזור',        bg: 'var(--brand-soft)',   fg: 'var(--brand)',   border: 'var(--blue-100)' },
+  { value: 'no_answer',      emoji: '📵', label: 'לא ענה',       bg: 'var(--bg-sunken)',    fg: 'var(--fg-3)',    border: 'var(--border-default)' },
 ]
+
+const label: React.CSSProperties = {
+  display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--fg-4)',
+  textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '7px',
+}
+
+const pill = (active: boolean, bg: string, fg: string, border: string): React.CSSProperties => ({
+  display: 'flex', alignItems: 'center', gap: '5px',
+  padding: '6px 13px', borderRadius: '20px', fontSize: '12px', fontWeight: 500,
+  fontFamily: 'inherit', cursor: 'pointer', transition: 'all 140ms',
+  background: active ? bg : 'var(--bg-sunken)',
+  color: active ? fg : 'var(--fg-3)',
+  border: `1px solid ${active ? border : 'var(--border-default)'}`,
+})
+
+interface EditActivity {
+  id: string
+  type: string
+  details: string | null
+  outcome: string | null
+}
 
 interface Props {
   leadId: string
@@ -24,20 +45,25 @@ interface Props {
   leadNotes?: string | null
   onClose: () => void
   onSaved: () => void
+  // כשקיים — עורכים אינטראקציה קיימת (UPDATE) במקום ליצור חדשה (INSERT)
+  editActivity?: EditActivity
 }
 
-export default function InteractionModal({ leadId, leadName, leadNotes, onClose, onSaved }: Props) {
+export default function InteractionModal({ leadId, leadName, leadNotes, onClose, onSaved, editActivity }: Props) {
   const supabase = createClient()
-  const [type, setType] = useState('call')
-  const [notes, setNotes] = useState('')
-  const [outcome, setOutcome] = useState('')
+  const isEdit = !!editActivity
+  const [type, setType] = useState(editActivity?.type || 'call')
+  // בעריכה, הטקסט הקיים נכנס ישר לתיבה הראשית — אין הבחנה שמורה ברשומה
+  // הקיימת בין "הערה גולמית" ל"סיכום AI שנוסח", רק שדה `details` אחד
+  const [notes, setNotes] = useState(editActivity?.details || '')
+  const [outcome, setOutcome] = useState(editActivity?.outcome || '')
   const [aiSummary, setAiSummary] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [nextFollowup, setNextFollowup] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() + 3)
-    return d.toISOString().split('T')[0]
-  })
+  // ברירת מחדל: בלי תזכורת. בעבר זה נקבע אוטומטית ל-3 ימים קדימה בכל תיעוד
+  // אינטראקציה, גם כשהתוצאה הייתה "לא מעוניין" — מה שיצר תזכורות-רפאים
+  // שאין להן כיסוי אמיתי ומציפות את הרשימה. עכשיו זו בחירה מודעת של הנציג
+  const [nextFollowup, setNextFollowup] = useState('')
 
   async function generateSummary() {
     if (!notes) return
@@ -63,6 +89,21 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
     const typeLabels: Record<string, string> = { call: 'שיחה', whatsapp: 'הודעת וואטסאפ', note: 'הערה' }
     const action = `${typeLabels[type]} עם ${leadName}`
 
+    // עריכת אינטראקציה קיימת — רק מעדכנים את הרשומה עצמה. לא נוגעים שוב
+    // ב-status/next_followup/last_contacted של הליד: אלה תופעות לוואי
+    // חד-פעמיות שכבר קרו כשהאינטראקציה נוצרה לראשונה, ולא רצוי "להפעיל"
+    // אותן שוב סתם כי מישהו תיקן טעות הקלדה בטקסט
+    if (editActivity) {
+      const { error } = await supabase.from('lead_activities').update({
+        type, action, details: finalNotes, outcome: outcome || null,
+      }).eq('id', editActivity.id)
+      setSaving(false)
+      if (error) { alert('עדכון האינטראקציה נכשל: ' + error.message); return }
+      onSaved()
+      onClose()
+      return
+    }
+
     await Promise.all([
       supabase.from('lead_activities').insert({
         lead_id: leadId,
@@ -74,12 +115,26 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
       }),
       supabase.from('leads').update({
         last_contacted: new Date().toISOString(),
-        next_followup: nextFollowup,
+        // ליד "לא מעוניין" לא אמור לגרור תזכורת פתוחה מפעם קודמת —
+        // תזכורת על ליד סגור היא בדיוק הרעש שהמזכירה התלוננה עליו
+        next_followup: outcome === 'not_interested' ? null : (nextFollowup || null),
         ...(outcome === 'published'      ? { status: 'published' }                            : {}),
         ...(outcome === 'interested'     ? { status: 'in_progress' }                          : {}),
         ...(outcome === 'not_interested' ? { status: 'not_relevant', temperature: 'cold' }    : {}),
       }).eq('id', leadId),
     ])
+
+    // "ממתין לנציג" (escalated_at) יושב על השיחה, לא על הליד — ליד שסומן
+    // "פורסם"/"לא מעוניין" כבר טופל, אז אין סיבה שהדגל האדום יישאר תקוע
+    if (outcome === 'published' || outcome === 'not_interested') {
+      const { data: conv } = await supabase
+        .from('conversations').select('id').eq('lead_id', leadId).not('escalated_at', 'is', null).maybeSingle()
+      if (conv) {
+        await supabase.from('conversations')
+          .update({ bot_enabled: true, status: 'active', escalated_at: null, escalation_reason: null })
+          .eq('id', conv.id)
+      }
+    }
 
     setSaving(false)
     onSaved()
@@ -88,49 +143,30 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', direction: 'rtl' }}
     >
-      <div
-        className="rounded-3xl w-full max-w-lg animate-slide-up"
-        style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-default)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-        }}
-      >
+      <div style={{ background: 'var(--bg-surface)', borderRadius: '16px', width: '420px', maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-5"
-          style={{ borderBottom: '1px solid var(--border-subtle)' }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 22px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
           <div>
-            <h3 className="font-semibold" style={{ color: 'var(--fg-1)', fontSize: '15px' }}>תיעוד אינטראקציה</h3>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--fg-3)' }}>עם {leadName}</p>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--fg-1)' }}>{isEdit ? 'עריכת אינטראקציה' : 'תיעוד אינטראקציה'}</h3>
+            <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--fg-4)' }}>עם {leadName}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-            style={{ background: 'var(--bg-hover)' }}
-          >
-            <X size={15} style={{ color: 'var(--fg-3)' }} />
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: '2px', display: 'flex' }}>
+            <X size={17} />
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Type */}
           <div>
-            <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>סוג אינטראקציה</label>
-            <div className="flex gap-2">
-              {TYPES.map(({ value, label, icon: Icon, color }) => (
-                <button
-                  key={value}
-                  onClick={() => setType(value)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${type === value ? color + ' border-current' : ''}`}
-                  style={type !== value ? { background: 'var(--bg-sunken)', color: 'var(--fg-3)', borderColor: 'var(--border-default)' } : {}}
-                >
-                  <Icon size={14} />
-                  {label}
+            <label style={label}>סוג אינטראקציה</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {TYPES.map(({ value, label: l, icon: Icon, bg, fg, border }) => (
+                <button key={value} onClick={() => setType(value)} style={pill(type === value, bg, fg, border)}>
+                  <Icon size={12} />
+                  {l}
                 </button>
               ))}
             </div>
@@ -138,83 +174,84 @@ export default function InteractionModal({ leadId, leadName, leadNotes, onClose,
 
           {/* Notes */}
           <div>
-            <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>מה קרה?</label>
+            <label style={label}>מה קרה?</label>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={3}
-              className="input-base resize-none"
+              className="input-base"
+              style={{ resize: 'vertical' }}
               placeholder="תאר בקצרה את השיחה, מה אמר, מה ביקש..."
             />
             {notes.length > 10 && (
               <button
                 onClick={generateSummary}
                 disabled={aiLoading}
-                className="mt-2 flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
-                style={{ color: 'var(--fg-3)' }}
+                style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: aiLoading ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '12px', fontWeight: 500, opacity: aiLoading ? 0.6 : 1, padding: 0 }}
               >
-                {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                <span style={{ color: '#a78bfa' }}>{aiLoading ? 'מנסח...' : 'נסח לי סיכום מקצועי עם AI'}</span>
+                {aiLoading ? <Loader2 size={12} className="animate-spin" style={{ color: 'var(--fg-3)' }} /> : <Sparkles size={12} style={{ color: 'var(--info)' }} />}
+                <span style={{ color: 'var(--info)' }}>{aiLoading ? 'מנסח...' : 'נסח לי סיכום מקצועי עם AI'}</span>
               </button>
             )}
           </div>
 
           {/* AI Summary */}
           {aiSummary && (
-            <div
-              className="rounded-2xl p-4 animate-slide-up"
-              style={{ background: 'rgba(124,58,237,0.08)', border: '1.5px solid rgba(124,58,237,0.25)' }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles size={12} className="text-purple-500" />
-                <p className="text-xs font-medium uppercase tracking-wider text-purple-600">סיכום AI</p>
+            <div className="animate-slide-up" style={{ borderRadius: '10px', padding: '12px 14px', background: 'var(--info-soft)', border: '1px solid var(--info-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <Sparkles size={11} style={{ color: 'var(--info)' }} />
+                <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--info)' }}>סיכום AI</p>
               </div>
               <textarea
                 value={aiSummary}
                 onChange={e => setAiSummary(e.target.value)}
                 rows={3}
-                className="w-full text-sm bg-transparent resize-none outline-none"
-                style={{ color: 'var(--fg-2)', fontFamily: 'var(--font-sans)' }}
+                style={{ width: '100%', fontSize: '13px', background: 'transparent', resize: 'vertical', outline: 'none', border: 'none', color: 'var(--fg-2)', fontFamily: 'var(--font-sans)', padding: 0 }}
               />
             </div>
           )}
 
           {/* Outcome */}
           <div>
-            <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>תוצאה</label>
-            <div className="flex flex-wrap gap-2">
-              {OUTCOMES.map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => setOutcome(value)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${outcome === value ? 'sesya-gradient text-white border-transparent' : ''}`}
-                  style={outcome !== value ? { background: 'var(--bg-sunken)', color: 'var(--fg-3)', borderColor: 'var(--border-default)' } : {}}
-                >
-                  {label}
+            <label style={label}>תוצאה</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {OUTCOMES.map(({ value, emoji, label: l, bg, fg, border }) => (
+                <button key={value} onClick={() => setOutcome(value)} style={pill(outcome === value, bg, fg, border)}>
+                  <span>{emoji}</span>
+                  {l}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Next follow-up */}
-          <div>
-            <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--fg-3)', fontWeight: 500 }}>follow-up הבא</label>
-            <input
-              type="date"
-              value={nextFollowup}
-              onChange={e => setNextFollowup(e.target.value)}
-              dir="ltr"
-              className="input-base"
-            />
-          </div>
+          {/* Next follow-up — לא רלוונטי בעריכת אינטראקציה קיימת, רק ביצירה חדשה.
+              אופציונלי במפורש: ברירת המחדל היא בלי תזכורת בכלל */}
+          {!isEdit && (
+            <div>
+              <label style={label}>תזכורת למעקב הבא <span style={{ fontWeight: 400, opacity: 0.6 }}>(לא חובה)</span></label>
+              <input
+                type="date"
+                value={nextFollowup}
+                onChange={e => setNextFollowup(e.target.value)}
+                className="input-base"
+                style={{ width: '100%' }}
+              />
+              {!nextFollowup && (
+                <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: '4px 2px 0' }}>
+                  לא תיקבע תזכורת אלא אם תבחר תאריך
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-6 pb-6">
-          <button onClick={handleSave} disabled={saving || !notes} className="btn-primary flex-1 disabled:opacity-40">
-            {saving ? 'שומר...' : '💾 שמור אינטראקציה'}
+        <div style={{ display: 'flex', gap: '8px', padding: '4px 22px 20px' }}>
+          <button onClick={handleSave} disabled={saving || !notes.trim()} className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', opacity: saving || !notes.trim() ? 0.4 : 1 }}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? 'שומר...' : isEdit ? 'שמור שינויים' : 'שמור אינטראקציה'}
           </button>
-          <button onClick={onClose} className="btn-ghost px-5">ביטול</button>
+          <button onClick={onClose} className="btn-ghost" style={{ padding: '0 20px' }}>ביטול</button>
         </div>
       </div>
     </div>

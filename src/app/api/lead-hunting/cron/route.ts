@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   if (due.length === 0) return NextResponse.json({ ok: true, triggered: 0 })
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://leadly-zeta.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://betterlead.vercel.app'
   const results: { business_id: string; status: string }[] = []
 
   for (const biz of due) {

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Leadly — ניהול לידים",
+  title: "BetterLead — ניהול לידים",
   description: "מערכת ניהול לידים חכמה מבוססת AI",
 };
 

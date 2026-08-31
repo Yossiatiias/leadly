@@ -5,18 +5,19 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
 import { useEffect, useState } from 'react'
-import { Moon, Sun, Home, MessageSquare, Users, CalendarDays, BarChart2, BookOpen, Plug2, Settings, Crosshair, type LucideIcon } from 'lucide-react'
+import { Moon, Sun, Home, MessageSquare, Users, CalendarDays, BarChart2, BookOpen, Settings, Crosshair, HelpCircle, ShieldCheck, Menu, X, type LucideIcon } from 'lucide-react'
 
-const navItems: { href: string; label: string; icon: LucideIcon }[] = [
+const navItems: { href: string; label: string; icon: LucideIcon; superadminOnly?: boolean }[] = [
   { href: '/',               label: 'בית',            icon: Home          },
   { href: '/conversations',  label: 'שיחות',          icon: MessageSquare },
-  { href: '/leads',          label: 'ניהול לידים',    icon: Users         },
-  { href: '/appointments',   label: 'יומן תורים',     icon: CalendarDays  },
-  { href: '/analytics',      label: 'ניתוח ביצועים',  icon: BarChart2     },
+  { href: '/leads',          label: 'מאגר פונים',     icon: Users         },
+  { href: '/appointments',   label: 'יומן מרפאה',     icon: CalendarDays  },
+  { href: '/analytics',      label: 'לוח בקרה',       icon: BarChart2     },
   { href: '/lead-hunting',   label: 'צייד לידים',     icon: Crosshair     },
-  { href: '/qa',             label: 'מידע ארגוני',    icon: BookOpen      },
-  { href: '/connections',    label: 'חיבורים',        icon: Plug2         },
-  { href: '/settings',       label: 'הגדרות עסק',     icon: Settings      },
+  { href: '/qa',             label: 'ספרייה ארגונית', icon: BookOpen      },
+  { href: '/qa/responses',   label: 'שאלות ותשובות',  icon: HelpCircle    },
+  { href: '/settings',       label: 'הגדרות מרפאה',   icon: Settings      },
+  { href: '/admin',          label: 'ניהול לקוחות',   icon: ShieldCheck,  superadminOnly: true },
 ]
 
 export default function Sidebar({ profile }: { profile: Profile | null }) {
@@ -27,10 +28,24 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
   const [dark, setDark] = useState(false)
   const [businessName, setBusinessName] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains('dark'))
   }, [])
+
+  // סוגר את הסיידבר אוטומטית אם המסך גדל בחזרה לרוחב מחשב, כדי שלא
+  // יישאר "פתוח" במצב הזה מסבב קודם במובייל
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth > 768) setMobileOpen(false)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // ניווט לעמוד חדש סוגר את הסיידבר במובייל
+  useEffect(() => { setMobileOpen(false) }, [pathname])
 
   useEffect(() => {
     if (!profile?.id) return
@@ -85,29 +100,52 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
   const initials = profile?.full_name?.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'U'
 
   return (
-    <aside style={{
-      position: 'fixed', right: 0, top: 0, bottom: 0,
-      width: '220px',
-      background: 'var(--sidebar-bg)',
-      borderLeft: '1px solid var(--sidebar-border)',
-      display: 'flex', flexDirection: 'column',
-      zIndex: 20,
-      transition: 'background 0.2s, border-color 0.2s',
-    }}>
+    <>
+      {/* כפתור המבורגר — מוצג רק במובייל (≤768px), הופך ל-X כשהסיידבר פתוח */}
+      <button
+        onClick={() => setMobileOpen(o => !o)}
+        className="mobile-only"
+        aria-label={mobileOpen ? 'סגור תפריט' : 'פתח תפריט'}
+        style={{
+          position: 'fixed', top: '14px', right: '14px', zIndex: 25,
+          width: '38px', height: '38px', borderRadius: '10px',
+          background: 'var(--sidebar-bg)', border: '1px solid var(--sidebar-border)',
+          color: 'var(--sidebar-nav-fg)', cursor: 'pointer',
+          alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+        }}
+      >
+        {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+      </button>
+
+      {/* רקע כהה מאחורי הסיידבר הפתוח במובייל — לחיצה עליו סוגרת */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 15 }}
+        />
+      )}
+
+      <aside className={`sidebar${mobileOpen ? ' mobile-open' : ''}`} style={{
+        position: 'fixed', right: 0, top: 0, bottom: 0,
+        width: '220px',
+        background: 'var(--sidebar-bg)',
+        borderLeft: '1px solid var(--sidebar-border)',
+        display: 'flex', flexDirection: 'column',
+        zIndex: 20,
+        transition: 'background 0.2s, border-color 0.2s, transform 0.25s ease',
+      }}>
 
       {/* ── Header: Leadly logo + AI Management + theme toggle ── */}
       <div style={{ padding: '14px 14px 12px', borderBottom: '1px solid var(--sidebar-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={dark ? '/logo-dark.png' : '/logo-light.png'}
-              alt="Leadly"
-              style={{ width: '72px', height: 'auto', objectFit: 'contain', flexShrink: 0, mixBlendMode: dark ? 'screen' : 'multiply' }}
+              src={dark ? '/logo-dark.svg' : '/logo-light.svg'}
+              alt="BetterLead"
+              style={{ width: '130px', height: 'auto', objectFit: 'contain', flexShrink: 0 }}
             />
-            <span style={{ fontSize: '9px', color: 'var(--sidebar-subtitle)', letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.3, whiteSpace: 'nowrap' }}>
-              AI<br />Management
-            </span>
           </div>
           <button onClick={toggleTheme} className="theme-toggle" title={dark ? 'מצב בהיר' : 'מצב כהה'} style={{ flexShrink: 0 }}>
             {dark ? <Sun size={14} /> : <Moon size={14} />}
@@ -130,8 +168,8 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
 
       {/* ── Nav ── */}
       <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || (href !== '/' && pathname.startsWith(href))
+        {navItems.filter(item => !item.superadminOnly || profile?.role === 'superadmin').map(({ href, label, icon: Icon }) => {
+          const active = pathname === href || (href !== '/' && pathname.startsWith(href + '/') && !navItems.some(item => item.href !== href && pathname.startsWith(item.href)))
           const showBadge = href === '/conversations' && unread > 0 && !active
 
           return (
@@ -189,6 +227,7 @@ export default function Sidebar({ profile }: { profile: Profile | null }) {
           התנתקות
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

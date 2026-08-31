@@ -2,9 +2,16 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SOURCE_LABELS, getDisplayName } from '@/types'
+import { SOURCE_LABELS, SOURCE_COLORS, type LeadSource, getDisplayName } from '@/types'
 import Link from 'next/link'
-import { Phone, MessageCircle, ChevronLeft, CheckCircle2, ArrowUp, TrendingUp, AlertCircle, Star, Zap, FileText, RefreshCw } from 'lucide-react'
+import { Phone, MessageCircle, ChevronLeft, CheckCircle2, ArrowUp, TrendingUp, AlertCircle, Star, Zap, FileText, RefreshCw, Moon, Bot, Sparkles } from 'lucide-react'
+
+/* גווני קלפי התובנות — עובדים גם במצב כהה דרך משתני הערכה */
+const INSIGHT_TONES = {
+  good: { bg: 'var(--success-soft)', border: 'var(--success-border, #BBF7D0)', icon: 'var(--success)', iconBg: 'rgba(15,158,123,0.14)', text: 'var(--fg-1)' },
+  warn: { bg: 'var(--danger-soft)',  border: 'var(--danger-border, #FECACA)',  icon: 'var(--danger)',  iconBg: 'rgba(232,75,60,0.14)',  text: 'var(--fg-1)' },
+  info: { bg: 'var(--info-soft)',    border: 'var(--info-border, #DDD6FE)',    icon: 'var(--info)',    iconBg: 'rgba(124,58,237,0.14)', text: 'var(--fg-1)' },
+} as const
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -89,6 +96,7 @@ export default function DashboardPage() {
   const [allLeads, setAllLeads] = useState<any[]>([])
   const [profiles, setProfiles] = useState<any[]>([])
   const [recentActivities, setRecentActivities] = useState<any[]>([])
+  const [appointments, setAppointments] = useState<any[]>([])
   const [userName, setUserName] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(true)
@@ -99,16 +107,18 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      const [{ data: profileData }, { data: leadsData }, { data: profilesData }, { data: activitiesData }] = await Promise.all([
+      const [{ data: profileData }, { data: leadsData }, { data: profilesData }, { data: activitiesData }, { data: apptData }] = await Promise.all([
         supabase.from('profiles').select('full_name, business_id').eq('id', user!.id).single(),
-        supabase.from('leads').select('*'),
+        supabase.from('leads').select('*').is('deleted_at', null),
         supabase.from('profiles').select('id, full_name'),
         supabase.from('lead_activities').select('*, lead:leads(name,first_name,last_name), profile:profiles(full_name)').order('created_at', { ascending: false }).limit(20),
+        supabase.from('appointments').select('id, created_at, notes, status'),
       ])
       setUserName(profileData?.full_name || '')
       setAllLeads(leadsData || [])
       setProfiles(profilesData || [])
       setRecentActivities(activitiesData || [])
+      setAppointments(apptData || [])
       if (profileData?.business_id) {
         const { data: biz } = await supabase.from('businesses').select('name').eq('id', profileData.business_id).single()
         setBusinessName(biz?.name || '')
@@ -136,65 +146,95 @@ export default function DashboardPage() {
   const notRel      = periodLeads.filter(l => l.status === 'not_relevant').length
   const convRate    = totalPeriod ? Math.round((published / totalPeriod) * 100) : 0
 
+  // תורים בתקופה הנבחרת + כמה מהם נקבעו על ידי הבוט
+  const apptStats = useMemo(() => {
+    const start = getPeriodStart(period, dateFrom)
+    const end   = getPeriodEnd(period, dateTo)
+    const inPeriod = appointments.filter(a => {
+      const d = new Date(a.created_at)
+      if (start && d < start) return false
+      if (end   && d > end)   return false
+      return a.status !== 'cancelled'
+    })
+    const byBot = inPeriod.filter(a => (a.notes || '').includes('נקבע אוטומטית על ידי הבוט')).length
+    return { total: inPeriod.length, byBot }
+  }, [appointments, period, dateFrom, dateTo])
+
   const active = allLeads.filter(l => !['published', 'not_relevant', 'closed', 'lost'].includes(l.status))
   const today  = new Date(); today.setHours(0, 0, 0, 0)
   const newToday = allLeads.filter(l => new Date(l.created_at) >= today).length
 
   // ─── AI Insights from real data ────────────────────────────────────────────
+  // כל תובנה נבנית רק מנתונים אמיתיים. אם אין מספיק נתונים — היא לא מוצגת.
   const insights = useMemo(() => {
-    const list: { icon: any; color: string; bg: string; title: string; body: string }[] = []
+    const list: {
+      icon: any; tone: 'good' | 'warn' | 'info'; text: string
+      breakdown?: { label: string; value: number; pct: number }[]
+    }[] = []
 
-    // 1. Overdue leads alert
+    // 1. לידים שהגיעו מחוץ לשעות הפעילות — הערך הישיר של בוט 24/7
+    const afterHours = periodLeads.filter(l => {
+      const h = new Date(l.created_at).getHours()
+      const day = new Date(l.created_at).getDay()
+      return h < 9 || h >= 18 || day === 6 // לפני 9, אחרי 18, או שבת
+    })
+    if (periodLeads.length >= 3 && afterHours.length > 0) {
+      const pct = Math.round((afterHours.length / periodLeads.length) * 100)
+      list.push({
+        icon: Moon, tone: 'good',
+        text: `${afterHours.length} מתוך ${periodLeads.length} לידים הגיעו מחוץ לשעות הפעילות (${pct}%) — הסוכן תפס אותם 24/7, בלעדיו הם היו הולכים למתחרים`,
+      })
+    }
+
+    // 2. תורים שהבוט קבע לבד
+    if (apptStats.total > 0 && apptStats.byBot > 0) {
+      const pct = Math.round((apptStats.byBot / apptStats.total) * 100)
+      list.push({
+        icon: Bot, tone: 'good',
+        text: `${apptStats.byBot} מתוך ${apptStats.total} תורים נקבעו אוטומטית על ידי הסוכן (${pct}%) — זה משפיע ישירות על נפח התורים`,
+      })
+    }
+
+    // 3. לידים שממתינים למענה — כולל פילוח סיבות
     const overdueLeads = active.filter(l => l.next_followup && new Date(l.next_followup) < new Date())
     if (overdueLeads.length > 0) {
-      list.push({ icon: AlertCircle, color: 'var(--danger)', bg: 'var(--danger-soft)',
-        title: `${overdueLeads.length} לידים עברו מועד טיפול`,
-        body: `הלידים האלה דורשים מענה מיידי לפני שיתקררו` })
+      const reasons: Record<string, number> = {}
+      overdueLeads.forEach(l => {
+        const key = l.treatment_type ? (TREATMENT_LABELS[l.treatment_type] || l.treatment_type) : 'ללא סיבה'
+        reasons[key] = (reasons[key] || 0) + 1
+      })
+      const breakdown = Object.entries(reasons)
+        .sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([label, value]) => ({ label, value, pct: Math.round((value / overdueLeads.length) * 100) }))
+      list.push({
+        icon: AlertCircle, tone: 'warn',
+        text: `${overdueLeads.length} לידים ממתינים לחזרה — מענה מהיר מכפיל סיכויי המרה`,
+        breakdown: breakdown.length > 1 ? breakdown : undefined,
+      })
     }
 
-    // 2. Conversion rate insight
-    const weekAgo = new Date(Date.now() - 7 * 86400000)
-    const thisWeek = allLeads.filter(l => new Date(l.created_at) >= weekAgo)
-    const thisWeekConv = thisWeek.length ? Math.round((thisWeek.filter(l => l.status === 'published').length / thisWeek.length) * 100) : 0
-    if (thisWeekConv > 0) {
-      list.push({ icon: TrendingUp, color: 'var(--success)', bg: 'var(--success-soft)',
-        title: `אחוז המרה השבוע: ${thisWeekConv}%`,
-        body: `${thisWeek.filter(l => l.status === 'published').length} מתוך ${thisWeek.length} לידים השבוע קבעו תור` })
+    // 4. אחוז המרה בתקופה
+    if (totalPeriod >= 3 && published > 0) {
+      list.push({
+        icon: TrendingUp, tone: 'good',
+        text: `${published} מתוך ${totalPeriod} לידים קבעו תור (${convRate}%) — זה אחוז ההמרה שלכם בתקופה`,
+      })
     }
 
-    // 3. Best source this month
-    const monthAgo = new Date(Date.now() - 30 * 86400000)
-    const monthLeads = allLeads.filter(l => new Date(l.created_at) >= monthAgo)
-    const sourceConvMap: Record<string, { total: number; pub: number }> = {}
-    monthLeads.forEach(l => {
-      if (!sourceConvMap[l.source]) sourceConvMap[l.source] = { total: 0, pub: 0 }
-      sourceConvMap[l.source].total++
-      if (l.status === 'published') sourceConvMap[l.source].pub++
-    })
-    let bestSource = '', bestRate = 0
-    Object.entries(sourceConvMap).forEach(([src, { total, pub }]) => {
-      const rate = total >= 3 ? Math.round((pub / total) * 100) : 0
-      if (rate > bestRate) { bestRate = rate; bestSource = src }
-    })
-    if (bestSource && bestRate > 0) {
-      list.push({ icon: Star, color: 'var(--warning)', bg: 'var(--warning-soft)',
-        title: `מקור המרה מוביל: ${SOURCE_LABELS[bestSource as keyof typeof SOURCE_LABELS] || bestSource}`,
-        body: `${bestRate}% המרה מלידים ממקור זה החודש` })
-    }
-
-    // 4. Top treatment type
+    // 5. הטיפול המבוקש ביותר
     const treatCounts: Record<string, number> = {}
     periodLeads.forEach(l => { if (l.treatment_type) { treatCounts[l.treatment_type] = (treatCounts[l.treatment_type] || 0) + 1 } })
     const topTreat = Object.entries(treatCounts).sort((a, b) => b[1] - a[1])[0]
     if (topTreat && topTreat[1] > 1) {
       const pct = totalPeriod ? Math.round((topTreat[1] / totalPeriod) * 100) : 0
-      list.push({ icon: Zap, color: 'var(--info)', bg: 'var(--info-soft)',
-        title: `טיפול מבוקש: ${TREATMENT_LABELS[topTreat[0]] || topTreat[0]}`,
-        body: `${topTreat[1]} לידים (${pct}%) מהתקופה מעוניינים בטיפול זה` })
+      list.push({
+        icon: Zap, tone: 'info',
+        text: `${topTreat[1]} לידים (${pct}%) פנו בנושא ${TREATMENT_LABELS[topTreat[0]] || topTreat[0]} — הטיפול המבוקש ביותר`,
+      })
     }
 
-    return list.slice(0, 4)
-  }, [allLeads, periodLeads, active, totalPeriod])
+    return list.slice(0, 3)
+  }, [periodLeads, active, totalPeriod, published, convRate, apptStats])
 
   const statusData = [
     { label: 'חדש',         value: periodLeads.filter(l => l.status === 'new').length,          color: 'var(--brand)' },
@@ -204,13 +244,13 @@ export default function DashboardPage() {
     { label: 'לא רלוונטי', value: periodLeads.filter(l => l.status === 'not_relevant').length,  color: 'var(--fg-4)' },
   ]
 
-  const sourceData = [
-    { label: 'בקאופיס', value: periodLeads.filter(l => l.source === 'backoffice').length, color: 'var(--brand)' },
-    { label: 'וואטסאפ', value: periodLeads.filter(l => l.source === 'whatsapp').length,   color: 'var(--success)' },
-    { label: 'רשתות',   value: periodLeads.filter(l => l.source === 'social').length,     color: '#8B5CF6' },
-    { label: 'יזום',    value: periodLeads.filter(l => l.source === 'outreach').length,   color: 'var(--warning)' },
-    { label: 'ידני',    value: periodLeads.filter(l => l.source === 'manual').length,     color: 'var(--fg-4)' },
-  ]
+  // נבנה דינמית מכל מקורות הלידים המוגדרים (SOURCE_LABELS/SOURCE_COLORS ב-types)
+  // כדי שקטגוריה חדשה (כמו פייסבוק/אינסטגרם) תופיע כאן אוטומטית בלי לגעת בקוד הזה
+  const sourceData = (Object.keys(SOURCE_LABELS) as LeadSource[]).map(src => ({
+    label: SOURCE_LABELS[src],
+    value: periodLeads.filter(l => l.source === src).length,
+    color: SOURCE_COLORS[src],
+  }))
 
   const bySalesperson = profiles.map(p => ({
     name: p.full_name,
@@ -231,7 +271,7 @@ export default function DashboardPage() {
   )
 
   return (
-    <div style={{ padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="mobile-tight-padding" style={{ padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
 
       {/* Header */}
       <div className="animate-in" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -251,22 +291,56 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* AI Insights — 3 bold bullets */}
+      {/* AI Insights — קלפים זה לצד זה */}
       {insights.length > 0 && (
-        <div className="animate-in stagger-1" style={{ marginBottom: '20px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 22px' }}>
-          <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '14px' }}>
-            ✦ תובנות AI
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {insights.slice(0, 3).map((ins, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: ins.color, marginTop: '5px', flexShrink: 0 }} />
-                <div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--fg-1)' }}>{ins.title}</span>
-                  <span style={{ fontSize: '13px', color: 'var(--fg-3)' }}> — {ins.body}</span>
+        <div className="animate-in stagger-1" style={{ marginBottom: '22px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '12px' }}>
+            <Sparkles size={15} style={{ color: 'var(--brand)' }} />
+            <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--fg-1)' }}>תובנות AI</span>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))',
+            gap: '14px',
+          }}>
+            {insights.map((ins, i) => {
+              const tone = INSIGHT_TONES[ins.tone]
+              const Icon = ins.icon
+              return (
+                <div key={i} style={{
+                  background: tone.bg, border: `1px solid ${tone.border}`,
+                  borderRadius: '14px', padding: '16px 18px',
+                  display: 'flex', gap: '13px', alignItems: 'flex-start',
+                }}>
+                  <div style={{
+                    width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
+                    background: tone.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Icon size={17} style={{ color: tone.icon }} />
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.55, color: tone.text, fontWeight: 500 }}>
+                      {ins.text}
+                    </p>
+
+                    {ins.breakdown && (
+                      <div style={{ marginTop: '10px', paddingTop: '9px', borderTop: `1px solid ${tone.border}`, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {ins.breakdown.map(b => (
+                          <div key={b.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '11.5px', color: tone.text, opacity: 0.75 }}>{b.label}</span>
+                            <span style={{ fontSize: '11.5px', color: tone.text, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                              {b.value} ({b.pct}%)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -301,7 +375,7 @@ export default function DashboardPage() {
       )}
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
+      <div className="grid-2col-mobile" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
         {[
           { label: 'סה״כ לידים בתקופה',  value: totalPeriod,       sub: `מתוך ${allLeads.length} במערכת`,          color: 'var(--brand)' },
           { label: 'לידים חדשים',         value: newLeads,           sub: 'ממתינים לטיפול',                          color: 'var(--fg-2)' },
@@ -316,7 +390,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '16px', marginBottom: '16px' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '16px', marginBottom: '16px' }}>
         {/* Recent activity */}
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -388,7 +462,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div className="card" style={{ padding: '18px 20px' }}>
           <h3 style={{ fontWeight: 600, color: 'var(--fg-1)', fontSize: '13px', marginBottom: '14px' }}>פילוח לפי סטטוס</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>

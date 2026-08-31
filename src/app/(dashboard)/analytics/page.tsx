@@ -28,7 +28,7 @@ const SOURCE_LABELS: Record<string, string> = {
   backoffice: 'בקאופיס', whatsapp: 'בוט וואטסאפ', social: 'רשתות',
   outreach: 'יזום', manual: 'הזנה ידנית', scrape: 'סריקה', bot: 'בוט',
 }
-const TEMP_LABELS: Record<string, string> = { hot: 'חם', medium: 'בינוני', cold: 'קר' }
+
 
 const TREATMENT_LABELS: Record<string, string> = {
   implant:      'השתלות',
@@ -74,7 +74,6 @@ const PIVOT_DIMS = [
   { key: 'quarter',        label: 'רבעון' },
   { key: 'source',         label: 'מקור' },
   { key: 'status',         label: 'סטטוס' },
-  { key: 'temperature',    label: 'טמפרטורה' },
   { key: 'assigned',       label: 'איש מכירות' },
   { key: 'treatment_type', label: 'סוג טיפול' },
 ]
@@ -93,7 +92,6 @@ function getDimValue(lead: Lead, dim: string): string {
     case 'quarter':        return `${d.getFullYear()}-Q${Math.ceil((d.getMonth() + 1) / 3)}`
     case 'source':         return SOURCE_LABELS[lead.source] || lead.source
     case 'status':         return STATUS_LABELS[lead.status] || lead.status
-    case 'temperature':    return TEMP_LABELS[lead.temperature] || lead.temperature
     case 'assigned':       return lead.profile?.full_name || 'לא שויך'
     case 'treatment_type': return lead.treatment_type ? (TREATMENT_LABELS[lead.treatment_type] || lead.treatment_type) : 'לא צוין'
     case 'count':          return 'כמות'
@@ -368,7 +366,7 @@ function PivotTable({ leads }: { leads: Lead[] }) {
         טבלת ניתוח — גרור שדות
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '16px', marginBottom: '20px', alignItems: 'start' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '16px', marginBottom: '20px', alignItems: 'start' }}>
         <div>
           <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             שדות זמינים
@@ -495,6 +493,7 @@ export default function AnalyticsPage() {
     supabase
       .from('leads')
       .select('*, profile:profiles!leads_assigned_to_fkey(full_name)')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .then(({ data }) => { setLeads(data || []); setLoading(false) })
   }, [])
@@ -515,11 +514,11 @@ export default function AnalyticsPage() {
   )
 
   return (
-    <div style={{ padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="mobile-tight-padding" style={{ padding: '28px', maxWidth: '1200px', margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 500, color: 'var(--fg-2)' }}>ניתוח ביצועים</h1>
+        <h1 style={{ fontSize: '22px', fontWeight: 500, color: 'var(--fg-2)' }}>לוח בקרה</h1>
         <p style={{ color: 'var(--fg-4)', fontSize: '13px', marginTop: '3px' }}>
           {filtered.length} לידים בתקופה הנבחרת, מתוך {leads.length} סה"כ
         </p>
@@ -567,7 +566,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Funnel + stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
 
         {/* Funnel */}
         <div className="card" style={{ padding: '20px' }}>
@@ -592,11 +591,11 @@ export default function AnalyticsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           {[
             { label: 'סה"כ לידים',  value: filtered.length,                                                color: 'var(--brand)', sub: 'בתקופה' },
-            { label: 'לידים חמים',  value: filtered.filter(l => l.temperature === 'hot').length,           color: '#DC2626',       sub: `${filtered.length ? Math.round(filtered.filter(l => l.temperature === 'hot').length / filtered.length * 100) : 0}% מהסך הכל` },
+            { label: 'פרסמו תור',   value: filtered.filter(l => l.status === 'published').length,           color: '#DC2626',       sub: `${filtered.length ? Math.round(filtered.filter(l => l.status === 'published').length / filtered.length * 100) : 0}% המרה` },
             { label: 'נסגרו',       value: filtered.filter(l => l.status === 'closed').length,             color: '#059669',       sub: `${filtered.length ? Math.round(filtered.filter(l => l.status === 'closed').length / filtered.length * 100) : 0}% המרה` },
             { label: 'בטיפול',      value: filtered.filter(l => ['new','contacted','in_progress'].includes(l.status)).length, color: '#D97706', sub: 'מצריכים מעקב' },
             { label: 'לא רלוונטי', value: filtered.filter(l => l.status === 'not_relevant').length,        color: '#6B7280',       sub: 'אבדו' },
-            { label: 'לידים קרים', value: filtered.filter(l => l.temperature === 'cold').length,           color: '#3B82F6',       sub: 'טמפרטורה נמוכה' },
+            { label: 'ממתינים',     value: filtered.filter(l => ['new','contacted','in_progress'].includes(l.status)).length, color: '#3B82F6', sub: 'טרם נסגרו' },
           ].map(stat => (
             <div key={stat.label} className="card" style={{ padding: '16px 18px' }}>
               <p style={{ fontSize: '11px', color: 'var(--fg-4)', fontWeight: 400, marginBottom: '6px' }}>{stat.label}</p>

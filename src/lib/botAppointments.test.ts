@@ -1,0 +1,643 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import {
+  normalizeApptDate, israelDateTime, extractApptFromText,
+  saveOrRescheduleBotAppointment, type WorkingDay,
+  resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
+  looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate,
+} from './botAppointments'
+
+describe('normalizeApptDate', () => {
+  it('accepts ISO format and pads single digits', () => {
+    expect(normalizeApptDate('2026-8-9')).toBe('2026-08-09')
+    expect(normalizeApptDate('2026-08-09')).toBe('2026-08-09')
+  })
+  it('accepts DD.MM.YYYY — day first, not US month-first', () => {
+    // 03.08.2026 must mean August 3rd, not March 8th
+    expect(normalizeApptDate('03.08.2026')).toBe('2026-08-03')
+  })
+  it('accepts DD/MM/YYYY', () => {
+    expect(normalizeApptDate('9/8/2026')).toBe('2026-08-09')
+  })
+  it('rejects garbage input', () => {
+    expect(normalizeApptDate('not a date')).toBeNull()
+    expect(normalizeApptDate('')).toBeNull()
+  })
+})
+
+describe('israelDateTime', () => {
+  it('builds a correct instant for a normal date/time', () => {
+    const d = israelDateTime('2026-08-09', '10:00')
+    expect(d).not.toBeNull()
+  })
+  it('rejects a non-existent date (Feb 31) instead of silently rolling into March', () => {
+    expect(israelDateTime('2026-02-31', '10:00')).toBeNull()
+  })
+  it('rejects malformed date/time strings', () => {
+    expect(israelDateTime('2026-8-9', '10:00')).toBeNull() // must be zero-padded already
+    expect(israelDateTime('2026-08-09', '25:00')).toBeNull()
+  })
+})
+
+describe('extractApptFromText (fallback when APPT tag is missing)', () => {
+  it('extracts date+time from a confirmation message', () => {
+    const r = extractApptFromText('קבענו לך תור ל-09.08.2026 בשעה 10:00 😊')
+    expect(r).toEqual({ date: '2026-08-09', time: '10:00', service: '' })
+  })
+  it('takes the LAST date/time mentioned — the new one in a reschedule message', () => {
+    const r = extractApptFromText('הזזנו את התור מ-03.08.2026 09:00 ל-10.08.2026 14:00, קבענו לך')
+    expect(r?.date).toBe('2026-08-10')
+    expect(r?.time).toBe('14:00')
+  })
+  it('returns null when there is no confirmation language', () => {
+    expect(extractApptFromText('מה השעות שלכם?')).toBeNull()
+  })
+  it('returns null when there is no time in the text', () => {
+    expect(extractApptFromText('קבענו לך תור')).toBeNull()
+  })
+})
+
+describe('resolveRelativeDayOffset', () => {
+  it('recognizes "מחר" as +1 day', () => {
+    expect(resolveRelativeDayOffset('מחר בערב זה מושלם')).toBe(1)
+  })
+  it('recognizes "מחרתיים" as +2 days — not confused with "מחר"', () => {
+    expect(resolveRelativeDayOffset('אפשר מחרתיים בבוקר?')).toBe(2)
+  })
+  it('recognizes "בעוד יומיים" as +2 days', () => {
+    expect(resolveRelativeDayOffset('בעוד יומיים אני פנוי')).toBe(2)
+  })
+  it('recognizes "בעוד שלושה ימים" (Hebrew number word) as +3 days', () => {
+    expect(resolveRelativeDayOffset('בעוד שלושה ימים בצהריים')).toBe(3)
+  })
+  it('recognizes "בעוד 4 ימים" (digit) as +4 days', () => {
+    expect(resolveRelativeDayOffset('בעוד 4 ימים')).toBe(4)
+  })
+  it('recognizes "היום" as +0 days', () => {
+    expect(resolveRelativeDayOffset('אפשר היום?')).toBe(0)
+  })
+  it('returns null when no relative-day phrase is present', () => {
+    expect(resolveRelativeDayOffset('כמה זה עולה?')).toBeNull()
+  })
+})
+
+describe('findRelativeDayOffsetInHistory', () => {
+  it('finds the most recent relative-day mention scanning backward', () => {
+    const history = [
+      { content: 'מחפשת הלבנת שיניים' },
+      { content: 'מחר בערב זה מושלם' },
+      { content: 'אז בצהריים' }, // follow-up that only corrects the time, not the day
+    ]
+    expect(findRelativeDayOffsetInHistory(history)).toBe(1)
+  })
+  it('returns null when nothing in the lookback window mentions a relative day', () => {
+    expect(findRelativeDayOffsetInHistory([{ content: 'כמה זה עולה?' }])).toBeNull()
+  })
+})
+
+// קרה בפועל (יוסי, 19/08): הלקוח שאל "למי?" (לא קשור לתאריך בכלל), והמודל
+// "נזכר" ובטעות שכפל אישור-תור ישן — ה-fallback הזיז בשקט תור אמיתי
+describe('looksLikeSchedulingReply — distinguishes real date/time replies from unrelated questions', () => {
+  it('recognizes an explicit date', () => {
+    expect(looksLikeSchedulingReply('אפשר ב-26.08.2026?')).toBe(true)
+  })
+  it('recognizes an explicit time', () => {
+    expect(looksLikeSchedulingReply('אפשר ב-14:00?')).toBe(true)
+  })
+  it('recognizes a day name', () => {
+    expect(looksLikeSchedulingReply('רביעי מתאים')).toBe(true)
+  })
+  it('recognizes a relative-day word', () => {
+    expect(looksLikeSchedulingReply('מחר בבוקר')).toBe(true)
+  })
+  it('recognizes a plain confirmation word', () => {
+    expect(looksLikeSchedulingReply('כן')).toBe(true)
+    expect(looksLikeSchedulingReply('מתאים לי')).toBe(true)
+  })
+  it('does NOT treat an unrelated question as a scheduling reply', () => {
+    expect(looksLikeSchedulingReply('למי')).toBe(false)
+    expect(looksLikeSchedulingReply('כמה זה עולה?')).toBe(false)
+    expect(looksLikeSchedulingReply('איפה אתם נמצאים')).toBe(false)
+  })
+})
+
+// קרה בפועל (24/08, אוריין): הבוט הציע "יש לנו תור פנוי ביום שני הקרוב,
+// 30.08.2026, בשעה 10:00" — הרופא היחיד ל"סתימה" לא עובד בימי שני. הלקוח
+// קיבל "יש תור" ואז מיד "אין תור" כשביקש לקבוע בפועל
+describe('extractOfferedDateTime — extracts a date+time the bot offered, even without confirmation wording', () => {
+  it('extracts date and time from a plain offer sentence (no confirm words)', () => {
+    const r = extractOfferedDateTime('יש לנו תור פנוי ביום שני הקרוב, 30.08.2026, בשעה 10:00. האם זה מתאים לך?')
+    expect(r).toEqual({ date: '2026-08-30', time: '10:00' })
+  })
+  it('returns null when there is no time in the text', () => {
+    expect(extractOfferedDateTime('אנחנו פתוחים בימים א-ה')).toBeNull()
+  })
+})
+
+describe('hasQualifiedDoctorOnDate — verifies a real doctor is actually available before an offer is sent', () => {
+  const DOC_A = 'doc-a' // עובד רק שלישי/רביעי
+  const empResponsibilities = { [DOC_A]: ['טיפולים משמרים'] }
+  const employeeSchedules = {
+    [DOC_A]: [
+      { day: 'ראשון', open: '', close: '', closed: true },
+      { day: 'שני', open: '', close: '', closed: true },
+      { day: 'שלישי', open: '09:00', close: '16:00', closed: false },
+      { day: 'רביעי', open: '09:00', close: '16:00', closed: false },
+      { day: 'חמישי', open: '', close: '', closed: true },
+    ],
+  }
+
+  it('returns false for a date whose weekday the sole qualified doctor does not work (real bug: 30.08.2026 is a Monday)', () => {
+    expect(hasQualifiedDoctorOnDate('2026-08-30', 'טיפולים משמרים', empResponsibilities, employeeSchedules)).toBe(false)
+  })
+
+  it('returns true for a date the doctor actually works (matching Tuesday)', () => {
+    expect(hasQualifiedDoctorOnDate('2026-09-01', 'טיפולים משמרים', empResponsibilities, employeeSchedules)).toBe(true)
+  })
+
+  it('does not block when the service is unknown/null (not enough information)', () => {
+    expect(hasQualifiedDoctorOnDate('2026-08-30', null, empResponsibilities, employeeSchedules)).toBe(true)
+  })
+
+  it('does not block when nobody in the business is configured for that service at all (config gap, not an availability issue)', () => {
+    expect(hasQualifiedDoctorOnDate('2026-08-30', 'הלבנה', empResponsibilities, employeeSchedules)).toBe(true)
+  })
+
+  it('does not block when the business has no doctor-service mapping configured at all', () => {
+    expect(hasQualifiedDoctorOnDate('2026-08-30', 'טיפולים משמרים', {}, {})).toBe(true)
+  })
+})
+
+describe('hasQualifiedDoctorOnDate — employeeMinLeadHours (per-doctor "needs X hours notice")', () => {
+  const DOC_A = 'doc-a'
+  const empResponsibilities = { [DOC_A]: ['שיקום הפה'] }
+  const employeeSchedules = {} // עובד/ת כל יום — רק בודקים את מגבלת השעות מראש
+
+  // מפרק Date להיסט תאריך/שעה בשעון ישראל, כדי לבנות תרחישים דטרמיניסטיים
+  // ביחס ל"עכשיו" בזמן הרצת הבדיקה (לא תאריך קבוע בקוד)
+  function israelParts(d: Date): { date: string; time: string } {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d)
+    const get = (t: string) => fmt.find(p => p.type === t)?.value || ''
+    return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}` }
+  }
+
+  it('blocks a doctor who needs 24h notice when the requested slot is only 2 hours away', () => {
+    const { date, time } = israelParts(new Date(Date.now() + 2 * 3600000))
+    expect(hasQualifiedDoctorOnDate(date, 'שיקום הפה', empResponsibilities, employeeSchedules, time, { [DOC_A]: 24 })).toBe(false)
+  })
+
+  it('allows the same doctor when the requested slot is 30 hours away', () => {
+    const { date, time } = israelParts(new Date(Date.now() + 30 * 3600000))
+    expect(hasQualifiedDoctorOnDate(date, 'שיקום הפה', empResponsibilities, employeeSchedules, time, { [DOC_A]: 24 })).toBe(true)
+  })
+
+  it('does not block when no min-lead-hours is configured for the doctor', () => {
+    const { date, time } = israelParts(new Date(Date.now() + 1 * 3600000))
+    expect(hasQualifiedDoctorOnDate(date, 'שיקום הפה', empResponsibilities, employeeSchedules, time, {})).toBe(true)
+  })
+
+  it('does not block when no time is passed at all (caller did not supply it)', () => {
+    const { date } = israelParts(new Date(Date.now() + 1 * 3600000))
+    expect(hasQualifiedDoctorOnDate(date, 'שיקום הפה', empResponsibilities, employeeSchedules, undefined, { [DOC_A]: 24 })).toBe(true)
+  })
+})
+
+describe('israelDateISOOffset', () => {
+  it('adds the given number of days to the base date', () => {
+    const base = new Date('2026-08-04T21:57:00.000Z') // faked-as-UTC Israel-local timestamp
+    expect(israelDateISOOffset(base, 0)).toBe('2026-08-04')
+    expect(israelDateISOOffset(base, 1)).toBe('2026-08-05')
+    expect(israelDateISOOffset(base, 6)).toBe('2026-08-10')
+  })
+})
+
+// ─── Mock Supabase client for saveOrRescheduleBotAppointment tests ──────────
+function mockSb(opts: {
+  existingAppt?: { id: string; scheduled_at: string } | null
+  dayAppts?: { assigned_to: string; scheduled_at: string; duration_minutes: number }[]
+  upcomingCounts?: Record<string, number>
+} = {}) {
+  const state = { lastInsertedISO: '', lastAssignedTo: '', lastUpdatePayload: null as any }
+
+  function build(selectArg: string) {
+    const chain: any = {
+      _select: selectArg,
+      eq: () => chain,
+      in: () => chain,
+      gte: () => chain,
+      lte: () => chain,
+      order: () => chain,
+      limit: () => chain,
+      maybeSingle: async () => {
+        if (selectArg === 'id, scheduled_at') {
+          return { data: opts.existingAppt ?? null }
+        }
+        if (selectArg.includes('id, scheduled_at, status')) {
+          return { data: { id: 'appt-id', scheduled_at: state.lastInsertedISO, status: 'scheduled' } }
+        }
+        if (selectArg === 'id') {
+          return { data: null } // dup check — no dup by default
+        }
+        return { data: null }
+      },
+      update: (payload: any) => {
+        state.lastUpdatePayload = payload
+        state.lastInsertedISO = payload.scheduled_at
+        if (payload.assigned_to) state.lastAssignedTo = payload.assigned_to
+        return { eq: async () => ({ error: null }) }
+      },
+      insert: (row: any) => {
+        state.lastInsertedISO = row.scheduled_at
+        state.lastAssignedTo = row.assigned_to
+        return { select: () => ({ single: async () => ({ data: { id: 'appt-id' }, error: null }) }) }
+      },
+    }
+    chain.then = (resolve: any) => {
+      if (selectArg.includes('assigned_to, scheduled_at, duration_minutes')) {
+        resolve({ data: opts.dayAppts || [] })
+      } else if (selectArg === 'assigned_to') {
+        const rows: any[] = []
+        for (const [uid, count] of Object.entries(opts.upcomingCounts || {})) {
+          for (let i = 0; i < count; i++) rows.push({ assigned_to: uid })
+        }
+        resolve({ data: rows })
+      } else {
+        resolve({ data: [] })
+      }
+    }
+    return chain
+  }
+
+  return {
+    state,
+    from: (_table: string) => ({
+      select: (arg: string) => build(arg),
+      insert: (row: any) => build('').insert(row),
+    }),
+  }
+}
+
+const baseParams = {
+  businessId: 'biz1',
+  leadId: null,
+  patientName: 'Test Patient',
+  patientPhone: '0500000000',
+  service: 'בדיקה',
+}
+
+describe('saveOrRescheduleBotAppointment — date validation', () => {
+  it('rejects an unparseable date', async () => {
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: 'garbage', time: '10:00' })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('unparseable_date')
+  })
+
+  it('rejects a date too far in the future (model hallucination)', async () => {
+    const farFuture = new Date(Date.now() + 500 * 86400000).toISOString().slice(0, 10)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: farFuture, time: '10:00' })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('date_too_far')
+  })
+})
+
+describe('saveOrRescheduleBotAppointment — same-weekday roll-forward', () => {
+  function nextWeekday(target: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
+    return d.toISOString().slice(0, 10)
+  }
+
+  it('rolls a past same-day time forward by exactly 7 days instead of failing', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: today, time: '00:05' })
+    expect(r.ok).toBe(true)
+    expect(r.dateRolledForward).toBe(true)
+    const rolled = new Date(r.newTime!)
+    const orig = new Date(`${today}T00:05:00+03:00`)
+    expect(Math.round((rolled.getTime() - orig.getTime()) / 86400000)).toBe(7)
+  })
+
+  it('does not roll forward a genuinely future date', async () => {
+    const future = nextWeekday((new Date().getDay() + 2) % 7)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: future, time: '10:00' })
+    expect(r.ok).toBe(true)
+    expect(r.dateRolledForward).toBeFalsy()
+  })
+})
+
+describe('saveOrRescheduleBotAppointment — working hours enforcement', () => {
+  const workingHours: WorkingDay[] = [
+    { day: 'ראשון', open: '09:00', close: '18:00', closed: false },
+    { day: 'שני', open: '09:00', close: '18:00', closed: false },
+    { day: 'שלישי', open: '09:00', close: '18:00', closed: false },
+    { day: 'רביעי', open: '09:00', close: '18:00', closed: false },
+    { day: 'חמישי', open: '09:00', close: '18:00', closed: false },
+    { day: 'שישי', open: '09:00', close: '13:00', closed: false },
+    { day: 'שבת', open: '', close: '', closed: true },
+  ]
+
+  function nextWeekday(target: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
+    return d.toISOString().slice(0, 10)
+  }
+
+  it('rejects a booking on a fully-closed day (Saturday)', async () => {
+    const saturday = nextWeekday(6)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: saturday, time: '10:00', workingHours })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('outside_working_hours')
+  })
+
+  it('rejects a booking after closing time on an open day', async () => {
+    const tuesday = nextWeekday(2)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: tuesday, time: '20:00', workingHours })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('outside_working_hours')
+  })
+
+  it('accepts a booking within business hours', async () => {
+    const tuesday = nextWeekday(2)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: tuesday, time: '10:00', workingHours })
+    expect(r.ok).toBe(true)
+  })
+
+  it('does not block anything when no working hours are configured (backward compatible)', async () => {
+    const saturday = nextWeekday(6)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: saturday, time: '10:00' })
+    expect(r.ok).toBe(true)
+  })
+})
+
+// קרה בפועל: ימי סגירה (חג/חופשה) הגיעו לבוט רק כהקשר בפרומפט ("אל תציע
+// תורים בתאריכים האלה"), בלי שום אכיפה בקוד — בדיוק כמו הפער שהיה קודם
+// בשעות פעילות. אם המודל בכל זאת אישר תור ביום סגור, הוא נשמר כתקין לגמרי
+describe('saveOrRescheduleBotAppointment — business closure exceptions (holidays)', () => {
+  function nextWeekday(target: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
+    return d.toISOString().slice(0, 10)
+  }
+
+  it('rejects a booking on a date listed in businessExceptions', async () => {
+    const tuesday = nextWeekday(2)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), {
+      ...baseParams, date: tuesday, time: '10:00',
+      businessExceptions: [{ date: tuesday, reason: 'חג' }],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('business_closed')
+  })
+
+  it('accepts a booking on a date not in businessExceptions', async () => {
+    const tuesday = nextWeekday(2)
+    const wednesday = nextWeekday(3)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), {
+      ...baseParams, date: tuesday, time: '10:00',
+      businessExceptions: [{ date: wednesday, reason: 'חג' }],
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it('does not block anything when no exceptions are configured (backward compatible)', async () => {
+    const tuesday = nextWeekday(2)
+    const r = await saveOrRescheduleBotAppointment(mockSb(), { ...baseParams, date: tuesday, time: '10:00' })
+    expect(r.ok).toBe(true)
+  })
+})
+
+describe('saveOrRescheduleBotAppointment — doctor assignment when multiple doctors qualify', () => {
+  const DOC_A = 'doc-a'
+  const DOC_B = 'doc-b'
+
+  function nextWeekday(target: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
+    return d.toISOString().slice(0, 10)
+  }
+
+  it('picks the doctor who is actually free at the requested time, not always the first one configured', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: `${tuesday}T09:00:00.000Z`, duration_minutes: 60 }],
+    })
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['השתלות'], [DOC_B]: ['השתלות'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_B)
+  })
+
+  it('load-balances between equally-free doctors by fewest upcoming appointments', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({ upcomingCounts: { [DOC_A]: 5, [DOC_B]: 0 } })
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['השתלות'], [DOC_B]: ['השתלות'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_B)
+  })
+
+  it('assigns directly when only one doctor qualifies — no availability lookup needed', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+
+  it('does not assign a doctor who is closed that day on their own personal schedule — picks the one who is actually working', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'אבחון',
+      empResponsibilities: { [DOC_A]: ['אבחון'], [DOC_B]: ['אבחון'] },
+      employeeSchedules: {
+        [DOC_A]: [{ day: 'שלישי', open: '', close: '', closed: true }],
+        [DOC_B]: [{ day: 'שלישי', open: '09:00', close: '18:00', closed: false }],
+      },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_B)
+  })
+
+  // קרה בפועל (יוסי, 19/08): רופא שסגר את כל ימי העבודה שלו קיבל תור בכל
+  // זאת, כי כשאף אחד לא היה "זמין היום" הקוד היה חוזר לרשימה המלאה. יוסי
+  // קבע במפורש: "בוט קובע לפי זמינות אמיתית ביומן בלבד" — התנהגות הפוכה
+  // מהמקורית (שם הטסט שונה בהתאם, זו לא עוד "נופל בחזרה" אלא "דוחה")
+  it('rejects the booking when every qualified doctor is closed that day, instead of assigning one anyway', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+      employeeSchedules: { [DOC_A]: [{ day: 'שלישי', open: '', close: '', closed: true }] },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+  })
+
+  it('rejects the booking when the sole qualified doctor is already booked at that exact time', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: `${tuesday}T09:00:00.000Z`, duration_minutes: 60 }],
+    })
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+  })
+
+  // מפרק Date להיסט תאריך/שעה בשעון ישראל, כדי לבנות תרחישים דטרמיניסטיים
+  // ביחס ל"עכשיו" בזמן הרצת הבדיקה
+  function israelParts(d: Date): { date: string; time: string } {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d)
+    const get = (t: string) => fmt.find(p => p.type === t)?.value || ''
+    return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}` }
+  }
+
+  it('rejects a booking with a doctor who requires 24h notice when the requested slot is only 2 hours away', async () => {
+    const { date, time } = israelParts(new Date(Date.now() + 2 * 3600000))
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date, time, service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+      employeeMinLeadHours: { [DOC_A]: 24 },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+  })
+
+  it('books normally with the same doctor when the requested slot is far enough ahead (30h > 24h required)', async () => {
+    const { date, time } = israelParts(new Date(Date.now() + 30 * 3600000))
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date, time, service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+      employeeMinLeadHours: { [DOC_A]: 24 },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+
+  it('does not treat "nobody configured for this service at all" as no_doctor_available (unaffected, existing behavior)', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'לא-קיים',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(r.assignedTo).toBeNull()
+  })
+
+  it('only honors preferredDoctorId when they are actually free at that exact time, otherwise falls through to another qualified doctor', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: `${tuesday}T09:00:00.000Z`, duration_minutes: 60 }],
+    })
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'], [DOC_B]: ['הלבנה'] },
+      preferredDoctorId: DOC_A,
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_B)
+  })
+
+  it('ignores employeeSchedules entirely when not provided (backward compatible)', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+
+  // קרה בפועל (אלינה מינסקי, 18/08): הבוט הזכיר "ד"ר גבי סמל" ללקוח בשיחה,
+  // אבל הרוטציה בין שני רופאים מוסמכים לאותו שירות שייכה בפועל את ד"ר עלא
+  // יונס — האישור הסופי סתר את מה שכבר נאמר. preferredDoctorId מכבד את מי
+  // שכבר הובטח, במקום להריץ רוטציה עצמאית שלא מודעת לכך
+  it('honors preferredDoctorId over load-balancing when the promised doctor still qualifies', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({ upcomingCounts: { [DOC_A]: 5, [DOC_B]: 0 } }) // DOC_B היה נבחר ברוטציה רגילה (פחות עמוס)
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['השתלות'], [DOC_B]: ['השתלות'] },
+      preferredDoctorId: DOC_A,
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+
+  it('falls back to normal load-balancing when preferredDoctorId is not actually qualified', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({ upcomingCounts: { [DOC_A]: 5, [DOC_B]: 0 } })
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['השתלות'], [DOC_B]: ['השתלות'] },
+      preferredDoctorId: 'doc-not-qualified',
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_B)
+  })
+})
+
+describe('saveOrRescheduleBotAppointment — secondaryService narrows to the doctor actually qualified for the real treatment', () => {
+  const DOC_A = 'doc-a' // עושה אבחונים כלליים אבל לא שתלים
+  const DOC_B = 'doc-b' // עושה גם אבחונים וגם שתלים
+
+  function nextWeekday(target: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
+    return d.toISOString().slice(0, 10)
+  }
+
+  it('excludes a doctor who does not perform the lead\'s actual (more specific) treatment', async () => {
+    // קרה בפועל: APPT.service="אבחון" (כללי) תואם לשני הרופאים, אבל הליד
+    // עצמו הוא בקשה ל"השתלות" — רק DOC_B מוסמך לזה. בלי secondaryService,
+    // כל רופא "אבחון" יכול היה להישלח, כולל מי שלא עושה שתלים בכלל
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'אבחון', secondaryService: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['אבחון'], [DOC_B]: ['אבחון', 'השתלות'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_B)
+  })
+
+  it('falls back to the general-service qualified list when nobody matches the secondary service (fails open, does not refuse the booking)', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'אבחון', secondaryService: 'אורתודנטיה',
+      empResponsibilities: { [DOC_A]: ['אבחון'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+
+  it('ignores secondaryService when it is the same as the primary service or "אחר"', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה', secondaryService: 'אחר',
+      empResponsibilities: { [DOC_A]: ['הלבנה'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+})

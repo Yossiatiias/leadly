@@ -1,0 +1,192 @@
+<title>אפיון: בקרת נוכחות עם QR</title>
+<style>
+:root{
+  --bg:#F7F8FA; --surface:#FFFFFF; --ink:#161B26; --ink-2:#4B5568; --ink-3:#7B8496;
+  --accent:#2B6BE8; --accent-soft:#EAF1FE; --accent-border:#C9DBFC;
+  --border:#E3E7EE; --good:#0F9D6C; --good-soft:#E6F7F1;
+  --warn:#B7791F; --warn-soft:#FDF3E2;
+  --radius:14px;
+  --serif: Georgia, "Times New Roman", serif;
+  --sans: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Consolas", "SFMono-Regular", Menlo, monospace;
+}
+:root[data-theme="dark"]{
+  --bg:#10141C; --surface:#161B26; --ink:#EDF0F5; --ink-2:#AEB6C6; --ink-3:#7C8496;
+  --accent:#6C9BF5; --accent-soft:#1A2740; --accent-border:#2C3E60;
+  --border:#252C3B; --good:#3FD8A3; --good-soft:#123328;
+  --warn:#E3B25E; --warn-soft:#3A2E14;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10141C; --surface:#161B26; --ink:#EDF0F5; --ink-2:#AEB6C6; --ink-3:#7C8496;
+    --accent:#6C9BF5; --accent-soft:#1A2740; --accent-border:#2C3E60;
+    --border:#252C3B; --good:#3FD8A3; --good-soft:#123328;
+    --warn:#E3B25E; --warn-soft:#3A2E14;
+  }
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+  direction:rtl; text-align:right; line-height:1.65; font-size:16px;
+}
+.page{ max-width:760px; margin:0 auto; padding:56px 28px 96px; }
+.eyebrow{
+  font-size:12.5px; font-weight:700; letter-spacing:0.08em; color:var(--accent);
+  text-transform:uppercase; margin:0 0 10px;
+}
+h1{
+  font-family:var(--serif); font-size:clamp(28px,4.5vw,40px); font-weight:700;
+  margin:0 0 6px; text-wrap:balance; letter-spacing:-0.01em;
+}
+.subtitle{ color:var(--ink-2); font-size:16.5px; margin:0 0 34px; max-width:60ch; }
+.meta-row{
+  display:flex; gap:18px; flex-wrap:wrap; font-size:13px; color:var(--ink-3);
+  border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+  padding:12px 0; margin-bottom:40px;
+}
+.meta-row b{ color:var(--ink-2); font-weight:600; }
+h2{
+  font-family:var(--serif); font-size:22px; font-weight:700; margin:48px 0 4px;
+  padding-bottom:10px; border-bottom:2px solid var(--ink); display:inline-block;
+}
+h2 .num{ color:var(--accent); font-variant-numeric:tabular-nums; margin-left:8px; }
+.section-lede{ color:var(--ink-2); font-size:15px; margin:14px 0 20px; max-width:62ch; }
+.flow{ display:flex; flex-direction:column; gap:0; margin:20px 0; }
+.step{
+  display:grid; grid-template-columns:36px 1fr; gap:16px; padding:16px 0;
+  border-bottom:1px solid var(--border);
+}
+.step:last-child{ border-bottom:none; }
+.step-badge{
+  width:32px; height:32px; border-radius:50%; background:var(--accent-soft);
+  border:1px solid var(--accent-border); color:var(--accent); font-weight:700;
+  font-size:14px; display:flex; align-items:center; justify-content:center;
+  font-variant-numeric:tabular-nums;
+}
+.step-title{ font-weight:700; font-size:15.5px; margin:0 0 3px; }
+.step-body{ color:var(--ink-2); font-size:14.5px; margin:0; }
+.two-col{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0; }
+@media (max-width:620px){ .two-col{ grid-template-columns:1fr; } }
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 22px;
+}
+.card h3{ font-size:15px; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+.card ul{ margin:0; padding-inline-start:20px; color:var(--ink-2); font-size:14.5px; }
+.card li{ margin:6px 0; }
+.pill{
+  display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+  padding:3px 10px; border-radius:99px; letter-spacing:0.01em;
+}
+.pill-good{ background:var(--good-soft); color:var(--good); }
+.pill-warn{ background:var(--warn-soft); color:var(--warn); }
+table{ width:100%; border-collapse:collapse; font-size:14.5px; margin:18px 0; }
+th{
+  text-align:right; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;
+  color:var(--ink-3); font-weight:700; padding:0 12px 10px; border-bottom:1px solid var(--border);
+}
+td{ padding:12px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--ink-2); }
+td:first-child, th:first-child{ padding-inline-start:0; color:var(--ink); font-weight:600; }
+.table-wrap{ overflow-x:auto; }
+.decision{
+  background:var(--accent-soft); border:1px solid var(--accent-border); border-radius:var(--radius);
+  padding:22px 24px; margin:44px 0 12px;
+}
+.decision .eyebrow{ margin-bottom:8px; }
+.decision ol{ margin:12px 0 0; padding-inline-start:22px; }
+.decision li{ margin:10px 0; font-size:15px; }
+.decision li b{ display:block; margin-bottom:2px; }
+.decision li span{ color:var(--ink-2); font-size:13.5px; }
+.foot{ margin-top:56px; padding-top:20px; border-top:1px solid var(--border); color:var(--ink-3); font-size:13px; }
+code{ font-family:var(--mono); background:var(--accent-soft); color:var(--accent); padding:1px 6px; border-radius:5px; font-size:0.9em; }
+</style>
+
+<div class="page">
+  <p class="eyebrow">אפיון פיצ'ר · BetterLead</p>
+  <h1>בקרת נוכחות עם סריקת QR</h1>
+  <p class="subtitle">עובד מגיע למרפאה, סורק קוד עם הטלפון שלו, וזהו — הנוכחות שלו נרשמת אוטומטית. בלי כרטיס נייר, בלי שעון נוכחות נפרד.</p>
+  <div class="meta-row">
+    <span><b>עבור:</b> שקד קליניק</span>
+    <span><b>תאריך:</b> 10.08.2026</span>
+    <span><b>סטטוס:</b> ממתין לאישור לקוח</span>
+  </div>
+
+  <h2><span class="num">01</span>מה זה בפועל</h2>
+  <p class="section-lede">מדבקת QR אחת נדבקת במקום קבוע בכניסה למרפאה (למשל ליד הדלפק). כל עובד שמגיע פותח את האפליקציה בטלפון שלו, סורק את הקוד, והמערכת רושמת "הגעתי" עם השעה המדויקת. באותו אופן בסוף היום — סריקה נוספת רושמת "עזבתי".</p>
+
+  <div class="flow">
+    <div class="step">
+      <div class="step-badge">1</div>
+      <div>
+        <p class="step-title">העובד מגיע ופותח את האפליקציה</p>
+        <p class="step-body">מחובר כבר עם המשתמש שלו, כמו כל כניסה רגילה למערכת.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-badge">2</div>
+      <div>
+        <p class="step-title">לוחץ "סימון נוכחות" וסורק את המדבקה</p>
+        <p class="step-body">המצלמה נפתחת בתוך האפליקציה עצמה — אין צורך באפליקציית סריקה נפרדת.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-badge">3</div>
+      <div>
+        <p class="step-title">המערכת מזהה: כניסה או יציאה?</p>
+        <p class="step-body">אם זו הסריקה הראשונה היום — נרשם "הגעה". אם כבר יש הגעה בלי יציאה — נרשם "יציאה".</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-badge">4</div>
+      <div>
+        <p class="step-title">אישור מיידי על המסך</p>
+        <p class="step-body">"נרשמה הגעה, 08:03 🌸" — ברור, פשוט, בלי טפסים.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="num">02</span>מה מנהל המרפאה רואה</h2>
+  <p class="section-lede">מסך חדש בהגדרות המערכת — "נוכחות עובדים" — עם טבלה של מי הגיע, מתי, ומתי עזב.</p>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>עובד</th><th>הגעה</th><th>יציאה</th><th>סה"כ שעות</th><th>סטטוס</th></tr></thead>
+    <tbody>
+      <tr><td>ד"ר מסאוורה</td><td>08:02</td><td>16:45</td><td>8:43</td><td><span class="pill pill-good">תקין</span></td></tr>
+      <tr><td>ד"ר אירה</td><td>09:15</td><td>—</td><td>—</td><td><span class="pill pill-warn">עדיין במרפאה</span></td></tr>
+      <tr><td>אבנר צרויה</td><td>—</td><td>—</td><td>—</td><td><span class="pill pill-warn">לא סרק היום</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="section-lede">אפשר לייצא את זה לאקסל בסוף חודש — בדיוק כמו הדוחות הקיימים במערכת היום.</p>
+
+  <h2><span class="num">03</span>נקודה שחשוב להכריע לגביה</h2>
+  <div class="two-col">
+    <div class="card">
+      <h3>⚠️ הסיכון: "לסרוק בשביל חבר"</h3>
+      <ul>
+        <li>מדבקה קבועה במקום אחד — טכנית, כל מי שסורק אותה "מסמן נוכחות", גם אם זה עובד שסורק בשביל מישהו שלא הגיע.</li>
+        <li>זה סיכון אמיתי בכל מערכת שמבוססת על מדבקה קבועה, לא ייחודי לנו.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>✅ הפתרון המוצע</h3>
+      <ul>
+        <li>הסריקה תקפה רק אם העובד מחובר לחשבון האישי שלו באפליקציה באותו רגע.</li>
+        <li>כלומר: צריך גם את הטלפון של העובד וגם את הסיסמה שלו כדי "לסרוק בשבילו" — הרבה יותר קשה לעקוף בטעות או בכוונה.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="decision">
+    <p class="eyebrow">להחלטה מול הלקוח</p>
+    <ol>
+      <li><b>איפה תלויה המדבקה בפועל?</b><span>כניסה למרפאה / דלפק קבלה / חדר צוות — משפיע על כמה קל לגשת אליה.</span></li>
+      <li><b>האם צריך התראה כשעובד "שכח לצאת"?</b><span>למשל אם עברו 12 שעות בלי סריקת יציאה — לשלוח תזכורת?</span></li>
+      <li><b>מי רואה את הדוח?</b><span>רק מנהל המרפאה, או גם כל עובד רואה את הנוכחות של עצמו בלבד?</span></li>
+      <li><b>יש כבר מערכת נוכחות/שכר קיימת שצריך להתחבר אליה?</b><span>אם כן — טוב לדעת עכשיו, לפני שבונים.</span></li>
+    </ol>
+  </div>
+
+  <p class="foot">מסמך זה מתאר את הפיצ'ר בשפה פשוטה לצורך אישור מול הלקוח. לאחר אישור — נעבור לתכנון טכני מפורט ולוח זמנים.</p>
+</div>

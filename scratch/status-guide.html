@@ -1,0 +1,524 @@
+<title>מסע הפנייה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;600;700&family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #F3F7F6;
+    --surface: #FFFFFF;
+    --surface-sunken: #EAF1EF;
+    --ink: #142320;
+    --ink-soft: #4B5D58;
+    --ink-faint: #7E9490;
+    --border: #D7E4E1;
+    --border-soft: #E4EDEB;
+
+    --accent: #0E6E62;
+    --accent-ink: #0B564D;
+    --accent-soft: #E1F1ED;
+    --accent-line: #9FCFC4;
+
+    --manual: #9C6B12;
+    --manual-ink: #7A5209;
+    --manual-soft: #FBF1DE;
+    --manual-line: #E7C77D;
+
+    --good: #2E7D5B;
+    --good-soft: #E4F3EC;
+    --bad: #B23B3B;
+    --bad-soft: #FBEAEA;
+    --neutral: #6B7C78;
+    --neutral-soft: #EDF2F1;
+
+    --shadow: 0 1px 2px rgba(20,35,32,0.04), 0 6px 20px -8px rgba(20,35,32,0.12);
+
+    --font-display: "Frank Ruhl Libre", "Times New Roman", serif;
+    --font-body: "Heebo", "Segoe UI", Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E1613;
+      --surface: #16211D;
+      --surface-sunken: #101A17;
+      --ink: #E9F1EE;
+      --ink-soft: #AFC3BE;
+      --ink-faint: #6E8480;
+      --border: #263531;
+      --border-soft: #1E2B27;
+
+      --accent: #3FB6A2;
+      --accent-ink: #7ED4C3;
+      --accent-soft: #123029;
+      --accent-line: #2C5A50;
+
+      --manual: #D9A44C;
+      --manual-ink: #EFC783;
+      --manual-soft: #2E2311;
+      --manual-line: #5A461F;
+
+      --good: #63C298;
+      --good-soft: #10281D;
+      --bad: #E28080;
+      --bad-soft: #2E1616;
+      --neutral: #90A5A0;
+      --neutral-soft: #1B2622;
+
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 30px -10px rgba(0,0,0,0.5);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0E1613;
+    --surface: #16211D;
+    --surface-sunken: #101A17;
+    --ink: #E9F1EE;
+    --ink-soft: #AFC3BE;
+    --ink-faint: #6E8480;
+    --border: #263531;
+    --border-soft: #1E2B27;
+
+    --accent: #3FB6A2;
+    --accent-ink: #7ED4C3;
+    --accent-soft: #123029;
+    --accent-line: #2C5A50;
+
+    --manual: #D9A44C;
+    --manual-ink: #EFC783;
+    --manual-soft: #2E2311;
+    --manual-line: #5A461F;
+
+    --good: #63C298;
+    --good-soft: #10281D;
+    --bad: #E28080;
+    --bad-soft: #2E1616;
+    --neutral: #90A5A0;
+    --neutral-soft: #1B2622;
+
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 30px -10px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { direction: rtl; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ─── Header ─────────────────────────────────────────── */
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-bottom: 22px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(32px, 5vw, 44px);
+    line-height: 1.18;
+    margin: 0 0 14px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  .dek {
+    font-size: 17px;
+    color: var(--ink-soft);
+    max-width: 58ch;
+    margin: 0 0 8px;
+  }
+
+  header.intro {
+    margin-bottom: 52px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ─── Legend ─────────────────────────────────────────── */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 12px;
+  }
+
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dot.auto { background: var(--accent); }
+  .legend-dot.manual { background: var(--manual); }
+
+  /* ─── Journey ────────────────────────────────────────── */
+
+  .journey { position: relative; }
+
+  .stage {
+    position: relative;
+    padding-inline-end: 46px;
+    padding-bottom: 48px;
+  }
+
+  .stage:last-child { padding-bottom: 0; }
+
+  /* מסלול אנכי בצד ימין (RTL) — רציף לאורך שלבים אוטומטיים, מקווקו בשלבים ידניים */
+  .stage::before {
+    content: "";
+    position: absolute;
+    inset-inline-end: 15px;
+    top: 40px;
+    bottom: -8px;
+    width: 2px;
+    background: var(--track, var(--border));
+  }
+  .stage.auto-flow::before { background: var(--accent-line); }
+  .stage.manual-flow::before {
+    background: repeating-linear-gradient(to bottom, var(--manual-line) 0 6px, transparent 6px 12px);
+  }
+  .stage:last-child::before { display: none; }
+
+  .stage-marker {
+    position: absolute;
+    inset-inline-end: 0;
+    top: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 14px;
+    background: var(--surface);
+    border: 2px solid var(--marker-border, var(--border));
+    color: var(--marker-color, var(--ink-soft));
+    z-index: 1;
+  }
+  .stage.auto-flow .stage-marker { border-color: var(--accent); color: var(--accent-ink); }
+  .stage.manual-flow .stage-marker { border-color: var(--manual); color: var(--manual-ink); }
+
+  .stage-head { margin-bottom: 18px; }
+
+  .stage-kicker {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  .stage.auto-flow .stage-kicker { background: var(--accent-soft); color: var(--accent-ink); }
+  .stage.manual-flow .stage-kicker { background: var(--manual-soft); color: var(--manual-ink); }
+
+  .stage h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+
+  .stage p.stage-desc {
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 54ch;
+  }
+
+  /* ─── Status cards ───────────────────────────────────── */
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .status-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .status-card .name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+
+  .status-card .name .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stage.auto-flow .status-card .name .dot { background: var(--accent); }
+  .stage.manual-flow .status-card .name .dot { background: var(--manual); }
+
+  .status-card .desc {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* וריאנטים סמנטיים לשלב הסיום — נפרד לגמרי מהצבע האדום/ירוק */
+  .status-card.good .name .dot { background: var(--good); }
+  .status-card.bad .name .dot { background: var(--bad); }
+  .status-card.neutral .name .dot { background: var(--neutral); }
+
+  /* ─── Callout: warning about lookalike names ─────────── */
+
+  .warn {
+    display: flex;
+    gap: 12px;
+    background: var(--manual-soft);
+    border: 1px solid var(--manual-line);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 22px;
+    font-size: 13.5px;
+    color: var(--ink);
+  }
+  .warn .icon { font-size: 18px; line-height: 1; flex-shrink: 0; }
+  .warn strong { color: var(--manual-ink); }
+
+  /* ─── Summary ────────────────────────────────────────── */
+
+  .summary {
+    margin-top: 64px;
+    padding-top: 44px;
+    border-top: 1px solid var(--border);
+  }
+
+  .summary h2 {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 22px;
+    text-align: center;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .summary-card {
+    border-radius: 16px;
+    padding: 22px 22px 20px;
+    border: 1.5px solid;
+  }
+
+  .summary-card.auto {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+  }
+  .summary-card.manual {
+    background: var(--manual-soft);
+    border-color: var(--manual-line);
+  }
+
+  .summary-card .head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+  .summary-card.auto .head { color: var(--accent-ink); }
+  .summary-card.manual .head { color: var(--manual-ink); }
+
+  .summary-card ul {
+    margin: 0;
+    padding-inline-start: 18px;
+    font-size: 13.5px;
+    color: var(--ink);
+    line-height: 1.7;
+  }
+
+  .summary-card p.note {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 12px 0 0;
+  }
+
+  @media (max-width: 560px) {
+    .page { padding: 40px 16px 72px; }
+    .stage { padding-inline-end: 38px; }
+    .stage::before { inset-inline-end: 12px; }
+    .stage-marker { width: 26px; height: 26px; font-size: 12px; }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="intro">
+    <span class="eyebrow">מדריך למשתמש · BetterLead</span>
+    <h1>איך עובד הסטטוס של הפנייה</h1>
+    <p class="dek">לכל פונה יש שלב שבו הוא נמצא ברגע נתון. חלק מהשלבים מתקדמים לבד, וחלק אתם קובעים ידנית — הנה כל המסע, לפי הסדר.</p>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot auto"></span> מתקדם אוטומטית</span>
+      <span class="legend-item"><span class="legend-dot manual"></span> אתם קובעים, ואף אחד לא משנה את זה</span>
+    </div>
+  </header>
+
+  <div class="journey">
+
+    <section class="stage auto-flow">
+      <span class="stage-marker">1</span>
+      <div class="stage-head">
+        <span class="stage-kicker">אוטומטי</span>
+        <h2>הפנייה נכנסת</h2>
+        <p class="stage-desc">מהרגע שפונה יוצר קשר ועד שנקבע לו תור — המערכת עוקבת אחרי השיחה ומקדמת את הסטטוס לבד.</p>
+      </div>
+      <div class="cards">
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>חדש</p>
+          <p class="desc">פונה בדיוק נכנס למערכת. עוד לא היה שום קשר.</p>
+        </div>
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>אין מענה</p>
+          <p class="desc">הבוט פנה אליו, אבל הוא עדיין לא הגיב.</p>
+        </div>
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>למעקב</p>
+          <p class="desc">התחיל שיח אמיתי — הפונה מגיב, השיחה מתקדמת.</p>
+        </div>
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>נקבע תור</p>
+          <p class="desc">נקבע לו תור בפועל ביומן, דרך הבוט או ידנית.</p>
+        </div>
+      </div>
+      <div class="warn">
+        <span class="icon">⚠️</span>
+        <div><strong>לב שים:</strong> "למעקב" (כאן) ו"מעקב אחר הצעה" (בהמשך) נשמעים דומים אבל הם שני עולמות שונים — הראשון אוטומטי, השני ידני ומוגן.</div>
+      </div>
+    </section>
+
+    <section class="stage manual-flow">
+      <span class="stage-marker">2</span>
+      <div class="stage-head">
+        <span class="stage-kicker">ידני</span>
+        <h2>הפונה מגיע לקליניקה</h2>
+        <p class="stage-desc">מכאן אתם קובעים מה קרה בפועל — רק אתם יודעים אם הוא הגיע.</p>
+      </div>
+      <div class="cards">
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>הגיע</p>
+          <p class="desc">הפונה הגיע לתור שנקבע לו.</p>
+        </div>
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>לא הגיע</p>
+          <p class="desc">הפונה לא הגיע לתור (no-show).</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage manual-flow">
+      <span class="stage-marker">3</span>
+      <div class="stage-head">
+        <span class="stage-kicker">ידני</span>
+        <h2>תהליך המכירה</h2>
+        <p class="stage-desc">אחרי האבחון, זה שלב המעקב אחרי ההצעה שנתתם.</p>
+      </div>
+      <div class="cards">
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>הצעת מחיר</p>
+          <p class="desc">נתתם לפונה הצעת מחיר, וממתינים לתשובה.</p>
+        </div>
+        <div class="status-card">
+          <p class="name"><span class="dot"></span>מעקב אחר הצעה</p>
+          <p class="desc">אתם בתהליך מעקב או שכנוע — התקשרתם, שלחתם תזכורת, ממתינים שיחליט.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage manual-flow">
+      <span class="stage-marker">4</span>
+      <div class="stage-head">
+        <span class="stage-kicker">ידני · סופי</span>
+        <h2>סיום התהליך</h2>
+        <p class="stage-desc">כל פנייה מגיעה בסוף לאחד מהמצבים האלה, לפי מה שבאמת קרה.</p>
+      </div>
+      <div class="cards">
+        <div class="status-card good">
+          <p class="name"><span class="dot"></span>נסגר</p>
+          <p class="desc">הפונה סגר עסקה — התהליך הסתיים בהצלחה.</p>
+        </div>
+        <div class="status-card bad">
+          <p class="name"><span class="dot"></span>אבוד</p>
+          <p class="desc">הפונה החליט לא להמשיך (מקום אחר, ויתר וכו').</p>
+        </div>
+        <div class="status-card neutral">
+          <p class="name"><span class="dot"></span>לא רלוונטי</p>
+          <p class="desc">הפנייה בכלל לא הייתה מתאימה — טעות, אזור לא רלוונטי, פנייה כפולה.</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="summary">
+    <h2>שני כללים, וזהו</h2>
+    <div class="summary-grid">
+      <div class="summary-card auto">
+        <p class="head">🔄 חדש · אין מענה · למעקב · נקבע תור</p>
+        <ul>
+          <li>המערכת מקדמת אותם לבד</li>
+          <li>אין צורך לעדכן ידנית</li>
+        </ul>
+      </div>
+      <div class="summary-card manual">
+        <p class="head">✋ כל סטטוס אחר</p>
+        <ul>
+          <li>רק אתם קובעים אותו</li>
+          <li>שום פעולה טכנית לא תזיז אותו בטעות — לא רענון מסך, לא יצירת תור, לא מחיקת תור</li>
+        </ul>
+        <p class="note">הוא נשאר בדיוק איפה ששמתם אותו, עד שאתם תבחרו אחרת.</p>
+      </div>
+    </div>
+  </div>
+
+</div>

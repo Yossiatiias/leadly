@@ -3,6 +3,18 @@
     {
       "path": "/api/lead-hunting/cron",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/post-appointment",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-messages",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/sync-optima",
+      "schedule": "0 6 * * *"
     }
   ]
 }

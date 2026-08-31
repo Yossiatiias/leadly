@@ -104,9 +104,9 @@ export default function MessagesPage() {
   const filteredProfiles = profiles.filter(p => p.full_name.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-canvas)' }}>
+    <div className="mobile-full-height" style={{ display: 'flex', height: '100vh', background: 'var(--bg-canvas)' }}>
       {/* Contacts */}
-      <div style={{ width: '260px', flexShrink: 0, background: 'var(--bg-surface)', borderLeft: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column' }}>
+      <div className={`msg-list-pane${selectedId ? ' mobile-hidden' : ''}`} style={{ width: '260px', flexShrink: 0, background: 'var(--bg-surface)', borderLeft: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border-default)' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--fg-2)', marginBottom: '12px' }}>הודעות</h2>
           <div style={{ position: 'relative' }}>
@@ -149,7 +149,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Chat */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className={`msg-chat-pane${!selectedId ? ' mobile-hidden' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {!selectedId ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: 'var(--fg-4)' }}>
             <MessageSquare size={32} style={{ color: 'var(--border-default)' }} />
@@ -158,6 +158,7 @@ export default function MessagesPage() {
         ) : (
           <>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-default)', background: 'var(--bg-surface)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button className="mobile-only" onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-2)', fontSize: '20px', padding: '2px 4px', fontFamily: 'inherit', alignItems: 'center' }}>→</button>
               <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#3FA9DC', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '13px' }}>
                 {selectedProfile ? getInitials(selectedProfile.full_name) : '?'}
               </div>

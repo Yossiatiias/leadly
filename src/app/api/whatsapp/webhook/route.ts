@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse, after } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { ingestIncomingMessages } from '@/lib/whatsappIngest'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,14 +22,16 @@ export async function POST(req: NextRequest) {
 
     if (!isRelevant) return NextResponse.json({ ok: true })
 
-    const instanceId: string = instanceData?.idInstance?.toString() || ''
+    const rawInstanceId: string = instanceData?.idInstance?.toString() || ''
+    // Normalize: strip "Instance " prefix that users sometimes paste from Green API console
+    const instanceId = rawInstanceId.replace(/^Instance\s+/i, '').trim()
     if (!instanceId) return NextResponse.json({ ok: true })
 
     // מצא עסק לפי instance
     const { data: connection } = await supabase
       .from('whatsapp_connections')
-      .select('business_id, bot_enabled')
-      .eq('instance_id', instanceId)
+      .select('business_id, bot_enabled, api_token, api_url')
+      .or(`instance_id.eq.${instanceId},instance_id.eq.Instance ${instanceId}`)
       .single()
 
     if (!connection?.bot_enabled) {
@@ -37,8 +40,8 @@ export async function POST(req: NextRequest) {
     }
 
     const businessId = connection.business_id
-    const greenUrl = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com'
-    const greenToken = process.env.GREEN_API_TOKEN
+    const greenUrl = connection.api_url || 'https://7107.api.greenapi.com'
+    const greenToken = connection.api_token
 
     // ─── במקום לסמוך על תוכן ה-webhook, שאל את Green API ישירות ───────────
     const msgsRes = await fetch(
@@ -60,96 +63,8 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
       `${req.headers.get('x-forwarded-proto')}://${req.headers.get('host')}`
 
-    for (const msg of incomingMsgs) {
-      const chatId: string = msg.chatId || ''
-      if (chatId.includes('@g.us')) continue // דלג על קבוצות
-
-      const senderPhone = chatId.replace('@c.us', '')
-      const messageText: string =
-        msg.textMessage ||
-        msg.extendedTextMessage?.text || ''
-      const messageId: string = msg.idMessage || ''
-
-      if (!messageText || !senderPhone || !messageId) continue
-
-      // בדוק אם כבר עיבדנו את ההודעה הזו
-      const { data: existing } = await supabase
-        .from('messages')
-        .select('id')
-        .eq('whatsapp_message_id', messageId)
-        .maybeSingle()
-
-      if (existing) {
-        console.log('[webhook] already processed:', messageId)
-        continue
-      }
-
-      console.log('[webhook] new message from', senderPhone, ':', messageText)
-
-      // מצא או צור שיחה
-      let { data: conversation } = await supabase
-        .from('conversations')
-        .select('*')
-        .eq('business_id', businessId)
-        .eq('contact_phone', senderPhone)
-        .maybeSingle()
-
-      if (!conversation) {
-        const { data: newConv } = await supabase
-          .from('conversations')
-          .insert({
-            business_id: businessId,
-            contact_phone: senderPhone,
-            contact_name: msg.senderName || null,
-            status: 'active',
-            bot_enabled: true,
-          })
-          .select()
-          .single()
-        conversation = newConv
-      }
-
-      if (!conversation) continue
-
-      // שמור הודעה נכנסת תמיד — גם במצב ידני
-      await supabase.from('messages').insert({
-        conversation_id: conversation.id,
-        business_id: businessId,
-        direction: 'inbound',
-        content: messageText,
-        sender_type: 'contact',
-        whatsapp_message_id: messageId,
-      })
-
-      // עדכן updated_at על השיחה כדי שתעלה לראש הרשימה
-      await supabase.from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversation.id)
-
-      // אם מצב ידני — שמור אבל אל תפעיל AI
-      if (!conversation.bot_enabled || conversation.status === 'human_takeover') continue
-
-      // קרא ל-ai-respond ברקע
-      const aiPayload = {
-        conversationId: conversation.id,
-        businessId,
-        senderPhone,
-        messageText,
-        instanceId,
-      }
-
-      after(async () => {
-        try {
-          await fetch(`${baseUrl}/api/whatsapp/ai-respond`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(aiPayload),
-          })
-        } catch (e) {
-          console.error('[webhook] after() error:', e)
-        }
-      })
-    }
+    const { processed } = await ingestIncomingMessages(supabase, businessId, incomingMsgs, baseUrl)
+    console.log('[webhook] processed new messages:', processed)
 
     return NextResponse.json({ ok: true })
 

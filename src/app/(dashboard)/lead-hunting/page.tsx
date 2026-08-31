@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { splitName } from '@/lib/leads'
 import { Plus, Check, X, Crosshair, Play, ExternalLink, Clock, Trash2, MessageSquare, Pencil } from 'lucide-react'
 
 interface Candidate {
@@ -33,6 +34,7 @@ interface HuntSchedule {
   scan_hour: number
   next_scan_at: string | null
   last_scan_at: string | null
+  last_scan_type: 'manual' | 'scheduled' | null
 }
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
@@ -66,7 +68,7 @@ export default function LeadHuntingPage() {
   const [newUrl, setNewUrl]           = useState('')
   const [newLabel, setNewLabel]       = useState('')
   const [newType, setNewType]         = useState<SourceType>('facebook')
-  const [schedule, setSchedule]       = useState<HuntSchedule>({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null })
+  const [schedule, setSchedule]       = useState<HuntSchedule>({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null, last_scan_type: null })
   const [scanning, setScanning]       = useState(false)
   const [scanMsg, setScanMsg]         = useState('')
   const [saving, setSaving]           = useState(false)
@@ -81,6 +83,8 @@ export default function LeadHuntingPage() {
   const [editLabel, setEditLabel]       = useState('')
   const [editUrl, setEditUrl]           = useState('')
   const [editType, setEditType]         = useState<SourceType>('facebook')
+  const [showResultPanel, setShowResultPanel] = useState(false)
+  const [showSourcesTooltip, setShowSourcesTooltip] = useState(false)
 
   useEffect(() => {
     if (!newUrl.trim() || newUrl.length < 8) return
@@ -98,10 +102,16 @@ export default function LeadHuntingPage() {
         detected = title || null
       } catch {}
       if (!detected) {
-        try {
-          const u = new URL(newUrl.startsWith('http') ? newUrl : 'https://' + newUrl)
-          detected = u.hostname.replace('www.', '')
-        } catch {}
+        // נופלים חזרה לשם המתחם רק כשזה מידע שימושי (אתר/אחר).
+        // בפייסבוק/אינסטגרם השם האמיתי (למשל שם הקבוצה) לא ניתן לזיהוי אוטומטי
+        // כשהקישור הוא מזהה מספרי — "facebook.com" בתור שם קבוצה מטעה ולא עוזר.
+        // עדיף להשאיר ריק ולתת למשתמש להזין שם אמיתי (הוא יודע איזו קבוצה זו).
+        if (newType !== 'facebook' && newType !== 'instagram') {
+          try {
+            const u = new URL(newUrl.startsWith('http') ? newUrl : 'https://' + newUrl)
+            detected = u.hostname.replace('www.', '')
+          } catch {}
+        }
       }
       if (detected && !newLabel.trim()) setNewLabel(detected)
       setFetchingTitle(false)
@@ -114,15 +124,18 @@ export default function LeadHuntingPage() {
     const interval = setInterval(async () => {
       const { data: biz } = await supabase.from('businesses').select('settings').eq('id', businessId).single()
       const lastScanAt = biz?.settings?.hunt_schedule?.last_scan_at
+      const lastScanType = biz?.settings?.hunt_schedule?.last_scan_type || 'manual'
       if (lastScanAt && lastScanAt > scanStartedAt) {
         clearInterval(interval)
         clearTimeout(timeout)
         setScanPending(false)
+        setSchedule(prev => ({ ...prev, last_scan_at: lastScanAt, last_scan_type: lastScanType }))
         const { data: newCands } = await supabase
           .from('lead_candidates').select('id')
           .eq('business_id', businessId)
           .gt('found_at', scanStartedAt)
         setScanResult({ at: lastScanAt, newLeads: newCands?.length || 0 })
+        setShowResultPanel(true)
         await loadCandidates(businessId)
       }
     }, 30000)
@@ -147,7 +160,7 @@ export default function LeadHuntingPage() {
       }))
       setSources(raw)
       if (biz?.settings?.hunt_schedule) {
-        setSchedule({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null, ...biz.settings.hunt_schedule })
+        setSchedule({ enabled: false, interval_hours: 24, scan_hour: 8, next_scan_at: null, last_scan_at: null, last_scan_type: null, ...biz.settings.hunt_schedule })
       }
       // restore scan pending state after page refresh
       const startedAt: string | undefined = biz?.settings?.scan_started_at
@@ -198,8 +211,12 @@ export default function LeadHuntingPage() {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url)
       const parts = u.pathname.split('/').filter(Boolean)
+      // קבוצת פייסבוק עם מזהה מספרי (הפורמט הנפוץ) — אין בו שם קריא,
+      // מחזירים ריק כדי שהרשימה תציג "+ הוסף שם" ולא תסתיר שהשם חסר
+      if (parts[0] === 'groups' && parts[1] && /^\d+$/.test(parts[1])) return ''
       if (parts[0] === 'groups' && parts[1]) return decodeURIComponent(parts[1]).replace(/-/g, ' ')
       if (parts[0]?.startsWith('@')) return parts[0]
+      if (u.hostname.includes('facebook.com') || u.hostname.includes('instagram.com')) return ''
       if (parts[0] && parts[0].length > 1) return decodeURIComponent(parts[0]).replace(/-/g, ' ')
       return u.hostname.replace('www.', '')
     } catch { return url.trim() }
@@ -261,9 +278,13 @@ export default function LeadHuntingPage() {
 
   async function approveCandidate(c: Candidate) {
     if (!businessId) return
+    const fullName = c.name || c.summary?.slice(0, 30) || 'ליד מצייד'
+    const { firstName, lastName } = splitName(fullName)
     await supabase.from('leads').insert({
       business_id: businessId,
-      name: c.name || c.summary?.slice(0, 30) || 'ליד מצייד',
+      name: fullName,
+      first_name: firstName,
+      last_name: lastName,
       phone: c.phone || null,
       email: c.email || null,
       source: 'scrape',
@@ -301,7 +322,7 @@ export default function LeadHuntingPage() {
   const currentTypeMeta = getTypeMeta(newType)
 
   return (
-    <div style={{ padding: '28px', maxWidth: '920px', margin: '0 auto', direction: 'rtl' }}>
+    <div className="mobile-tight-padding" style={{ padding: '28px', maxWidth: '920px', margin: '0 auto', direction: 'rtl' }}>
 
       {/* Toast */}
       {toast && (
@@ -338,8 +359,9 @@ export default function LeadHuntingPage() {
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="flex-wrap-mobile" style={{ display: 'flex', gap: '8px' }}>
           <input
+            className="mobile-input-full"
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             placeholder={fetchingTitle ? 'מזהה שם...' : `שם ה${currentTypeMeta.label}`}
@@ -372,7 +394,7 @@ export default function LeadHuntingPage() {
       </div>
 
       {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', marginBottom: '20px' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', marginBottom: '20px' }}>
 
         {/* ── Sources card ── */}
         <div style={card}>
@@ -402,8 +424,8 @@ export default function LeadHuntingPage() {
                         </button>
                       ))}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <input value={editLabel} onChange={e => setEditLabel(e.target.value)} placeholder="שם" style={{ width: '130px', padding: '6px 9px', borderRadius: '7px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }} />
+                    <div className="flex-wrap-mobile" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input className="mobile-input-full" value={editLabel} onChange={e => setEditLabel(e.target.value)} placeholder="שם" style={{ width: '130px', padding: '6px 9px', borderRadius: '7px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }} />
                       <input value={editUrl} onChange={e => setEditUrl(e.target.value)} dir="ltr" placeholder="URL" style={{ flex: 1, padding: '6px 9px', borderRadius: '7px', border: '1px solid var(--border-default)', fontSize: '12px', fontFamily: 'inherit', background: 'var(--bg-surface)', color: 'var(--fg-1)', outline: 'none' }} />
                       <button onClick={saveEdit} style={{ padding: '6px 12px', borderRadius: '7px', border: 'none', background: 'var(--brand)', color: 'white', fontFamily: 'inherit', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>שמור</button>
                       <button onClick={() => setEditingIndex(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex', padding: '4px', flexShrink: 0 }}><X size={14} /></button>
@@ -472,9 +494,6 @@ export default function LeadHuntingPage() {
                   {schedule.next_scan_at && (
                     <span>סריקה הבאה: {new Date(schedule.next_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   )}
-                  {schedule.last_scan_at && (
-                    <span>סריקה אחרונה: {new Date(schedule.last_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                  )}
                 </div>
                 <p style={{ fontSize: '11px', color: 'var(--fg-4)', lineHeight: 1.5 }}>מומלץ לבחור שעה שבה המחשב בדרך כלל דולק</p>
               </>
@@ -494,30 +513,44 @@ export default function LeadHuntingPage() {
               <Play size={14} /> {scanPending ? 'סורק...' : 'סרוק עכשיו'}
             </button>
 
-            {scanMsg && !scanResult && (
+            {scanMsg && (
               <p style={{ fontSize: '11px', color: 'var(--fg-4)', marginBottom: '8px', lineHeight: 1.5 }}>{scanMsg}</p>
-            )}
-
-            {scanResult && (
-              <div style={{ background: 'var(--bg-sunken)', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px' }}>
-                <p style={{ fontSize: '12px', fontWeight: 700, color: scanResult.newLeads > 0 ? 'var(--success)' : 'var(--fg-2)', margin: '0 0 5px' }}>
-                  {scanResult.newLeads > 0 ? `✅ נמצאו ${scanResult.newLeads} לידים חדשים` : '✅ הסריקה הושלמה — לא נמצאו לידים חדשים'}
-                </p>
-                <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: '0 0 2px' }}>
-                  🕐 {new Date(scanResult.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </p>
-                <p style={{ fontSize: '11px', color: 'var(--fg-4)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  📡 {sources.map(s => s.label || s.url).join(' · ')}
-                </p>
-              </div>
             )}
 
             <p style={{ fontSize: '11px', color: 'var(--fg-4)', lineHeight: 1.5 }}>
               {sources.length === 0
                 ? 'הוסף מקור כדי להתחיל'
-                : 'שימוש תכוף עלול לגרום לחסימה — מומלץ עד פעמיים ביום'}
+                : 'שימוש תכוף עלול לגרום לחסימה, מומלץ עד פעמיים ביום'}
             </p>
           </div>
+
+          {/* Last scan summary — separate card */}
+          {schedule.last_scan_at && !scanPending && (
+            <div style={card}>
+              <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-1)', margin: '0 0 10px' }}>📋 סריקה אחרונה</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מתי:</span>
+                  <span style={{ fontSize: '11px', color: 'var(--fg-2)', fontWeight: 600 }}>
+                    {new Date(schedule.last_scan_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '20px', background: schedule.last_scan_type === 'scheduled' ? 'var(--brand-soft)' : 'var(--bg-sunken)', color: schedule.last_scan_type === 'scheduled' ? 'var(--brand)' : 'var(--fg-3)', border: '1px solid var(--border-default)', fontWeight: 500 }}>
+                    {schedule.last_scan_type === 'scheduled' ? 'אוטומטית' : 'יזומה'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מקורות שנסרקו:</span>
+                  <span style={{ fontSize: '11px', color: 'var(--fg-2)', fontWeight: 600 }}>{sources.length}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>לידים חדשים:</span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: scanResult && scanResult.newLeads > 0 ? 'var(--success)' : 'var(--fg-2)' }}>
+                    {scanResult?.newLeads ?? '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
@@ -618,6 +651,51 @@ export default function LeadHuntingPage() {
           })
         )}
       </div>
+
+      {/* Floating scan result panel — X only, no auto-dismiss */}
+      {scanResult && showResultPanel && (
+        <div className="scan-result-panel-mobile" style={{
+          position: 'fixed', bottom: '30px', left: '30px',
+          background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+          borderRadius: '16px', padding: '18px 20px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)', zIndex: 9000,
+          minWidth: '280px', maxWidth: '360px', direction: 'rtl',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 700, color: scanResult.newLeads > 0 ? 'var(--success)' : 'var(--fg-1)' }}>
+              ✅ הסריקה הושלמה
+            </span>
+            <button onClick={() => setShowResultPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', padding: '4px', display: 'flex' }}>
+              <X size={15} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--fg-4)', flexShrink: 0 }}>🆕 לידים חדשים:</span>
+              <span style={{ fontSize: '16px', fontWeight: 700, color: scanResult.newLeads > 0 ? 'var(--success)' : 'var(--fg-3)' }}>
+                {scanResult.newLeads}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '12px', color: 'var(--fg-4)', flexShrink: 0 }}>📡 מקורות שנסרקו:</span>
+              <span style={{ fontSize: '12px', color: 'var(--fg-2)', lineHeight: 1.6 }}>
+                {sources.map(s => s.label || s.url).join('\n').split('\n').map((name, i) => (
+                  <span key={i} style={{ display: 'block' }}>· {name}</span>
+                ))}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--fg-4)' }}>🕐 בוצע:</span>
+              <span style={{ fontSize: '12px', color: 'var(--fg-3)' }}>
+                {new Date(scanResult.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

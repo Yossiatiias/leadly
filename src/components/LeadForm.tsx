@@ -7,13 +7,15 @@ import type { Profile, Lead } from '@/types'
 import { Paperclip, Upload, X, FileText, Loader2 } from 'lucide-react'
 
 const SOURCES = [
+  { value: 'whatsapp',   label: 'סוכן' },
   { value: 'manual',     label: 'הזנה ידנית' },
-  { value: 'backoffice', label: 'בקאופיס' },
-  { value: 'whatsapp',   label: 'בוט וואטסאפ' },
-  { value: 'social',     label: 'רשתות חברתיות' },
-  { value: 'outreach',   label: 'פנייה יזומה' },
-  { value: 'scrape',     label: 'סריקה' },
-  { value: 'bot',        label: 'בוט' },
+  { value: 'backoffice', label: 'טלפוני' },
+  { value: 'website',    label: 'אתר' },
+  { value: 'scrape',     label: 'צייד לידים' },
+  { value: 'facebook',   label: 'פייסבוק' },
+  { value: 'instagram',  label: 'אינסטגרם' },
+  { value: 'social',     label: 'סושיאל' },
+  { value: 'other',      label: 'אחר' },
 ]
 
 const STATUSES = [
