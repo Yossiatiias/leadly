@@ -301,6 +301,53 @@ export function hasQualifiedDoctorOnDate(
   })
 }
 
+export type SlotAvailabilityCheck =
+  | { status: 'unknown' } // אין מספיק מידע כדי לבדוק (שירות/שיוך לא ידועים) — לא חוסמים
+  | { status: 'available'; doctorId: string }
+  | { status: 'unavailable' } // יש שיוך ברור לשירות, אבל אף רופא/ה מוסמכ/ת לא פנוי/ה בפועל בשעה הזו
+
+// ─── בדיקת זמינות אמיתית **כולל שעה מדויקת**, לפני שהצעה נשלחת ללקוח ────────
+// (יוסי, 31/08): hasQualifiedDoctorOnDate למעלה בודקת רק "עובד/ת ביום הזה"
+// (לפי employee_schedules) — לא אם השעה הספציפית שהוצעה כבר תפוסה אצל אותו
+// רופא/ה. זו הפונקציה שסוגרת את הפער: אותה סינון מועמדים (שירות+יום+
+// min-lead) כמו hasQualifiedDoctorOnDate, ואז קריאה ל-pickAvailableDoctor —
+// **אותה פונקציה בדיוק** שמשמשת את הקביעה האמיתית (saveOrRescheduleBotAppointment)
+// — כדי לבדוק חפיפה מול appointments אמיתיים. Read-only: לא כותבת כלום,
+// לא שומרת/מזמינה slot — רק שאלה "מי פנוי/ה עכשיו בפועל"
+export async function findAvailableDoctorForExactSlot(
+  sb: any, businessId: string,
+  dateISO: string, time: string, durationMinutes: number,
+  service: string | null | undefined,
+  empResponsibilities: Record<string, string[]>,
+  employeeSchedules: Record<string, WorkingDay[]>,
+  employeeMinLeadHours?: Record<string, number>
+): Promise<SlotAvailabilityCheck> {
+  if (!service || Object.keys(empResponsibilities).length === 0) return { status: 'unknown' }
+  let qualified = Object.entries(empResponsibilities)
+    .filter(([, svcs]) => svcs.some(s => service.includes(s) || s.includes(service)))
+    .map(([uid]) => uid)
+  if (qualified.length === 0) return { status: 'unknown' }
+
+  const scheduledAt = israelDateTime(dateISO, time)
+  if (!scheduledAt) return { status: 'unknown' }
+  const dayName = israelWeekday(scheduledAt)
+
+  qualified = qualified.filter(uid => {
+    const sched = employeeSchedules[uid]
+    const dayOk = !sched?.length || (() => {
+      const entry = sched.find(d => d.day === dayName)
+      return !entry || !entry.closed
+    })()
+    if (!dayOk) return false
+    if (!meetsMinLeadTime(scheduledAt, uid, employeeMinLeadHours)) return false
+    return true
+  })
+  if (qualified.length === 0) return { status: 'unavailable' }
+
+  const picked = await pickAvailableDoctor(sb, businessId, qualified, scheduledAt, durationMinutes)
+  return picked ? { status: 'available', doctorId: picked } : { status: 'unavailable' }
+}
+
 // ─── האם הודעת הלקוח **הנוכחית** נראית כבקשה לתאריך/שעה חדשים? ─────────────
 // קרה בפועל (יוסי, 19/08): הלקוח שאל "למי?" (שאלה כללית, לא קשורה לתאריך)
 // והמודל, מבלי שנתבקש, "הזה" בתשובתו אישור-תור ישן משיחת בדיקה קודמת

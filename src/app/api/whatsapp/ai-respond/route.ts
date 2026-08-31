@@ -4,7 +4,7 @@ import {
   saveOrRescheduleBotAppointment, extractApptFromText,
   normalizeApptDate, israelDateTime,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
-  looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate,
+  looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
   type BotApptResult,
 } from '@/lib/botAppointments'
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
@@ -590,12 +590,46 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
           offered.time,
           business?.settings?.employee_min_lead_hours || {}
         )
-        if (!available) {
-          console.error('[ai-respond] RELIABILITY BLOCK — offered a date with no qualified doctor actually available that day, replacing with an honest answer:', JSON.stringify({
-            conversationId, offered, offerService,
+        // ─── בדיקת תפוסה מדויקת בשעה, לא רק "עובד/ת ביום הזה" ───────────────
+        // (יוסי, 31/08): hasQualifiedDoctorOnDate למעלה לא בודקת אם השעה
+        // הספציפית כבר תפוסה. אם היא כן חשבה שיש זמינות (day-check עבר),
+        // עוד בדיקה אמיתית מול היומן — אותה pickAvailableDoctor בדיוק
+        // שמשמשת את הקביעה עצמה — לפני שההצעה בכלל נשלחת ללקוח
+        let exactSlotBlocked = false
+        if (available) {
+          const matchedOfferSvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => offerService && sv.name?.includes(offerService))
+          const offerDuration = matchedOfferSvc?.duration ? parseInt(String(matchedOfferSvc.duration)) : 60
+          const slotCheck = await findAvailableDoctorForExactSlot(
+            supabase, businessId,
+            offered.date, offered.time, isNaN(offerDuration) ? 60 : offerDuration,
+            offerService,
+            business?.settings?.employee_responsibilities || {},
+            business?.settings?.employee_schedules || {},
+            business?.settings?.employee_min_lead_hours || {}
+          )
+          if (slotCheck.status === 'unavailable') {
+            exactSlotBlocked = true
+          } else if (slotCheck.status === 'available') {
+            // אם ההצעה מזכירה שם רופא/ה ספציפי/ת שאינו/ה מי שבאמת נמצא/ת
+            // פנוי/ה בשעה הזו — אותה סתירה בדיוק כמו שם רופא שגוי בקביעה
+            // בפועל. חוסמים גם כאן, לא רק אחרי שכבר נקבע תור
+            const trueDoctorName = profileMap[slotCheck.doctorId] || null
+            const allDoctorNames = Object.values(profileMap)
+            if (allDoctorNames.length > 0 && textMentionsWrongDoctor(aiResponse, trueDoctorName, allDoctorNames)) {
+              exactSlotBlocked = true
+              console.error('[ai-respond] RELIABILITY BLOCK — offer named a doctor who is not actually free at that exact time, replacing with an honest answer:', JSON.stringify({
+                conversationId, offered, trueDoctorName,
+              }))
+            }
+          }
+        }
+        if (!available || exactSlotBlocked) {
+          console.error('[ai-respond] RELIABILITY BLOCK — offered a date/time with no qualified doctor actually available, replacing with an honest answer:', JSON.stringify({
+            conversationId, offered, offerService, exactSlotBlocked,
           }))
           // אותו נוסח בדיוק כמו no_doctor_available (קביעה בפועל) ואותה
-          // התנהגות — מסומן "ממתין לנציג" לצוות, לא רק מילים ללקוח (יוסי, 24/08)
+          // התנהגות — מסומן "ממתין לנציג" לצוות, לא רק מילים ללקוח (יוסי, 24/08).
+          // אין המצאת שעה חלופית — אותה הודעה קבועה + הסלמה, כמו תמיד
           aiResponse = NO_AVAILABILITY_MESSAGE
           await supabase.from('conversations').update({
             escalated_at: new Date().toISOString(),

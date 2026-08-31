@@ -3,7 +3,7 @@ import {
   normalizeApptDate, israelDateTime, extractApptFromText,
   saveOrRescheduleBotAppointment, type WorkingDay,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
-  looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate,
+  looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
 } from './botAppointments'
 
 describe('normalizeApptDate', () => {
@@ -200,6 +200,81 @@ describe('hasQualifiedDoctorOnDate — employeeMinLeadHours (per-doctor "needs X
   it('does not block when no time is passed at all (caller did not supply it)', () => {
     const { date } = israelParts(new Date(Date.now() + 1 * 3600000))
     expect(hasQualifiedDoctorOnDate(date, 'שיקום הפה', empResponsibilities, employeeSchedules, undefined, { [DOC_A]: 24 })).toBe(true)
+  })
+})
+
+// ─── findAvailableDoctorForExactSlot — בדיקת זמינות אמיתית לפני שליחת הצעה ───
+// (יוסי, 31/08): לא רק "עובד/ת ביום הזה" — האם השעה הספציפית שהוצעה
+// באמת פנויה, לפי אותה pickAvailableDoctor שמשמשת את הקביעה עצמה
+describe('findAvailableDoctorForExactSlot — real time-slot availability before an offer is sent', () => {
+  const DOC_A = 'doc-a'
+  const DOC_B = 'doc-b'
+
+  function nextWeekday(target: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
+    return d.toISOString().slice(0, 10)
+  }
+
+  it('returns available when the requested time does not overlap the doctor\'s existing appointment', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: israelDateTime(tuesday, '09:00')!.toISOString(), duration_minutes: 60 }],
+    })
+    const result = await findAvailableDoctorForExactSlot(
+      sb, 'biz1', tuesday, '12:00', 60, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, {}
+    )
+    expect(result.status).toBe('available') // 12:00 לא חופף ל-09:00-10:00
+  })
+
+  it('returns unavailable when the requested exact time overlaps the doctor\'s existing appointment', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: israelDateTime(tuesday, '09:00')!.toISOString(), duration_minutes: 60 }],
+    })
+    const result = await findAvailableDoctorForExactSlot(
+      sb, 'biz1', tuesday, '09:00', 60, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, {}
+    )
+    expect(result.status).toBe('unavailable')
+  })
+
+  it('returns the actually-free doctor when doctor A is busy but doctor B qualifies and is free', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: israelDateTime(tuesday, '10:00')!.toISOString(), duration_minutes: 60 }],
+    })
+    const result = await findAvailableDoctorForExactSlot(
+      sb, 'biz1', tuesday, '10:00', 60, 'השתלות',
+      { [DOC_A]: ['השתלות'], [DOC_B]: ['השתלות'] }, {}
+    )
+    expect(result).toEqual({ status: 'available', doctorId: DOC_B })
+  })
+
+  it('returns unavailable when no qualified doctor works that day at all', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const result = await findAvailableDoctorForExactSlot(
+      sb, 'biz1', tuesday, '10:00', 60, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] },
+      { [DOC_A]: [{ day: 'שלישי', open: '', close: '', closed: true }] }
+    )
+    expect(result.status).toBe('unavailable')
+  })
+
+  it('returns unknown (does not block) when the service is not recognized', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const result = await findAvailableDoctorForExactSlot(sb, 'biz1', tuesday, '10:00', 60, null, { [DOC_A]: ['הלבנה'] }, {})
+    expect(result.status).toBe('unknown')
+  })
+
+  it('returns unknown (does not block) when the business has no doctor-service mapping at all', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const result = await findAvailableDoctorForExactSlot(sb, 'biz1', tuesday, '10:00', 60, 'הלבנה', {}, {})
+    expect(result.status).toBe('unknown')
   })
 })
 

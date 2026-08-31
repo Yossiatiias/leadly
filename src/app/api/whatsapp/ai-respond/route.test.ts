@@ -606,6 +606,107 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     expect(sendCall!.body.message).toContain('01.09.2026')
   })
 
+  // ─── בדיקת זמינות אמיתית בשעה מדויקת, לא רק ביום (יוסי, 31/08) ────────────
+  describe('offer-grounding also checks exact time-slot collision, not just day-of-week', () => {
+    it('does NOT send "יש תור ב-10:00" when 10:00 is already booked for the sole qualified doctor — falls back to the existing human-handoff message', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'טיפולים משמרים', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['טיפולים משמרים'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+      const tuesday = '2026-09-01' // יום שלישי בפועל
+      fakeDb.seed('appointments', [{
+        id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001',
+        assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30,
+      }])
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"סתימה"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'שלישי',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('10:00')
+      // אותו נוסח קבוע, אותה התנהגות הסלמה — לא flow חלופי, לא שעה שהומצאה
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    it('DOES send the offer when 10:00 is genuinely free for the qualified doctor', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'טיפולים משמרים', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['טיפולים משמרים'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+      const tuesday = '2026-09-01'
+      // תור קיים באותו יום, אבל בשעה אחרת שלא חופפת ל-10:00 — לא אמור לחסום
+      fakeDb.seed('appointments', [{
+        id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001',
+        assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '13:00'), duration_minutes: 30,
+      }])
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"סתימה"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'שלישי',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('10:00')
+    })
+
+    it('lets the offer through using the doctor who is actually free, when doctor A is busy at that time but doctor B qualifies and is free', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+        docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+      const tuesday = '2026-09-01'
+      fakeDb.seed('appointments', [{
+        id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001',
+        assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30,
+      }])
+      // ההצעה לא נוקבת בשם רופא ספציפי — לא סותרת את הבדיקה, גם אם A עסוק
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"השתלות"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'שלישי',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('10:00')
+    })
+
+    it('does not invent an alternative time when no qualified doctor is free at all — falls back to the existing human-handoff, not a made-up slot', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+        docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+      const tuesday = '2026-09-01'
+      fakeDb.seed('appointments', [
+        { id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 1', patient_phone: '972500000001', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
+        { id: 'existing2', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 2', patient_phone: '972500000002', assigned_to: 'docB', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
+      ])
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"השתלות"}`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'שלישי',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+  })
+
   it('refuses to send at all when the business has no active WhatsApp connection (no silent cross-tenant fallback)', async () => {
     seedBaseline()
     fakeDb.tables.whatsapp_connections = [] // אין חיבור בכלל
