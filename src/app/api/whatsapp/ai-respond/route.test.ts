@@ -91,10 +91,17 @@ function seedBaseline() {
   fakeDb.seed('knowledge_gaps', [])
 }
 
-function nextWeekday(target: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-  return d.toISOString().slice(0, 10)
+// דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה — ראה הסבר מלא
+// באותה פונקציה ב-botAppointments.test.ts (אותו באג, אותו תיקון)
+function nextWeekday(target: number, baseISO?: string): string {
+  const base = baseISO
+    ? new Date(`${baseISO}T12:00:00Z`)
+    : (() => {
+        const now = new Date()
+        return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+      })()
+  const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+  return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
 }
 
 async function callAiRespond(body: Record<string, unknown>) {

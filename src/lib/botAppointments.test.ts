@@ -210,10 +210,23 @@ describe('findAvailableDoctorForExactSlot — real time-slot availability before
   const DOC_A = 'doc-a'
   const DOC_B = 'doc-b'
 
-  function nextWeekday(target: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-    return d.toISOString().slice(0, 10)
+  // דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה (יוסי, 01/09):
+  // הגרסה הקודמת חישבה עם d.getDay() (יום מקומי) ואז חתכה עם toISOString()
+  // (UTC) — כשהזמן המקומי היה 00:00-02:59 בישראל בקיץ, ה-UTC עדיין "אתמול",
+  // ותאריך "יום שלישי" יצא בפועל יום שני. כאן: כל החישוב ב-UTC לאורך כל
+  // הדרך, מעוגן בצהריים (לא חצות) — getUTCDay של תאריך שנבנה כך תמיד משקף
+  // את יום השבוע האמיתי של אותו Y-M-D (עובדה קלנדרית, לא תלוית timezone),
+  // ואין חיתוך יום שגוי כי גם הבנייה וגם הפלט הסופי רחוקים מגבול חצות.
+  // baseISO אופציונלי מאפשר תאריך התייחסות קבוע לבדיקה ישירה של ההתנהגות.
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
   }
 
   it('returns available when the requested time does not overlap the doctor\'s existing appointment', async () => {
@@ -377,10 +390,23 @@ describe('saveOrRescheduleBotAppointment — date validation', () => {
 })
 
 describe('saveOrRescheduleBotAppointment — same-weekday roll-forward', () => {
-  function nextWeekday(target: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-    return d.toISOString().slice(0, 10)
+  // דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה (יוסי, 01/09):
+  // הגרסה הקודמת חישבה עם d.getDay() (יום מקומי) ואז חתכה עם toISOString()
+  // (UTC) — כשהזמן המקומי היה 00:00-02:59 בישראל בקיץ, ה-UTC עדיין "אתמול",
+  // ותאריך "יום שלישי" יצא בפועל יום שני. כאן: כל החישוב ב-UTC לאורך כל
+  // הדרך, מעוגן בצהריים (לא חצות) — getUTCDay של תאריך שנבנה כך תמיד משקף
+  // את יום השבוע האמיתי של אותו Y-M-D (עובדה קלנדרית, לא תלוית timezone),
+  // ואין חיתוך יום שגוי כי גם הבנייה וגם הפלט הסופי רחוקים מגבול חצות.
+  // baseISO אופציונלי מאפשר תאריך התייחסות קבוע לבדיקה ישירה של ההתנהגות.
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
   }
 
   it('rolls a past same-day time forward by exactly 7 days instead of failing', async () => {
@@ -412,10 +438,23 @@ describe('saveOrRescheduleBotAppointment — working hours enforcement', () => {
     { day: 'שבת', open: '', close: '', closed: true },
   ]
 
-  function nextWeekday(target: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-    return d.toISOString().slice(0, 10)
+  // דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה (יוסי, 01/09):
+  // הגרסה הקודמת חישבה עם d.getDay() (יום מקומי) ואז חתכה עם toISOString()
+  // (UTC) — כשהזמן המקומי היה 00:00-02:59 בישראל בקיץ, ה-UTC עדיין "אתמול",
+  // ותאריך "יום שלישי" יצא בפועל יום שני. כאן: כל החישוב ב-UTC לאורך כל
+  // הדרך, מעוגן בצהריים (לא חצות) — getUTCDay של תאריך שנבנה כך תמיד משקף
+  // את יום השבוע האמיתי של אותו Y-M-D (עובדה קלנדרית, לא תלוית timezone),
+  // ואין חיתוך יום שגוי כי גם הבנייה וגם הפלט הסופי רחוקים מגבול חצות.
+  // baseISO אופציונלי מאפשר תאריך התייחסות קבוע לבדיקה ישירה של ההתנהגות.
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
   }
 
   it('rejects a booking on a fully-closed day (Saturday)', async () => {
@@ -449,10 +488,23 @@ describe('saveOrRescheduleBotAppointment — working hours enforcement', () => {
 // תורים בתאריכים האלה"), בלי שום אכיפה בקוד — בדיוק כמו הפער שהיה קודם
 // בשעות פעילות. אם המודל בכל זאת אישר תור ביום סגור, הוא נשמר כתקין לגמרי
 describe('saveOrRescheduleBotAppointment — business closure exceptions (holidays)', () => {
-  function nextWeekday(target: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-    return d.toISOString().slice(0, 10)
+  // דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה (יוסי, 01/09):
+  // הגרסה הקודמת חישבה עם d.getDay() (יום מקומי) ואז חתכה עם toISOString()
+  // (UTC) — כשהזמן המקומי היה 00:00-02:59 בישראל בקיץ, ה-UTC עדיין "אתמול",
+  // ותאריך "יום שלישי" יצא בפועל יום שני. כאן: כל החישוב ב-UTC לאורך כל
+  // הדרך, מעוגן בצהריים (לא חצות) — getUTCDay של תאריך שנבנה כך תמיד משקף
+  // את יום השבוע האמיתי של אותו Y-M-D (עובדה קלנדרית, לא תלוית timezone),
+  // ואין חיתוך יום שגוי כי גם הבנייה וגם הפלט הסופי רחוקים מגבול חצות.
+  // baseISO אופציונלי מאפשר תאריך התייחסות קבוע לבדיקה ישירה של ההתנהגות.
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
   }
 
   it('rejects a booking on a date listed in businessExceptions', async () => {
@@ -486,10 +538,23 @@ describe('saveOrRescheduleBotAppointment — doctor assignment when multiple doc
   const DOC_A = 'doc-a'
   const DOC_B = 'doc-b'
 
-  function nextWeekday(target: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-    return d.toISOString().slice(0, 10)
+  // דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה (יוסי, 01/09):
+  // הגרסה הקודמת חישבה עם d.getDay() (יום מקומי) ואז חתכה עם toISOString()
+  // (UTC) — כשהזמן המקומי היה 00:00-02:59 בישראל בקיץ, ה-UTC עדיין "אתמול",
+  // ותאריך "יום שלישי" יצא בפועל יום שני. כאן: כל החישוב ב-UTC לאורך כל
+  // הדרך, מעוגן בצהריים (לא חצות) — getUTCDay של תאריך שנבנה כך תמיד משקף
+  // את יום השבוע האמיתי של אותו Y-M-D (עובדה קלנדרית, לא תלוית timezone),
+  // ואין חיתוך יום שגוי כי גם הבנייה וגם הפלט הסופי רחוקים מגבול חצות.
+  // baseISO אופציונלי מאפשר תאריך התייחסות קבוע לבדיקה ישירה של ההתנהגות.
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
   }
 
   it('picks the doctor who is actually free at the requested time, not always the first one configured', async () => {
@@ -674,10 +739,23 @@ describe('saveOrRescheduleBotAppointment — secondaryService narrows to the doc
   const DOC_A = 'doc-a' // עושה אבחונים כלליים אבל לא שתלים
   const DOC_B = 'doc-b' // עושה גם אבחונים וגם שתלים
 
-  function nextWeekday(target: number): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((target - d.getDay() + 7) % 7 || 7))
-    return d.toISOString().slice(0, 10)
+  // דטרמיניסטי, לא תלוי בתאריך/שעה/timezone שבו הבדיקה רצה (יוסי, 01/09):
+  // הגרסה הקודמת חישבה עם d.getDay() (יום מקומי) ואז חתכה עם toISOString()
+  // (UTC) — כשהזמן המקומי היה 00:00-02:59 בישראל בקיץ, ה-UTC עדיין "אתמול",
+  // ותאריך "יום שלישי" יצא בפועל יום שני. כאן: כל החישוב ב-UTC לאורך כל
+  // הדרך, מעוגן בצהריים (לא חצות) — getUTCDay של תאריך שנבנה כך תמיד משקף
+  // את יום השבוע האמיתי של אותו Y-M-D (עובדה קלנדרית, לא תלוית timezone),
+  // ואין חיתוך יום שגוי כי גם הבנייה וגם הפלט הסופי רחוקים מגבול חצות.
+  // baseISO אופציונלי מאפשר תאריך התייחסות קבוע לבדיקה ישירה של ההתנהגות.
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
   }
 
   it('excludes a doctor who does not perform the lead\'s actual (more specific) treatment', async () => {
