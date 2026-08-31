@@ -10,7 +10,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -582,8 +582,30 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     if (!apptData) {
       const offered = extractOfferedDateTime(aiResponse)
       if (offered) {
-        const offerService = matchServiceReason(inlineAnalysis?.reason, business?.settings?.services || [])
-        const available = hasQualifiedDoctorOnDate(
+        // ─── resolver יחיד ל"מהו השירות" — לא ניחוש, לא lead.treatment_type ──
+        // (יוסי, 31/08, מקרה ד"ר גבי סמל): קודם מה שהמודל כתב בתגית LEAD
+        // בתור הנוכחי; אם חסר, סורק אחורה בהודעות **הנכנסות** של הלקוח
+        // באותה שיחה (תופס גם "השתלה" → "יום שני?" → "כן", שבו התור
+        // האחרון לא מזכיר את השירות בכלל אבל הוא עדיין ידוע מהקונטקסט)
+        const offerService = resolveActiveService(inlineAnalysis?.reason, msgs, business?.settings?.services || [])
+
+        // ─── FAIL-CLOSED, לא FAIL-OPEN, כשלא ידוע איזה שירות מבוקש ──────────
+        // זה בדיוק מה שקרה בפועל עם ד"ר גבי סמל: כש-offerService יצא null,
+        // hasQualifiedDoctorOnDate/findAvailableDoctorForExactSlot חוזרות
+        // permissive (true/unknown) מעצם העיצוב שלהן, וההצעה הגולמית של
+        // המודל (רופא+שעה, גם אם מומצאים) יצאה ללקוח בלי שום אימות. אם אחרי
+        // ה-resolver למעלה עדיין אין service — לא קוראים לבדיקות האלה
+        // בכלל (הן חסרות משמעות בלי service אמיתי) — פשוט חוסמים, כמו
+        // "אין זמינות". שאר הלוגיקה (service קיים, אין שיוך רופאים בעסק
+        // בכלל) ממשיכה בדיוק כמו קודם, לא נגעתי בזה
+        let available = false
+        let exactSlotBlocked = false
+        if (!offerService) {
+          console.error('[ai-respond] RELIABILITY BLOCK — cannot verify a doctor offer without a known service (fail-closed, not fail-open):', JSON.stringify({
+            conversationId, offered,
+          }))
+        } else {
+        available = hasQualifiedDoctorOnDate(
           offered.date, offerService,
           business?.settings?.employee_responsibilities || {},
           business?.settings?.employee_schedules || {},
@@ -595,7 +617,6 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
         // הספציפית כבר תפוסה. אם היא כן חשבה שיש זמינות (day-check עבר),
         // עוד בדיקה אמיתית מול היומן — אותה pickAvailableDoctor בדיוק
         // שמשמשת את הקביעה עצמה — לפני שההצעה בכלל נשלחת ללקוח
-        let exactSlotBlocked = false
         if (available) {
           const matchedOfferSvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => offerService && sv.name?.includes(offerService))
           const offerDuration = matchedOfferSvc?.duration ? parseInt(String(matchedOfferSvc.duration)) : 60
@@ -638,6 +659,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
               }
             }
           }
+        }
         }
         if (!available || exactSlotBlocked) {
           console.error('[ai-respond] RELIABILITY BLOCK — offered a date/time with no qualified doctor actually available, replacing with an honest answer:', JSON.stringify({

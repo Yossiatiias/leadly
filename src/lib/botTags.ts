@@ -268,6 +268,36 @@ export function matchServiceReason(reason: string | null | undefined, services: 
   return found ? found.name : 'אחר'
 }
 
+// ─── resolver יחיד ל"מהו השירות הפעיל כרגע בשיחה", לפני כל בדיקת זמינות ─────
+// (יוסי, 31/08, אחרי מקרה ד"ר גבי סמל): מקור אמת יחיד, בסדר עדיפות ברור —
+// לא מנחשים, לא נופלים חזרה ל-lead.treatment_type (הוכח שיכול להיות ישן
+// ולא קשור לשיחה הנוכחית, למשל שיחה ארוכה שעברה כמה נושאים).
+//
+// עדיפות 1: מה שהמודל עצמו כתב בתגית LEAD **בתור הנוכחי**.
+// עדיפות 2: ההודעה **הנכנסת** האחרונה של הלקוח עצמו שמזהה שירות אמיתי —
+// סורק אחורה כדי לתפוס גם "אני רוצה השתלה" → "יום שני מתאים?" → "כן"
+// (בתור האחרון אין את המילה "השתלה" בכלל, אבל השירות עדיין ידוע מהקונטקסט)
+//
+// אם שתי העדיפויות נכשלות — מחזיר null. הקורא (ai-respond/route.ts) חייב
+// להתייחס ל-null כאן כ"לא ידוע בוודאות" ולנקוט fail-closed (לא לשלוח
+// הצעת תור לא-מאומתת), לא fail-open כמו שקרה בפועל
+export function resolveActiveService(
+  inlineReason: string | null | undefined,
+  messages: { direction: string; content: string }[],
+  services: { name: string }[]
+): string | null {
+  const fromReason = matchServiceReason(inlineReason, services)
+  if (fromReason && fromReason !== 'אחר') return fromReason
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.direction !== 'inbound') continue
+    const fromMessage = matchServiceReason(m.content, services)
+    if (fromMessage && fromMessage !== 'אחר') return fromMessage
+  }
+  return null
+}
+
 // ─── מיזוג ניתוח ליד (LEAD tag) לתוך שדות עדכון — לוגיקה טהורה, ────────────
 // בלי קריאות DB. STATUS_RANK מבטיח שסטטוס תמיד מתקדם קדימה, לא נסוג אחורה
 export const STATUS_RANK: Record<string, number> = {

@@ -831,6 +831,151 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     })
   })
 
+  // ─── resolveActiveService — fail-closed, לא fail-open, כשלא ברור מה נדרש ───
+  // (יוסי, 31/08, מקרה ד"ר גבי סמל האמיתי בפרודקשן) — service לא ידוע חייב
+  // לחסום את ההצעה, לא לתת לה לעבור בלי אימות
+  describe('service resolution before an offer is grounded — fails closed, never falls back to stale lead.treatment_type', () => {
+    function seedGabiAndYounesAllClosedExceptTuesday() {
+      fakeDb.seed('profiles', [
+        { id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+        { id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' },
+      ])
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+        docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
+      }
+    }
+
+    // Regression test 1
+    it('resolves the service from the current message, and only a qualified+working+free doctor can be offered', async () => {
+      seedBaseline()
+      seedGabiAndYounesAllClosedExceptTuesday()
+      const tuesday = '2026-09-01'
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'אני רוצה השתלה ביום שלישי',
+      }]
+      // בלי תגית LEAD בכלל — resolveActiveService חייב להסתמך על עדיפות 2
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה השתלה ביום שלישי',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('10:00') // שני הרופאים עובדים שלישי — הצעה תקינה
+    })
+
+    // Regression test 2
+    it('still resolves the service from earlier context when the current turn is just "כן" and the LEAD tag has no reason', async () => {
+      seedBaseline()
+      seedGabiAndYounesAllClosedExceptTuesday()
+      const tuesday = '2026-09-01'
+      fakeDb.tables.messages = [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact', content: 'אני רוצה השתלה', created_at: '2026-08-31T10:00:00.000Z' },
+        { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', sender_type: 'ai', content: 'יום שלישי מתאים?', created_at: '2026-08-31T10:00:05.000Z' },
+        { id: 'm3', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact', content: 'כן', created_at: '2026-08-31T10:00:10.000Z' },
+      ]
+      // אין "השתלה" בהודעה הנוכחית, ואין תגית LEAD — השירות חייב להיפתר מההיסטוריה
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'כן',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('10:00')
+    })
+
+    // Regression test 3
+    it('fails closed (escalates) when the service cannot be identified from the reason tag or any recent customer message', async () => {
+      seedBaseline()
+      seedGabiAndYounesAllClosedExceptTuesday()
+      const tuesday = '2026-09-01'
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'מתי אתם פתוחים',
+      }]
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי אתם פתוחים',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // Regression test 4
+    it('uses the service from the current conversation, not a stale lead.treatment_type from an unrelated earlier topic', async () => {
+      seedBaseline()
+      seedGabiAndYounesAllClosedExceptTuesday()
+      const tuesday = '2026-09-01'
+      fakeDb.tables.conversations[0].lead_id = 'lead1'
+      fakeDb.seed('leads', [{ id: 'lead1', business_id: 'biz1', name: 'לקוח', status: 'in_progress', treatment_type: 'הלבנת שיניים' }])
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'אני רוצה השתלה ביום שלישי',
+      }]
+      openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesday.split('-').reverse().join('.')}, בשעה 10:00. האם זה מתאים לך? 😊`
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה השתלה ביום שלישי',
+      })
+
+      // אם המערכת הייתה נופלת בטעות ל-treatment_type הישן ("הלבנת שיניים"),
+      // לא היה נמצא אף רופא מוסמך (אף אחד לא מוסמך להלבנה בבדיקה הזו) —
+      // ההצעה הייתה נחסמת. היא לא נחסמת, כי השירות הפעיל הוא השתלות
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('10:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // Regression test 5 — המקרה האמיתי מהפרודקשן
+    it('real-world case: Dr. Gabi Samel with every day closed must never be offered for השתלות on 31.08.2026 10:00', async () => {
+      seedBaseline()
+      fakeDb.seed('profiles', [
+        { id: 'docGabi', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+      ])
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '30' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docGabi: ['השתלות', 'שיקום פה מלא'] }
+      // בדיוק כמו ב-DB האמיתי: כל 7 הימים סגורים
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docGabi: [
+          { day: 'ראשון', open: '09:00', close: '17:00', closed: true },
+          { day: 'שני', open: '09:00', close: '17:00', closed: true },
+          { day: 'שלישי', open: '09:00', close: '17:00', closed: true },
+          { day: 'רביעי', open: '09:00', close: '17:00', closed: true },
+          { day: 'חמישי', open: '09:00', close: '17:00', closed: true },
+          { day: 'שישי', open: '09:00', close: '13:00', closed: true },
+          { day: 'שבת', open: '', close: '', closed: true },
+        ],
+      }
+      fakeDb.tables.messages = [{
+        id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+        content: 'יוסי, מכפר סבא. אני רוצה לקבוע תור להשתלה ביום שני בבוקר',
+      }]
+      // אותה הודעה בדיוק כמו בפרודקשן — בלי תגית LEAD
+      openaiReply = 'תודה יוסי! 🌸\n\nד"ר גבי סמל מבצע את ההשתלות, והוא זמין ביום שני 31.08.2026 בשעה 10:00.\n\nהאם זה מתאים לך?'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'יוסי, מכפר סבא. אני רוצה לקבוע תור להשתלה ביום שני בבוקר',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('31.08.2026')
+      expect(sendCall!.body.message).not.toContain('10:00')
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+  })
+
   it('refuses to send at all when the business has no active WhatsApp connection (no silent cross-tenant fallback)', async () => {
     seedBaseline()
     fakeDb.tables.whatsapp_connections = [] // אין חיבור בכלל
