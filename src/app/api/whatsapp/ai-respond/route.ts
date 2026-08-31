@@ -95,7 +95,36 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      return await handleAiRespond(conversationId, businessId, senderPhone, messageText)
+      let response = await handleAiRespond(conversationId, businessId, senderPhone, messageText)
+
+      // ─── לא לתת להודעת לקוח "להיעלם" ────────────────────────────────────
+      // קרה בפועל (30/08, רחל מוגרבי): הריצה הראשונה עדיין מעבדת, הלקוחה
+      // שולחת הודעה נוספת — היא לא יכולה לתפוס את הנעילה (עדיין תפוסה)
+      // ולא לעבור את ה-rate-limit (תשובה נשלחה זה עתה), אז ה-webhook שלה
+      // פשוט מדלג ומחזיר בלי לעשות כלום. ההודעה נשארת ב-DB אבל אף ריצה
+      // לא באמת עונה עליה. כאן, אחרי שהריצה שכן תפסה את הנעילה מסיימת,
+      // בודקים אם הצטברה הודעה שה-batch שלה לא ראה בכלל — ואם כן, ממשיכים
+      // לעבד אותה **באותה נעילה בדיוק** (בלי לשחרר ולתפוס מחדש), עד שאין
+      // יותר מה לתפוס. זה שומר על "ריצה אחת בכל רגע" (אין קריאות מקבילות)
+      // תוך כדי שאף הודעה לא נשארת בלי מענה
+      for (let guard = 0; guard < 5; guard++) {
+        const { data: conv } = await supabase.from('conversations').select('ai_last_batch_at').eq('id', conversationId).maybeSingle()
+        const cursor = conv?.ai_last_batch_at
+        if (!cursor) break // אין מידע על batch קודם (למשל המיגרציה טרם רצה) — לא ממשיכים לנחש
+
+        const { data: pendingRows } = await supabase.from('messages')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .eq('direction', 'inbound')
+          .gt('created_at', cursor)
+
+        if (!pendingRows?.length) break // אין הודעות ממתינות — סיימנו
+
+        console.log('[ai-respond] follow-up pass — inbound message(s) arrived while a previous pass was still processing:', JSON.stringify({ conversationId, cursor, pendingCount: pendingRows.length }))
+        response = await handleAiRespond(conversationId, businessId, senderPhone, '', { sinceOverride: cursor, skipGates: true })
+      }
+
+      return response
     } finally {
       await supabase.from('conversations').update({ ai_processing_started_at: null }).eq('id', conversationId)
     }
@@ -105,42 +134,69 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function handleAiRespond(conversationId: string, businessId: string, senderPhone: string, messageText: string) {
+// ─── קורא-המשך (follow-up pass) בתוך אותה ריצה נעולה ────────────────────────
+// options.sinceOverride: אם קיים, ה-batch מסתכל אחורה **עד התאריך הזה בדיוק**
+// (לא "5 שניות אחורה מעכשיו") — כדי לתפוס בוודאות הודעות שהגיעו תוך כדי
+// שהריצה הקודמת עדיין עיבדה, גם אם עברו הרבה יותר מ-5 שניות מאז שהן נשלחו.
+// options.skipGates: מדלג על ההמתנה המלאכותית (1500ms) ועל בדיקת ה-rate-limit
+// — אלה נועדו למנוע טריגר כפול על אותה הודעה מ-webhook נפרד, לא רלוונטיים
+// כשאנחנו כבר בטוחים (כאן, מה-caller) שיש הודעת לקוח אמיתית שממתינה לעיבוד
+async function handleAiRespond(
+  conversationId: string, businessId: string, senderPhone: string, messageText: string,
+  options: { sinceOverride?: string; skipGates?: boolean } = {}
+) {
   {
-    // ─── FIX 6: המתן לאיסוף הודעות מרובות מהירות (קוצר מ-3 שניות ל-1.5) ──
-    await new Promise(r => setTimeout(r, 1500))
+    if (!options.skipGates) {
+      // ─── FIX 6: המתן לאיסוף הודעות מרובות מהירות (קוצר מ-3 שניות ל-1.5) ──
+      await new Promise(r => setTimeout(r, 1500))
 
-    // ─── FIX 4: Rate limiting מ-DB (לא in-memory) ────────────────────────
-    const { data: lastOutbound } = await supabase
-      .from('messages')
-      .select('created_at')
-      .eq('conversation_id', conversationId)
-      .eq('direction', 'outbound')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+      // ─── FIX 4: Rate limiting מ-DB (לא in-memory) ────────────────────────
+      const { data: lastOutbound } = await supabase
+        .from('messages')
+        .select('created_at')
+        .eq('conversation_id', conversationId)
+        .eq('direction', 'outbound')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
 
-    if (lastOutbound) {
-      const elapsed = Date.now() - new Date(lastOutbound.created_at).getTime()
-      if (elapsed < MIN_RESPONSE_INTERVAL_MS) {
-        console.log(`Rate limited: ${senderPhone} (${Math.round(elapsed / 1000)}s ago)`)
-        return NextResponse.json({ ok: true, skipped: 'rate_limited' })
+      if (lastOutbound) {
+        const elapsed = Date.now() - new Date(lastOutbound.created_at).getTime()
+        if (elapsed < MIN_RESPONSE_INTERVAL_MS) {
+          console.log(`Rate limited: ${senderPhone} (${Math.round(elapsed / 1000)}s ago)`)
+          return NextResponse.json({ ok: true, skipped: 'rate_limited' })
+        }
       }
     }
 
-    // ─── FIX 6: אסוף את כל ההודעות הנכנסות מ-5 שניות אחרונות ──────────
-    const batchSince = new Date(Date.now() - 5000).toISOString()
-    const { data: batchMessages } = await supabase
+    // ─── FIX 6: אסוף את כל ההודעות הנכנסות מ-5 שניות אחרונות (או, בריצת-המשך,
+    // מאז ה-cursor המדויק שהועבר — ראה sinceOverride למעלה) ──────────────
+    // sinceOverride הוא ה-created_at של ההודעה **האחרונה שכבר טופלה** בריצה
+    // הקודמת — לכן משתמשים כאן ב-gt (חד-משמעית אחריה), לא gte, כדי לא לכלול
+    // מחדש הודעה שכבר נענתה יחד עם התוכן החדש שממתין
+    const batchSince = options.sinceOverride || new Date(Date.now() - 5000).toISOString()
+    let batchQuery = supabase
       .from('messages')
-      .select('content')
+      .select('content, created_at')
       .eq('conversation_id', conversationId)
       .eq('direction', 'inbound')
-      .gte('created_at', batchSince)
       .order('created_at', { ascending: true })
+    batchQuery = options.sinceOverride ? batchQuery.gt('created_at', batchSince) : batchQuery.gte('created_at', batchSince)
+    const { data: batchMessages } = await batchQuery
 
     const combinedText = batchMessages?.length
       ? batchMessages.map(m => m.content).join('\n')
       : messageText
+
+    // שומרים עד היכן ה-batch הזה הסתכל — כך שאחרי שהריצה הזו תסתיים, ה-POST
+    // handler יכול לבדוק בוודאות אם הגיעה הודעה שהיא **לא** ראתה בכלל,
+    // ולעבד אותה מיד באותה נעילה, במקום שהיא "תיעלם" (ראה יוסי, 30/08 —
+    // רחל מוגרבי: הודעה שנייה נשלחה תוך כדי שהריצה הראשונה עדיין עיבדה,
+    // ומעולם לא קיבלה עיבוד עצמאי משלה — לא ע"י lock ולא ע"י rate-limit)
+    if (batchMessages?.length) {
+      const lastBatchedAt = batchMessages[batchMessages.length - 1].created_at
+      await supabase.from('conversations').update({ ai_last_batch_at: lastBatchedAt }).eq('id', conversationId)
+    }
 
     // ─── טען נתוני עסק + Q&A + היסטוריה + מצב מגדר/שם של השיחה ────────────
     const [{ data: business }, { data: qaItems }, { data: recentMessages }, { data: convGenderRow }] = await Promise.all([

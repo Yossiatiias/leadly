@@ -16,7 +16,7 @@ function israelDateTimeISO(dateISO: string, time: string): string {
 let fakeDb: FakeDb
 let openaiReply = ''
 let sentMessages: { url: string; body: any }[] = []
-let openaiCalls: { systemPrompt: string }[] = []
+let openaiCalls: { systemPrompt: string; userMessage: string }[] = []
 
 beforeEach(() => {
   fakeDb = new FakeDb()
@@ -35,7 +35,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: any) => {
     if (url.includes('api.openai.com')) {
       const body = opts?.body ? JSON.parse(opts.body) : null
-      openaiCalls.push({ systemPrompt: body?.messages?.find((m: any) => m.role === 'system')?.content || '' })
+      openaiCalls.push({
+        systemPrompt: body?.messages?.find((m: any) => m.role === 'system')?.content || '',
+        userMessage: body?.messages?.filter((m: any) => m.role === 'user')?.slice(-1)[0]?.content || '',
+      })
       return {
         ok: true,
         json: async () => ({ choices: [{ message: { content: openaiReply } }] }),
@@ -630,5 +633,129 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     const json = await res.json()
     expect(json.skipped).toBe('rate_limited')
     expect(sentMessages.length).toBe(0)
+  })
+})
+
+// ─── רגרסיה: הודעת לקוח לא "נעלמת" כשהיא מגיעה תוך כדי שריצה קודמת עדיין ────
+// מעבדת (יוסי, 30/08 — רחל מוגרבי: "1 _כן" נענה, אבל "אני מכפר יונה" שנשלחה
+// 11 שניות אחר-כך לא קיבלה עיבוד עצמאי משלה — נחסמה ע"י ה-lock/rate-limit
+// והלכה לאיבוד עד שהלקוחה חזרה על עצמה בעצמה). כאן בודקים את המנגנון
+// שמתקן את זה: cursor (conversations.ai_last_batch_at) שנשמר בסוף כל batch,
+// ונבדק שוב ע"י ה-POST handler לפני שהוא באמת מסיים — לא רק "5 שניות אחורה
+// מעכשיו" (שלא היה תופס פער של 11 שניות)
+describe('ai-respond POST — follow-up processing for messages that arrive mid-run (ROOT CAUSE A fix)', () => {
+  // timeout מוארך: ריצת follow-up מוסיפה עוד סבב שהייה-אנושית מלאכותית
+  // (typing indicator + delay) מעל הריצה הראשונה, ועובר את ברירת המחדל (5s)
+  it('does not lose a message that arrives ~11s after the triggering message — it gets processed as a follow-up, not silently dropped', async () => {
+    seedBaseline()
+    fakeDb.tables.messages = [{
+      id: 'mA', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+      content: 'הודעה ראשונה', created_at: new Date().toISOString(),
+    }]
+    openaiReply = 'תשובה כללית 😊'
+
+    // מדמה הודעה שממש נשלחת תוך כדי שה-run הראשון מעבד: מזריקים אותה ל-DB
+    // באמצע ה-flow עצמו (ברגע שהקריאה הראשונה ל-OpenAI מתבצעת — אחרי
+    // שה-batch הראשון כבר נשלף מה-DB, בדיוק כמו התזמון האמיתי שקרה בפועל).
+    // created_at שלה מאוחר בכוונה מ-mA, כדי לוודא שהיא זו שנתפסת כ"ממתינה"
+    let injected = false
+    const realFetch = (globalThis.fetch as any)
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: any) => {
+      if (url.includes('api.openai.com') && !injected) {
+        injected = true
+        fakeDb.tables.messages.push({
+          id: 'mB', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+          content: 'הודעה שנייה שהגיעה תוך כדי עיבוד', created_at: new Date(Date.now() + 11000).toISOString(),
+        })
+      }
+      return realFetch(url, opts)
+    }))
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'הודעה ראשונה',
+    })
+
+    const sends = sentMessages.filter(m => m.url.includes('sendMessage'))
+    // שתי תשובות נשלחו — אחת לכל הודעה — לא הודעה כפולה לאותה הודעה, ולא
+    // הודעה שהלכה לאיבוד בלי מענה בכלל
+    expect(sends.length).toBe(2)
+    expect(openaiCalls.length).toBe(2)
+    // הקריאה השנייה ל-OpenAI חייבת לכלול את תוכן ההודעה השנייה — ההוכחה
+    // שהיא לא "נעלמה" מהקונטקסט שהמודל ראה
+    expect(openaiCalls[1].userMessage).toContain('הודעה שנייה שהגיעה תוך כדי עיבוד')
+  }, 15000)
+
+  it('merges multiple messages that arrive during processing into a single follow-up turn, not a burst of separate replies', async () => {
+    seedBaseline()
+    fakeDb.tables.messages = [{
+      id: 'mA', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+      content: 'הודעה ראשונה', created_at: new Date().toISOString(),
+    }]
+    openaiReply = 'תשובה כללית 😊'
+
+    // מזריק שתי הודעות (B ואז C, שנייה-שתיים אחרי) תוך כדי ה-run הראשון —
+    // שתיהן אמורות להתאחד לתשובת follow-up אחת, לא שתי תשובות נפרדות
+    let injected = false
+    const realFetch = (globalThis.fetch as any)
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: any) => {
+      if (url.includes('api.openai.com') && !injected) {
+        injected = true
+        const base = Date.now()
+        fakeDb.tables.messages.push(
+          { id: 'mB', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact', content: 'אני מכפר יונה', created_at: new Date(base + 11000).toISOString() },
+          { id: 'mC', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact', content: 'ועדיף בבוקר', created_at: new Date(base + 13000).toISOString() },
+        )
+      }
+      return realFetch(url, opts)
+    }))
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'הודעה ראשונה',
+    })
+
+    const sends = sentMessages.filter(m => m.url.includes('sendMessage'))
+    // לא 3 תשובות (אחת לכל הודעה) — רק 2: אחת ל-A, אחת מאוחדת ל-B+C יחד
+    expect(sends.length).toBe(2)
+    expect(openaiCalls.length).toBe(2)
+    expect(openaiCalls[1].userMessage).toContain('אני מכפר יונה')
+    expect(openaiCalls[1].userMessage).toContain('ועדיף בבוקר')
+  }, 15000)
+
+  it('does not trigger any follow-up run when no new message arrived while processing', async () => {
+    seedBaseline()
+    fakeDb.tables.messages = [{
+      id: 'mA', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+      content: 'הודעה יחידה', created_at: new Date().toISOString(),
+    }]
+    openaiReply = 'תשובה כללית 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'הודעה יחידה',
+    })
+
+    // בלי הודעה חדשה שממתינה — אסור שתיווצר ריצה נוספת (לא לולאה מיותרת,
+    // לא קריאה כפולה ל-OpenAI, לא הודעה כפולה ללקוח)
+    expect(openaiCalls.length).toBe(1)
+    expect(sentMessages.filter(m => m.url.includes('sendMessage')).length).toBe(1)
+  })
+
+  it('does not create concurrent runs — the lock is held for the entire follow-up loop, not re-claimed per iteration', async () => {
+    seedBaseline()
+    const now = Date.now()
+    fakeDb.tables.messages = [{
+      id: 'mA', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+      content: 'הודעה ראשונה', created_at: new Date(now).toISOString(),
+    }, {
+      id: 'mB', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
+      content: 'הודעה שנייה', created_at: new Date(now + 11000).toISOString(),
+    }]
+    openaiReply = 'תשובה כללית 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'הודעה ראשונה',
+    })
+
+    // הנעילה תמיד משוחררת לגמרי בסיום — גם אחרי לולאת follow-up
+    expect(fakeDb.tables.conversations[0].ai_processing_started_at).toBeNull()
   })
 })
