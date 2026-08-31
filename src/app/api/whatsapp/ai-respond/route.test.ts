@@ -983,6 +983,126 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     })
   })
 
+  // ─── FIND AVAILABLE SLOTS — "מתי פנוי?"/"מה יש בשלישי?" (יוסי, 01/09) ─────
+  // עד כה המערכת ידעה רק לאמת שעה שכבר ניתנה, לא לענות בעצמה על שאלת
+  // זמינות כללית — ראה מפרט מלא ב-findAvailableSlots (botAppointments.ts)
+  describe('FIND AVAILABLE SLOTS — real available-slot listing computed before generation, grounded after it', () => {
+    // תרחיש G: "תרשום לי מתי פנוי" בלי לחזור על היום — היום כבר "פעיל"
+    // בשיחה כי הבוט עצמו שאל עליו קודם
+    it('G — uses the day already active in the conversation (bot asked about it) when the customer just says "תרשום לי מתי פנוי"', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '11:00', closed: false }],
+      }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה', sender_type: 'contact' },
+        { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'מה מתאים לך ביום שלישי?', sender_type: 'ai' },
+      ])
+      openaiReply = 'בטח! יש לנו פנוי ב-09:00 😊\nLEAD:{"reason":"הלבנה"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תרשום לי מתי פנוי',
+      })
+
+      // הזמינות האמיתית חושבה **לפני** הגנרציה והוזרקה לפרומפט עצמו
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).toContain('זמינות אמיתית')
+      expect(prompt).toContain('09:00')
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // תרחיש H: "ברביעי פנוי?" — שם יום ישיר, פותר לתאריך קונקרטי (רביעי הקרוב)
+    it('H — "ברביעי פנוי?" resolves the weekday name to a concrete date and returns real slots for it', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'רביעי', open: '09:00', close: '11:00', closed: false }],
+      }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה', sender_type: 'contact' },
+      ])
+      openaiReply = 'בהחלט! יש לנו פנוי ב-09:00 😊\nLEAD:{"reason":"הלבנה"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'ברביעי פנוי?',
+      })
+
+      const wednesday = nextWeekday(3)
+      const [dy, dm, dd] = wednesday.split('-')
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).toContain(`${dd}.${dm}.${dy}`)
+      expect(prompt).toContain('09:00')
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // תרחיש I: אין זמינות אמיתית בכלל — לא ממציאים שעה, נשארים על מנגנון
+    // ההסלמה הקיים (אותו ניסוח קבוע, אותה תגית escalated_at)
+    it('I — no real availability found: falls back to the existing escalation message, no invented time', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+      }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה ביום שלישי', sender_type: 'contact' },
+      ])
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"הלבנה"}\nESCALATE:["אין זמינות"]'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+      })
+
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).toContain('לא נמצאה זמינות אמיתית')
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // תרחיש J: ה-LLM "משפר" ומוסיף שעה שלא הייתה ברשימה האמיתית שהוזרקה לו
+    it('J — a time the model invents beyond the real computed slots list is never sent to the customer', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '09:00', close: '10:00', closed: false }], // רק 09:00 אפשרי (60 דק')
+      }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה ביום שלישי', sender_type: 'contact' },
+      ])
+      // 14:30 מומצאת — לא הייתה ברשימת השעות האמיתיות שהוזרקה לפרומפט
+      openaiReply = 'יש לנו פנוי ב-09:00 וגם ב-14:30 😊\nLEAD:{"reason":"הלבנה"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('14:30')
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+  })
+
   it('refuses to send at all when the business has no active WhatsApp connection (no silent cross-tenant fallback)', async () => {
     seedBaseline()
     fakeDb.tables.whatsapp_connections = [] // אין חיבור בכלל

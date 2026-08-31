@@ -4,6 +4,7 @@ import {
   saveOrRescheduleBotAppointment, type WorkingDay,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
   looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
+  findAvailableSlots, israelWeekday,
 } from './botAppointments'
 
 describe('normalizeApptDate', () => {
@@ -288,6 +289,154 @@ describe('findAvailableDoctorForExactSlot — real time-slot availability before
     const sb = mockSb()
     const result = await findAvailableDoctorForExactSlot(sb, 'biz1', tuesday, '10:00', 60, 'הלבנה', {}, {})
     expect(result.status).toBe('unknown')
+  })
+})
+
+// ─── findAvailableSlots — FIND AVAILABLE SLOTS, לא רק CHECK EXACT SLOT ──────
+// (יוסי, 01/09): לקוח ששאל "תרשום לי מתי פנוי" צריך רשימת שעות אמיתיות,
+// לא רק תשובת כן/לא לשעה בודדת. ראה מפרט מלא ב-findAvailableSlots עצמה
+describe('findAvailableSlots — real available time slots for a given day (FIND AVAILABLE SLOTS)', () => {
+  const DOC_A = 'doc-a'
+  const DOC_B = 'doc-b'
+
+  function nextWeekday(target: number): string {
+    const now = new Date()
+    const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
+  }
+
+  const narrowSchedule = (day: string) => [{ day, open: '09:00', close: '11:00', closed: false }]
+
+  // A. רופא מוסמך עובד 09:00-11:00 (שני slots של 60 דק'), חלק תפוס
+  it('A — returns only the genuinely free slots when part of the day is already booked', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: israelDateTime(tuesday, '09:00')!.toISOString(), duration_minutes: 60 }],
+    })
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: narrowSchedule(day) }, {}, 60
+    )
+    expect(result).toEqual([{ date: tuesday, time: '10:00', doctorId: DOC_A }])
+  })
+
+  // B. רופא פנוי אבל לא מוסמך לשירות המבוקש
+  it('B — returns no slots for a doctor who is free but not qualified for the requested service', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'השתלות',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: narrowSchedule(day) }, {}, 60
+    )
+    expect(result).toEqual([])
+  })
+
+  // C. רופא מוסמך אבל סגור/ה באותו יום לפי הלוח האישי
+  it('C — returns no slots for a doctor who is qualified but closed that day', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: '', close: '', closed: true }] }, {}, 60
+    )
+    expect(result).toEqual([])
+  })
+
+  // D. שני רופאים מוסמכים — מיזוג אמיתי, בלי כפילות על אותה שעה
+  it('D — merges real slots from two qualified doctors without duplicating the same time', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    // DOC_A תפוס ב-09:00, פנוי ב-10:00. DOC_B פנוי בשתיהן — לכן 09:00 חייב
+    // להגיע מ-DOC_B (המרכיב האמיתי היחיד הפנוי אז), ו-10:00 מ-DOC_A (הראשון
+    // ברשימת qualified שפנוי בפועל) — לא שתי שורות לאותה שעה
+    const sb = mockSb({
+      dayAppts: [{ assigned_to: DOC_A, scheduled_at: israelDateTime(tuesday, '09:00')!.toISOString(), duration_minutes: 60 }],
+    })
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'], [DOC_B]: ['הלבנה'] },
+      { [DOC_A]: narrowSchedule(day), [DOC_B]: narrowSchedule(day) }, {}, 60
+    )
+    expect(result).toEqual([
+      { date: tuesday, time: '09:00', doctorId: DOC_B },
+      { date: tuesday, time: '10:00', doctorId: DOC_A },
+    ])
+  })
+
+  // E. הלקוח ביקש רופא מסוים — לא מציעים תחליף בשקט
+  it('E — returns slots only for the doctor the customer explicitly requested, even though another qualified doctor is also free', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'], [DOC_B]: ['הלבנה'] },
+      { [DOC_A]: narrowSchedule(day), [DOC_B]: narrowSchedule(day) }, {}, 60,
+      DOC_B // preferredDoctorId
+    )
+    expect(result.every(sl => sl.doctorId === DOC_B)).toBe(true)
+    expect(result.length).toBeGreaterThan(0)
+  })
+
+  // F. employee_min_lead_hours — שעות מוקדמות מדי לא מוחזרות
+  it('F — excludes slots that are too soon for a doctor who requires minimum lead time', async () => {
+    // יום/שעות שכולם קרובים מדי ל"עכשיו" (2-4 שעות קדימה) מול דרישה של 24 שעות
+    function israelParts(d: Date): { date: string; time: string } {
+      const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(d)
+      const get = (t: string) => fmt.find(p => p.type === t)?.value || ''
+      return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}` }
+    }
+    const soon = israelParts(new Date(Date.now() + 2 * 3600000))
+    const day = israelWeekday(new Date(`${soon.date}T12:00:00Z`))
+    const [sh] = soon.time.split(':').map(Number)
+    const openHour = String(Math.max(0, sh)).padStart(2, '0')
+    const closeHour = String(Math.min(23, sh + 4)).padStart(2, '0')
+    const sb = mockSb()
+
+    const blocked = await findAvailableSlots(
+      sb, 'biz1', soon.date, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: `${openHour}:00`, close: `${closeHour}:00`, closed: false }] },
+      { [DOC_A]: 24 }, 60
+    )
+    expect(blocked).toEqual([])
+
+    const unblocked = await findAvailableSlots(
+      sb, 'biz1', soon.date, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: `${openHour}:00`, close: `${closeHour}:00`, closed: false }] },
+      {}, 60
+    )
+    expect(unblocked.length).toBeGreaterThan(0)
+  })
+
+  it('fails closed (returns no slots) when the service is unknown', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const result = await findAvailableSlots(sb, 'biz1', tuesday, null, { [DOC_A]: ['הלבנה'] }, {}, {}, 60)
+    expect(result).toEqual([])
+  })
+
+  it('fails closed (returns no slots) when the business has no doctor-service mapping at all', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const result = await findAvailableSlots(sb, 'biz1', tuesday, 'הלבנה', {}, {}, {}, 60)
+    expect(result).toEqual([])
+  })
+
+  it('respects maxResults, capping at 4 by default even with a long open window', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: '09:00', close: '17:00', closed: false }] }, {}, 60
+    )
+    expect(result.length).toBe(4)
   })
 })
 

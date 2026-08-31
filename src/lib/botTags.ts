@@ -298,6 +298,29 @@ export function resolveActiveService(
   return null
 }
 
+// ─── זיהוי "מה יש בכלל" (FIND AVAILABLE SLOTS) לעומת בדיקת שעה ספציפית ──────
+// (יוסי, 01/09): "מתי פנוי", "מה יש בשלישי", "תרשום לי שעות פנויות" — אלה
+// לא בקשה לתאריך/שעה ספציפיים (זה כבר מטופל ע"י extractOfferedDateTime/
+// APPT), אלא בקשה לרשימת אפשרויות. אם כבר יש שעה מדויקת (HH:MM) בהודעה,
+// זו כנראה בדיקת-שעה רגילה ("10:30 פנוי?"), לא שאלת "מה יש בכלל"
+const AVAILABILITY_INQUIRY_PHRASES = ['מתי פנוי', 'מתי יש', 'אילו שעות', 'אילו זמנים', 'איזה שעות', 'מה יש ב', 'שעות פנויות', 'תורים פנויים', 'יש תורים', 'מה פנוי']
+const AVAILABILITY_DAY_HINT = /(ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת|מחר|היום|מחרתיים)/
+export function looksLikeAvailabilityInquiry(text: string): boolean {
+  if (!text) return false
+  if (/\d{1,2}:\d{2}/.test(text)) return false // שעה מדויקת כבר ננקבה — לא "מה יש בכלל"
+  if (AVAILABILITY_INQUIRY_PHRASES.some(p => text.includes(p))) return true
+  // מקרה נפוץ נוסף: שם יום/מילת-זמן + "פנוי" בלי שעה מדויקת (למשל "ברביעי פנוי?")
+  return text.includes('פנוי') && AVAILABILITY_DAY_HINT.test(text)
+}
+
+// כל השעות (HH:MM) המוזכרות בטקסט, לפי סדר הופעה — לצורך אימות שהתשובה
+// הסופית של הבוט לא מכילה שעה שלא הוחזרה בפועל מ-findAvailableSlots
+// (ai-respond/route.ts) — לא מספיק להזריק רשימה לפרומפט, כי ה-LLM עדיין
+// עלול "לשפר"/להמציא שעה שלא הייתה בה
+export function extractAllTimesInText(text: string): string[] {
+  return [...text.matchAll(/(\d{1,2}):(\d{2})/g)].map(([, h, m]) => `${h.padStart(2, '0')}:${m}`)
+}
+
 // ─── מיזוג ניתוח ליד (LEAD tag) לתוך שדות עדכון — לוגיקה טהורה, ────────────
 // בלי קריאות DB. STATUS_RANK מבטיח שסטטוס תמיד מתקדם קדימה, לא נסוג אחורה
 export const STATUS_RANK: Record<string, number> = {

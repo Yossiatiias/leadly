@@ -5,12 +5,13 @@ import {
   normalizeApptDate, israelDateTime,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
   looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
+  findAvailableSlots, resolveActiveRequestedDate,
   type BotApptResult,
 } from '@/lib/botAppointments'
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -393,6 +394,47 @@ async function handleAiRespond(
       return `יום ${dayName} ${day}/${m}/${y} = ${iso}`
     }).join('\n')
 
+    // ─── FIND AVAILABLE SLOTS — "מתי פנוי?"/"מה יש בשלישי?" ────────────────
+    // (יוסי, 01/09): עד כה המערכת ידעה רק לאמת שעה ספציפית שכבר ניתנה
+    // (עיגון הצעה למטה) — לא לענות בעצמה "אילו שעות יש". כשלקוח ביקש
+    // "תרשום לי מתי פנוי" בלי לתת שעה, ל-LLM לא היה שום מקור אמת לענות,
+    // ובלית ברירה נפל תמיד להעברה לנציג — גם כשבפועל היו שעות פנויות.
+    // כאן: אם ההודעה נראית כשאלת-זמינות כללית, מחשבים מראש שעות אמיתיות
+    // מהיומן ומזריקים אותן כעובדה קשיחה לפרומפט — ה-LLM לא "מנחש", רק בוחר
+    // איך לנסח את מה שכבר חושב. הוולידציה שאף שעה שלא ברשימה לא תישלח
+    // בפועל היא **אחרי** הגנרציה, למטה (איפה שגם שאר עיגון ההצעות רץ)
+    let availableSlotsBlock = ''
+    let computedSlotsThisTurn: { date: string; time: string; doctorId: string }[] | null = null
+    if (looksLikeAvailabilityInquiry(combinedText)) {
+      const requestedDate = resolveActiveRequestedDate(combinedText, msgs, israelNow)
+      // אין עדיין תגית LEAD לתור הזה (טרם קרינו ל-LLM) — משתמשים רק
+      // בעדיפות 2 של resolveActiveService (סריקת הודעות נכנסות אחורה),
+      // בדיוק כמו שעיגון ההצעה למטה עושה כש-inlineReason חסר
+      const inquiryService = resolveActiveService(null, msgs, business?.settings?.services || [])
+      if (requestedDate && inquiryService) {
+        const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap)
+        const matchedInquirySvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => sv.name?.includes(inquiryService))
+        const inquiryDuration = matchedInquirySvc?.duration ? parseInt(String(matchedInquirySvc.duration)) : 60
+        const slots = await findAvailableSlots(
+          supabase, businessId,
+          requestedDate, inquiryService,
+          business?.settings?.employee_responsibilities || {},
+          business?.settings?.employee_schedules || {},
+          business?.settings?.employee_min_lead_hours || {},
+          isNaN(inquiryDuration) ? 60 : inquiryDuration,
+          preferredDoctorIdForInquiry,
+        )
+        computedSlotsThisTurn = slots
+        const [dy, dm, dd] = requestedDate.split('-')
+        if (slots.length > 0) {
+          const slotsText = slots.map(sl => `${sl.time}${profileMap[sl.doctorId] ? ` (${profileMap[sl.doctorId]})` : ''}`).join(', ')
+          availableSlotsBlock = `\nזמינות אמיתית ב-${dd}.${dm}.${dy}: ${slotsText}\n**חובה**: הלקוח שאל על זמינות/שעות פנויות — הצג לו אך ורק שעות מתוך הרשימה הזו (אפשר לבחור 2-4 מהן, אין צורך להציג את כולן). אסור להוסיף, לשנות או להמציא שעה שלא מופיעה כאן, גם אם היא נשמעת סבירה.`
+        } else {
+          availableSlotsBlock = `\nלא נמצאה זמינות אמיתית ב-${dd}.${dm}.${dy} לשירות המבוקש. הלקוח שאל על זמינות/שעות פנויות — אל תמציא שעה. אמור בעדינות שלא מצאת תור זמין (ראה הניסוח הקבוע בחוקים למטה) ושתעביר את הבקשה לנציג.`
+        }
+      }
+    }
+
     // מסמך הנחיות שהועלה בהגדרות — הופך לבסיס הפרומפט של הבוט
     const agentInstructions = (business?.settings?.agent_instructions || '').trim()
     const instructionsBlock = agentInstructions
@@ -412,7 +454,7 @@ ${genderInstructionBlock}
 ${business?.settings?.description || ''}
 כתובת: ${business?.address || ''} | אתר: ${business?.website || ''} | שעות פעילות: ${workingHoursText || 'לא הוגדרו'}
 ${servicesText ? `\nשירותים:\n${servicesText}` : ''}
-${staffText}${closedDatesText}${existingApptText}
+${staffText}${closedDatesText}${existingApptText}${availableSlotsBlock}
 ${qaText ? `\nQ&A:\n${qaText}` : ''}
 
 חוקים:
@@ -571,6 +613,30 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     let aiResponse = parsed.cleanResponse
 
     if (!aiResponse) return NextResponse.json({ ok: true })
+
+    // ─── עיגון "שעות פנויות" מול הרשימה האמיתית שחושבה למעלה ──────────────
+    // לא מספיק להזריק את הרשימה לפרומפט (ה-LLM עדיין עלול "לשפר"/להמציא
+    // שעה). כאן: כל שעה שהתשובה מזכירה, כשזו הייתה שאלת זמינות עם תאריך+
+    // שירות שהצלחנו לזהות, חייבת להיות בדיוק אחת מתוך computedSlotsThisTurn
+    // — אם לא, לא סומכים על שום חלק מהניסוח, ואותה נפילה בדיוק כמו בכל
+    // מקום אחר שאין בו זמינות אמיתית: NO_AVAILABILITY_MESSAGE + ESCALATE
+    // (לא נוגעים במנגנון ההסלמה עצמו, רק מפעילים אותו). רץ רק כשזו לא כבר
+    // פעולת קביעה אמיתית (apptData) — שם יש כבר את שכבת האכיפה המלאה
+    if (computedSlotsThisTurn !== null && !apptData) {
+      const allowedTimes = new Set(computedSlotsThisTurn.map(sl => sl.time))
+      const mentionedTimes = extractAllTimesInText(aiResponse)
+      const inventedTime = mentionedTimes.find(t => !allowedTimes.has(t))
+      if (inventedTime) {
+        console.error('[ai-respond] RELIABILITY BLOCK — availability response mentioned a time not present in the real computed slots list:', JSON.stringify({
+          conversationId, inventedTime, allowedTimes: Array.from(allowedTimes),
+        }))
+        aiResponse = NO_AVAILABILITY_MESSAGE
+        await supabase.from('conversations').update({
+          escalated_at: new Date().toISOString(),
+          escalation_reason: 'אין רופא/ה זמין/ה לטיפול המבוקש בתאריך/שעה שהתבקשו',
+        }).eq('id', conversationId)
+      }
+    }
 
     // ─── עיגון הצעת תור מול זמינות אמיתית — לפני שהיא בכלל נשלחת ────────────
     // קרה בפועל (24/08, אוריין): הבוט הציע "יש לנו תור פנוי ביום שני

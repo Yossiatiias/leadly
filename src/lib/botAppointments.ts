@@ -348,6 +348,179 @@ export async function findAvailableDoctorForExactSlot(
   return picked ? { status: 'available', doctorId: picked } : { status: 'unavailable' }
 }
 
+export interface AvailableSlot { date: string; time: string; doctorId: string }
+
+// ─── מציאת שעות פנויות אמיתיות ביום נתון — לא רק בדיקת שעה אחת בודדת ────────
+// (יוסי, 01/09): עד כה המערכת ידעה רק CHECK EXACT SLOT ("האם 10:30 פנוי?",
+// findAvailableDoctorForExactSlot למעלה) — לא FIND AVAILABLE SLOTS ("אילו
+// שעות פנויות יש ביום X?"). קרה בפועל: לקוח שנדחה על שעה ספציפית ביקש
+// "תרשום לי מתי פנוי" — לבוט לא היה שום מקור אמת לענות (אסור לו להמציא
+// שעה), ובלית ברירה נפל תמיד להעברה לנציג, גם כשבפועל היו שעות פנויות
+// אמיתיות ביומן. הפונקציה הזו סוגרת את הפער: אותו סינון בדיוק כמו
+// findAvailableDoctorForExactSlot (שירות → מוסמכים → עובד/ת ביום → min-lead),
+// ואז בונה רשת שעות מתוך שעות הפתיחה/סגירה האישיות של כל רופא/ה
+// (employee_schedules, open/close בפועל — לא רק "עובד/סגור"), מסננת חפיפה
+// מול appointments אמיתיים (אותה שאילתה כמו pickAvailableDoctor), וממזגת
+// בין רופאים כדי לא להציג אותה שעה פעמיים. Read-only: לא כותבת/שומרת כלום.
+// preferredDoctorId, אם סופק, מצמצם את כל החיפוש לרופא/ה הזה/ו בלבד —
+// לעולם לא מציעים תחליף בשקט למי שהלקוח ביקש בשם (אותו עיקרון כמו
+// extractCustomerRequestedDoctorId/textMentionsWrongDoctor באסקלציה למעלה)
+export async function findAvailableSlots(
+  sb: any, businessId: string,
+  dateISO: string,
+  service: string | null | undefined,
+  empResponsibilities: Record<string, string[]>,
+  employeeSchedules: Record<string, WorkingDay[]>,
+  employeeMinLeadHours: Record<string, number> | undefined,
+  durationMinutes: number,
+  preferredDoctorId?: string | null,
+  maxResults = 4
+): Promise<AvailableSlot[]> {
+  // fail-closed: בלי שירות ידוע ובלי שיוך רופאים בעסק, אין שום בסיס אמיתי
+  // להציע שעות — לא מנחשים (אותו עיקרון כמו resolveActiveService ב-botTags.ts
+  // וה-fail-closed שנוסף ב-route.ts, 31/08 — מקרה ד"ר גבי סמל)
+  if (!service || Object.keys(empResponsibilities).length === 0) return []
+
+  let qualified = Object.entries(empResponsibilities)
+    .filter(([, svcs]) => svcs.some(s => service.includes(s) || s.includes(service)))
+    .map(([uid]) => uid)
+  if (qualified.length === 0) return []
+
+  // הלקוח ביקש רופא/ה מסוים/ת בשם — מחפשים אך ורק אצלו/ה, לא מציעים תחליף
+  if (preferredDoctorId) {
+    qualified = qualified.includes(preferredDoctorId) ? [preferredDoctorId] : []
+    if (qualified.length === 0) return []
+  }
+
+  const probe = new Date(`${dateISO}T12:00:00Z`)
+  if (isNaN(probe.getTime())) return []
+  const dayName = israelWeekday(probe)
+
+  // רק רופאים עם לוח אישי מוגדר ובעל שעות פתיחה/סגירה אמיתיות ביום הזה —
+  // בלי לוח אישי (employeeSchedules[uid] ריק) אי אפשר לבנות רשת שעות
+  // אמיתית בכלל, אז לא מנחשים שעות ברירת מחדל; פשוט מדלגים על הרופא הזה
+  const doctorHours: Record<string, WorkingDay> = {}
+  for (const uid of qualified) {
+    const sched = employeeSchedules[uid]
+    if (!sched?.length) continue
+    const entry = sched.find(d => d.day === dayName)
+    if (!entry || entry.closed || !entry.open || !entry.close) continue
+    doctorHours[uid] = entry
+  }
+  const openDoctors = Object.keys(doctorHours)
+  if (openDoctors.length === 0) return []
+
+  const dayStart = israelDateTime(dateISO, '00:00')
+  const dayEnd = israelDateTime(dateISO, '23:59')
+  if (!dayStart || !dayEnd) return []
+
+  const { data: dayAppts } = await sb.from('appointments')
+    .select('assigned_to, scheduled_at, duration_minutes')
+    .eq('business_id', businessId)
+    .in('assigned_to', openDoctors)
+    .in('status', ['scheduled', 'confirmed'])
+    .gte('scheduled_at', dayStart.toISOString())
+    .lte('scheduled_at', dayEnd.toISOString())
+
+  const apptsByDoctor: Record<string, { start: number; end: number }[]> = {}
+  for (const uid of openDoctors) apptsByDoctor[uid] = []
+  for (const a of (dayAppts || []) as { assigned_to: string; scheduled_at: string; duration_minutes: number | null }[]) {
+    if (!apptsByDoctor[a.assigned_to]) continue
+    const start = new Date(a.scheduled_at).getTime()
+    apptsByDoctor[a.assigned_to].push({ start, end: start + (a.duration_minutes || 60) * 60000 })
+  }
+
+  // רשת שעות מועמדות לכל רופא/ה, בקפיצות של משך הטיפול עצמו, בתוך שעות
+  // הפתיחה/סגירה האישיות שלו/ה בלבד — לא מעבר לזמן שהטיפול נגמר בדיוק בסגירה
+  const doctorSlotTimes: Record<string, Set<string>> = {}
+  const candidateTimes = new Set<string>()
+  for (const uid of openDoctors) {
+    const { open, close } = doctorHours[uid]
+    const [oh, om] = open.split(':').map(Number)
+    const [ch, cm] = close.split(':').map(Number)
+    const closeMin = ch * 60 + cm
+    doctorSlotTimes[uid] = new Set()
+    for (let cursor = oh * 60 + om; cursor + durationMinutes <= closeMin; cursor += durationMinutes) {
+      const t = `${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`
+      doctorSlotTimes[uid].add(t)
+      candidateTimes.add(t)
+    }
+  }
+
+  const sortedTimes = Array.from(candidateTimes).sort()
+  const results: AvailableSlot[] = []
+
+  for (const time of sortedTimes) {
+    if (results.length >= maxResults) break
+    // סדר קבוע (qualified, לא Object.keys(doctorHours) שאינו מובטח יציב) —
+    // אותו רופא/ה נבחר/ת באופן דטרמיניסטי בכל הרצה לאותה שעה, לא רנדומלי,
+    // וכשאותה שעה פנויה אצל כמה רופאים בלי העדפת לקוח — לא מוצגת פעמיים
+    for (const uid of qualified) {
+      if (!doctorSlotTimes[uid]?.has(time)) continue
+      const scheduledAt = israelDateTime(dateISO, time)
+      if (!scheduledAt) continue
+      if (!meetsMinLeadTime(scheduledAt, uid, employeeMinLeadHours)) continue
+      const slotStart = scheduledAt.getTime()
+      const slotEnd = slotStart + durationMinutes * 60000
+      const busy = apptsByDoctor[uid].some(a => slotStart < a.end && slotEnd > a.start)
+      if (busy) continue
+      results.push({ date: dateISO, time, doctorId: uid })
+      break
+    }
+  }
+  return results
+}
+
+// ─── פתרון "רביעי?"/"מה יש בשלישי?" לתאריך קונקרטי לפני חיפוש שעות ──────────
+// findAvailableSlots דורשת תאריך מדויק, לא שם יום — הפונקציות האלה סוגרות
+// את הפער בין מה שהלקוח כתב לבין מה ש-findAvailableSlots צריכה לקבל
+const HEB_WEEKDAY_LIST = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+
+// israelNow חייב כבר לכלול את היסט שעון ישראל (ראה israelDateISOOffset
+// למעלה, ו-upcomingDatesText/israelNow ב-ai-respond/route.ts לאותה טכניקה —
+// getUTCDay ולא israelWeekday, כדי לא "להזיז" את הזמן פעמיים)
+export function nextDateForWeekday(israelNow: Date, weekdayHeb: string): string | null {
+  const targetIdx = HEB_WEEKDAY_LIST.indexOf(weekdayHeb)
+  if (targetIdx === -1) return null
+  const offset = (targetIdx - israelNow.getUTCDay() + 7) % 7
+  return israelDateISOOffset(israelNow, offset)
+}
+
+// מזהה תאריך מבוקש מטקסט בודד: מילת יחס ("מחר"), תאריך מפורש, או שם יום
+// (כולל היום עצמו — אם היום שלישי והלקוח כתב "שלישי", הכוונה היא היום)
+export function resolveDateMentionInText(text: string, israelNow: Date): string | null {
+  if (!text) return null
+  const relOffset = resolveRelativeDayOffset(text)
+  if (relOffset !== null) return israelDateISOOffset(israelNow, relOffset)
+  const dmy = text.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/)
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
+  const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+  for (const w of HEB_WEEKDAY_LIST) {
+    if (text.includes(w)) return nextDateForWeekday(israelNow, w)
+  }
+  return null
+}
+
+// סורק את ההודעה הנוכחית, ואם לא נמצא בה תאריך — אחורה בהיסטוריה (כולל
+// הודעות **יוצאות** של הבוט, לא רק נכנסות — קרה בפועל: הבוט שאל "מה מתאים
+// לך ביום שלישי?" והלקוח ענה "תרשום לי מתי פנוי" בלי לחזור על היום עצמו.
+// שונה בכוונה מ-resolveActiveService/extractCustomerRequestedDoctorId
+// שסורקות רק inbound — שם השאלה היא "מה הלקוח בעצמו אמר", כאן השאלה היא
+// "מה כבר פעיל/מדובר עליו בשיחה", וזה יכול להיות גם משהו שהבוט הציע
+export function resolveActiveRequestedDate(
+  currentText: string, messages: { content: string }[], israelNow: Date, maxLookback = 8
+): string | null {
+  const inCurrent = resolveDateMentionInText(currentText, israelNow)
+  if (inCurrent) return inCurrent
+  const start = Math.max(0, messages.length - maxLookback)
+  for (let i = messages.length - 1; i >= start; i--) {
+    const found = resolveDateMentionInText(messages[i].content, israelNow)
+    if (found) return found
+  }
+  return null
+}
+
 // ─── האם הודעת הלקוח **הנוכחית** נראית כבקשה לתאריך/שעה חדשים? ─────────────
 // קרה בפועל (יוסי, 19/08): הלקוח שאל "למי?" (שאלה כללית, לא קשורה לתאריך)
 // והמודל, מבלי שנתבקש, "הזה" בתשובתו אישור-תור ישן משיחת בדיקה קודמת
