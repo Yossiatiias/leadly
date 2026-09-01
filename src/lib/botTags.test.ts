@@ -109,14 +109,43 @@ describe('buildApptConfirmationSummary', () => {
     expect(msg).toContain('ד"ר אירה')
   })
 
-  it('includes service name and notes when available', () => {
+  // (יוסי, 01/09): קרה בפועל — "הלבנה (הלבנת שיניים)", שני שמות לאותו
+  // שירות. מעדיפים notes (הניסוח הידידותי-ללקוח) על פני השם הפנימי, לא
+  // שניהם יחד
+  it('shows only the customer-facing service description (notes) when both a name and notes are given, not both', () => {
     const msg = buildApptConfirmationSummary({
       newTimeISO: '2026-08-10T09:00:00.000Z',
       serviceName: 'בדיקת חניכיים',
       serviceNotes: 'כולל צילום פנורמי',
     })
-    expect(msg).toContain('בדיקת חניכיים')
     expect(msg).toContain('כולל צילום פנורמי')
+    expect(msg).not.toContain('בדיקת חניכיים')
+  })
+
+  it('falls back to the internal service name when no customer-facing notes are configured', () => {
+    const msg = buildApptConfirmationSummary({
+      newTimeISO: '2026-08-10T09:00:00.000Z',
+      serviceName: 'בדיקת חניכיים',
+    })
+    expect(msg).toContain('בדיקת חניכיים')
+  })
+
+  // המקרה האמיתי מפרודקשן: "ליום יום רביעי" (כפילות) + "הלבנה (הלבנת שיניים)"
+  it('real production case: no duplicated "יום", no duplicated service name — matches the exact requested output', () => {
+    const msg = buildApptConfirmationSummary({
+      newTimeISO: '2026-09-02T11:00:00.000Z', // 14:00 Israel, Wednesday
+      doctorName: 'ד"ר מסאוורה',
+      serviceName: 'הלבנה',
+      serviceNotes: 'הלבנת שיניים',
+      businessAddress: 'רח\' פתח תקווה 6, בניין החלוצים, נתניה',
+    })
+    expect(msg).not.toMatch(/יום\s+יום/) // אין "יום יום"
+    expect(msg).not.toContain('הלבנה (הלבנת שיניים)') // אין שני שמות לאותו שירות
+    expect(msg).toContain('ד"ר מסאוורה')
+    expect(msg).toContain('02.09.2026')
+    expect(msg).toContain('14:00')
+    expect(msg).toContain('להלבנת שיניים')
+    expect(msg).toBe('✅ קבעתי לך תור אצל ד"ר מסאוורה ליום רביעי, 02.09.2026, בשעה 14:00, להלבנת שיניים.\nהכתובת: רח\' פתח תקווה 6, בניין החלוצים, נתניה')
   })
 
   it('includes the business address when provided', () => {

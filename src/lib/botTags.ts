@@ -139,13 +139,21 @@ export function buildApptConfirmationSummary(params: {
   })
   const parts = fmt.formatToParts(new Date(params.newTimeISO))
   const get = (t: string) => parts.find(p => p.type === t)?.value || ''
-  const niceDate = `יום ${get('weekday')} ${get('day')}.${get('month')}.${get('year')} בשעה ${get('hour')}:${get('minute')}`
+  // (יוסי, 01/09): get('weekday') ב-Intl he-IL כבר כולל את המילה "יום"
+  // בעצמה (למשל "יום רביעי") — הוספת "יום " נוספת לפני זה יצרה בפועל
+  // "ליום יום רביעי" בהודעת האישור האמיתית. גם פסיקים סביב התאריך, כדי
+  // שהמשפט ייקרא בבירור כ"יום, תאריך, שעה" ולא כגוש אחד רציף
+  const niceDate = `${get('weekday')}, ${get('day')}.${get('month')}.${get('year')}, בשעה ${get('hour')}:${get('minute')}`
 
   let line = '✅ קבעתי לך תור'
   if (params.doctorName) line += ` אצל ${params.doctorName}`
   line += ` ל${niceDate}`
-  if (params.serviceName) line += `, ${params.serviceName}`
-  if (params.serviceNotes) line += ` (${params.serviceNotes})`
+  // שם שירות אחד בלבד ללקוח — לא שם פנימי + notes יחד (קרה בפועל: "הלבנה
+  // (הלבנת שיניים)", שני שמות לאותו שירות). מעדיפים את הניסוח הידידותי-
+  // ללקוח (notes, כשמוגדר) על פני השם הפנימי הקצר; נופלים לשם הפנימי רק
+  // כשאין notes בכלל
+  const customerFacingService = params.serviceNotes || params.serviceName || null
+  if (customerFacingService) line += `, ל${customerFacingService}`
   if (params.businessAddress) line += `.\nהכתובת: ${params.businessAddress}`
   return line
 }
