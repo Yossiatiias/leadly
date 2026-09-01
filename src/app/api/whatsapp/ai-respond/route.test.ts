@@ -1076,8 +1076,10 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       expect(conv!.escalated_at).toBeTruthy()
     })
 
-    // תרחיש J: ה-LLM "משפר" ומוסיף שעה שלא הייתה ברשימה האמיתית שהוזרקה לו
-    it('J — a time the model invents beyond the real computed slots list is never sent to the customer', async () => {
+    // תרחיש J: ה-LLM "משפר" ומוסיף שעה שלא הייתה ברשימה האמיתית שהוזרקה לו.
+    // (יוסי, 01/09, אחרי מקרה פרודקשן): כשיש slots אמיתיים, כשל ניסוח של
+    // ה-LLM לא הופך יותר ל-"אין זמינות"/הסלמה — SAFE_SLOT_RESPONSE במקום
+    it('J — a time the model invents beyond the real computed slots list is never sent — SAFE_SLOT_RESPONSE with the real slot instead, no escalation', async () => {
       seedBaseline()
       fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
       fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
@@ -1097,9 +1099,10 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
 
       const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
       expect(sendCall!.body.message).not.toContain('14:30')
-      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      expect(sendCall!.body.message).toContain('09:00') // ה-slot האמיתי כן מוצג
+      expect(sendCall!.body.message).not.toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
       const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
-      expect(conv!.escalated_at).toBeTruthy()
+      expect(conv!.escalated_at).toBeFalsy() // יש זמינות אמיתית — אסור להסלים בגללה
     })
   })
 
@@ -1166,8 +1169,10 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       expect(conv!.escalated_at).toBeTruthy()
     })
 
-    // 7. ה-LLM מוסיף תאריך/שעה שלא הוחזרו מהסריקה האמיתית — לא נשלח ללקוח
-    it('7 — a date/time the model invents beyond the real next-available list is never sent to the customer', async () => {
+    // 7. ה-LLM מוסיף תאריך/שעה שלא הוחזרו מהסריקה האמיתית. (יוסי, 01/09,
+    // אחרי מקרה פרודקשן): SAFE_SLOT_RESPONSE במקום — לא NO_AVAILABILITY,
+    // כי יש בפועל זמינות אמיתית
+    it('7 — a date/time the model invents beyond the real next-available list is never sent — SAFE_SLOT_RESPONSE with the real slots instead, no escalation', async () => {
       seedBaseline()
       fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
       fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
@@ -1185,9 +1190,10 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
 
       const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
       expect(sendCall!.body.message).not.toContain('01.01.2099')
-      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      expect(sendCall!.body.message).toContain('09:00') // ה-slots האמיתיים כן מוצגים
+      expect(sendCall!.body.message).not.toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
       const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
-      expect(conv!.escalated_at).toBeTruthy()
+      expect(conv!.escalated_at).toBeFalsy() // יש זמינות אמיתית — אסור להסלים בגללה
     })
 
     // הלקוח ביקש רופא מסוים, בלי יום ספציפי — כל האפשרויות שייכות רק לו/ה
@@ -1217,6 +1223,151 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       const slotsLine = prompt.split('\n').find(l => l.startsWith('התורים הפנויים הקרובים ביותר'))
       expect(slotsLine).toContain('עלא יונס')
       expect(slotsLine).not.toContain('גבי סמל')
+    })
+  })
+
+  // ─── SAFE_SLOT_RESPONSE — INVARIANT: real slots never become "no availability" ──
+  // (יוסי, 01/09, מקרה פרודקשן אמיתי): service="הלבנה", findNextAvailableSlots
+  // מצאה בפועל 4 slots אמיתיים (01.09 11:00, 01.09 15:00, 02.09 13:00,
+  // 02.09 14:00), ובכל זאת הלקוח קיבל "לא מצאתי תור זמין" והועבר לנציג.
+  // מכאן: IF computedSlots.length>0 → לעולם לא NO_AVAILABILITY/הסלמה,
+  // רק SAFE_SLOT_RESPONSE הבנוי ישירות מהנתונים האמיתיים
+  describe('SAFE_SLOT_RESPONSE — real slots never become "no availability", regardless of how badly the model phrases its own answer', () => {
+    function allWeekSchedule(open: string, close: string): { day: string; open: string; close: string; closed: boolean }[] {
+      return ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(day => ({ day, open, close, closed: false }))
+    }
+    function allWeekClosed(): { day: string; open: string; close: string; closed: boolean }[] {
+      return ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(day => ({ day, open: '', close: '', closed: true }))
+    }
+    function seedGeneralInquiry() {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני צריך השתלה', sender_type: 'contact' },
+      ])
+    }
+
+    // 1. ה-LLM אומר "לא מצאתי תור זמין" כשיש בפועל 4 slots אמיתיים
+    it('1 — the model says "no availability" while real slots exist: SAFE_SLOT_RESPONSE is sent instead, no escalation', async () => {
+      seedGeneralInquiry()
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekSchedule('09:00', '11:00') }
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      expect(sendCall!.body.message).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // 2. ה-LLM ממציא שעה נוספת שלא קיימת (מכוסה גם ב-tests הקיימים 7/J,
+    // מוחזר כאן במפורש לפי מספור הבדיקות שאושר)
+    it('2 — the model invents an extra time that does not exist: SAFE_SLOT_RESPONSE, no escalation', async () => {
+      seedGeneralInquiry()
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekSchedule('09:00', '10:00') } // slot יחיד/יום
+      openaiReply = 'יש לנו פנוי ב-09:00 וגם ב-14:30 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('14:30')
+      expect(sendCall!.body.message).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // 3. ה-LLM כותב את השעה בפורמט/ניסוח שה-validator לא מצליח לפרש
+    // (שם יום בלבד, בלי תאריך מספרי — בדיוק כמו המקרה האמיתי בפרודקשן)
+    it('3 — the model uses a format the validator cannot parse (day name only, no numeric date): SAFE_SLOT_RESPONSE, not NO_AVAILABILITY_MESSAGE, no escalation', async () => {
+      seedGeneralInquiry()
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekSchedule('09:00', '11:00') }
+      // אין שום DD.MM.YYYY בתשובה — extractAllDateTimePairsInText לא תמצא זוגות
+      openaiReply = 'יש לנו תור פנוי ביום שלישי בשעה 09:00, מתאים לך? 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      expect(sendCall!.body.message).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // 4. ה-LLM מזכיר רופא שאינו ברשימת הרופאים של ה-slots
+    it('4 — the model mentions a doctor not among the real slots: SAFE_SLOT_RESPONSE with the real data only, no escalation', async () => {
+      seedGeneralInquiry()
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekSchedule('09:00', '11:00') }
+      fakeDb.seed('profiles', [
+        { id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+        { id: 'docC', full_name: 'ד"ר לא-מוסמך', business_id: 'biz1' },
+      ])
+      openaiReply = 'יש לנו פנוי ב-09:00 אצל ד"ר לא-מוסמך 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('לא-מוסמך')
+      expect(sendCall!.body.message).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // 5. computedSlots ריק — ההתנהגות הקיימת נשמרת בדיוק
+    it('5 — no real slots anywhere: keeps the existing NO_AVAILABILITY_MESSAGE + escalation, unchanged', async () => {
+      seedGeneralInquiry()
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekClosed() }
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"השתלות"}\nESCALATE:["אין זמינות"]'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // 6. המקרה האמיתי מפרודקשן: service=הלבנה, 4 slots אמיתיים
+    // (01.09 11:00, 01.09 15:00, 02.09 13:00, 02.09 14:00)
+    it('6 — real production case replay: 4 real slots for הלבנה — customer gets the real options, never "no availability", never escalation', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [
+          { day: 'שלישי', open: '10:00', close: '16:00', closed: false },
+          { day: 'רביעי', open: '10:00', close: '16:00', closed: false },
+        ],
+      }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר מסאוורה', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'בעצם אני צריך הלבנה שיניים יש תורים פנויים?', sender_type: 'contact' },
+      ])
+      // בדיוק כמו בפרודקשן: המודל ענה שאין זמינות, למרות שהיו slots אמיתיים
+      openaiReply = 'לצערי, לא מצאתי תור זמין כרגע. אני אעביר את הבקשה לנציג שיחזור אליך בהקדם עם פרטים נוספים.\nLEAD:{"reason":"הלבנה"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'בעצם אני צריך הלבנה שיניים יש תורים פנויים?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('לא מצאתי תור זמין')
+      expect(sendCall!.body.message).toContain('ד"ר מסאוורה')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
     })
   })
 

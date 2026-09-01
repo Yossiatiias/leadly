@@ -11,7 +11,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -657,51 +657,87 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
 
     if (!aiResponse) return NextResponse.json({ ok: true })
 
+    // ─── דגל: יש זמינות אמיתית, אל תסלים בגללה ──────────────────────────
+    // (יוסי, 01/09): כשמגיע SAFE_SLOT_RESPONSE, זה לא מספיק להחליף את
+    // aiResponse — escalationReason כבר חושב **למעלה** (שורה ~587) מתוך
+    // הטקסט **המקורי** של המודל (parsed.cleanResponse, לפני שהוחלף), ואם
+    // המודל בטעות כתב "מעביר לנציג" (בדיוק המקרה בפועל: המודל ניסח בעצמו
+    // "לא מצאתי תור... מעביר לנציג" למרות שהיו 4 slots אמיתיים) —
+    // extractEscalationFromText תפס את זה כבר, ובלי הדגל הזה ה-escalation
+    // עדיין היה נרשם ל-DB בסוף (למטה, ~שורה 846) גם אחרי שהתשובה שנשלחת
+    // בפועל היא SAFE_SLOT_RESPONSE. לא נוגעים במנגנון ההסלמה עצמו — רק
+    // מדלגים על ההפעלה שלו במקרה הספציפי הזה
+    let suppressAvailabilityEscalation = false
+
     // ─── עיגון "שעות פנויות" מול הרשימה האמיתית שחושבה למעלה ──────────────
-    // לא מספיק להזריק את הרשימה לפרומפט (ה-LLM עדיין עלול "לשפר"/להמציא
-    // שעה). כאן: כל שעה שהתשובה מזכירה, כשזו הייתה שאלת זמינות עם תאריך+
-    // שירות שהצלחנו לזהות, חייבת להיות בדיוק אחת מתוך computedSlotsThisTurn
-    // — אם לא, לא סומכים על שום חלק מהניסוח, ואותה נפילה בדיוק כמו בכל
-    // מקום אחר שאין בו זמינות אמיתית: NO_AVAILABILITY_MESSAGE + ESCALATE
-    // (לא נוגעים במנגנון ההסלמה עצמו, רק מפעילים אותו). רץ רק כשזו לא כבר
-    // פעולת קביעה אמיתית (apptData) — שם יש כבר את שכבת האכיפה המלאה
+    // (יוסי, 01/09, INVARIANT אחרי מקרה פרודקשן אמיתי — service="הלבנה",
+    // 4 slots אמיתיים נמצאו, ובכל זאת הלקוח קיבל "לא מצאתי תור זמין" +
+    // הועבר לנציג): IF computedSlots.length > 0 → לעולם לא NO_AVAILABILITY,
+    // לעולם לא הסלמה בגלל זמינות — רק SAFE_SLOT_RESPONSE, שנבנה ישירות
+    // מהנתונים האמיתיים (buildSafeSlotResponse, botTags.ts), בלי תלות
+    // בניסוח של ה-LLM בכלל. "כשל" עכשיו כולל גם "ה-LLM התעלם מהרשימה
+    // וענה שאין זמינות" (mentionsAnyRealSlot=false), לא רק "המציא שעה" —
+    // זה בדיוק מה שקרה בפועל. ה-IF/ELSE הזה שומר על ההתנהגות המקורית
+    // במדויק כש-computedSlotsThisTurn.length===0 (allowedTimes ריק ⇒ כל
+    // שעה מוזכרת נחשבת "לא מאושרת", בדיוק כמו קודם) — רק מוסיף ענף חדש
+    // כש-length>0. רץ רק כשזו לא כבר פעולת קביעה אמיתית (apptData) — שם
+    // יש כבר את שכבת האכיפה המלאה
     if (computedSlotsThisTurn !== null && !apptData) {
       const allowedTimes = new Set(computedSlotsThisTurn.map(sl => sl.time))
       const mentionedTimes = extractAllTimesInText(aiResponse)
-      const inventedTime = mentionedTimes.find(t => !allowedTimes.has(t))
-      if (inventedTime) {
-        console.error('[ai-respond] RELIABILITY BLOCK — availability response mentioned a time not present in the real computed slots list:', JSON.stringify({
-          conversationId, inventedTime, allowedTimes: Array.from(allowedTimes),
-        }))
-        aiResponse = NO_AVAILABILITY_MESSAGE
-        await supabase.from('conversations').update({
-          escalated_at: new Date().toISOString(),
-          escalation_reason: 'אין רופא/ה זמין/ה לטיפול המבוקש בתאריך/שעה שהתבקשו',
-        }).eq('id', conversationId)
+      const hasInventedTime = mentionedTimes.some(t => !allowedTimes.has(t))
+      const ignoredRealSlots = computedSlotsThisTurn.length > 0 && !mentionedTimes.some(t => allowedTimes.has(t))
+      if (hasInventedTime || ignoredRealSlots) {
+        if (computedSlotsThisTurn.length > 0) {
+          console.error('[ai-respond] SAFE_SLOT_RESPONSE override — real slots exist but the model\'s response failed grounding (invented time / ignored the list / unparseable format) — never escalating when real availability exists:', JSON.stringify({
+            conversationId, hasInventedTime, ignoredRealSlots, allowedTimes: Array.from(allowedTimes),
+          }))
+          aiResponse = buildSafeSlotResponse(computedSlotsThisTurn, profileMap)
+          suppressAvailabilityEscalation = true
+        } else {
+          console.error('[ai-respond] RELIABILITY BLOCK — availability response mentioned a time not present in the real computed slots list:', JSON.stringify({
+            conversationId, mentionedTimes,
+          }))
+          aiResponse = NO_AVAILABILITY_MESSAGE
+          await supabase.from('conversations').update({
+            escalated_at: new Date().toISOString(),
+            escalation_reason: 'אין רופא/ה זמין/ה לטיפול המבוקש בתאריך/שעה שהתבקשו',
+          }).eq('id', conversationId)
+        }
       }
     }
 
     // ─── עיגון "התורים הקרובים ביותר" (GENERAL NEXT AVAILABLE) ────────────
-    // כאן יש כמה תאריכים אפשריים באותה תשובה — לא מספיק לבדוק ששעה "קיימת
-    // איפשהו ברשימה" (כמו למעלה, שם כל הרשימה היא ליום אחד ידוע). בודקים
-    // זוגות תאריך+שעה שלמים (extractAllDateTimePairsInText) מול הרשימה
-    // האמיתית, ובנפרד — ששום שם רופא/ה שלא ברשימה לא מוזכר בתשובה בכלל
+    // אותו INVARIANT בדיוק כמו למעלה, מותאם לכך שכאן יש כמה תאריכים
+    // אפשריים באותה תשובה — לא מספיק לבדוק ששעה "קיימת איפשהו ברשימה".
+    // בודקים זוגות תאריך+שעה שלמים (extractAllDateTimePairsInText), שם
+    // רופא/ה, ו**גם** אם התשובה מתעלמת מהרשימה לגמרי (בדיוק המקרה
+    // בפועל: "לא מצאתי תור זמין" כשהיו 4 slots אמיתיים)
     if (computedNextAvailableSlots !== null && !apptData) {
       const allowedPairs = new Set(computedNextAvailableSlots.map(sl => `${sl.date}|${sl.time}`))
       const allowedDoctorNames = new Set(computedNextAvailableSlots.map(sl => profileMap[sl.doctorId]).filter(Boolean))
       const mentionedPairs = extractAllDateTimePairsInText(aiResponse)
-      const invalidPair = mentionedPairs.find(p => !allowedPairs.has(`${p.date}|${p.time}`))
+      const hasInvalidPair = mentionedPairs.some(p => !allowedPairs.has(`${p.date}|${p.time}`))
       const allDoctorNames = Object.values(profileMap)
-      const wrongDoctorMentioned = allDoctorNames.find(name => name && aiResponse.includes(name) && !allowedDoctorNames.has(name))
-      if (invalidPair || wrongDoctorMentioned) {
-        console.error('[ai-respond] RELIABILITY BLOCK — general-availability response mentioned a date/time/doctor not present in the real computed next-available slots:', JSON.stringify({
-          conversationId, invalidPair, wrongDoctorMentioned, allowedPairs: Array.from(allowedPairs),
-        }))
-        aiResponse = NO_AVAILABILITY_MESSAGE
-        await supabase.from('conversations').update({
-          escalated_at: new Date().toISOString(),
-          escalation_reason: 'אין רופא/ה זמין/ה לטיפול המבוקש בתאריך/שעה שהתבקשו',
-        }).eq('id', conversationId)
+      const wrongDoctorMentioned = !!allDoctorNames.find(name => name && aiResponse.includes(name) && !allowedDoctorNames.has(name))
+      const ignoredRealSlots = computedNextAvailableSlots.length > 0 && !mentionedPairs.some(p => allowedPairs.has(`${p.date}|${p.time}`))
+      if (hasInvalidPair || wrongDoctorMentioned || ignoredRealSlots) {
+        if (computedNextAvailableSlots.length > 0) {
+          console.error('[ai-respond] SAFE_SLOT_RESPONSE override — real next-available slots exist but the model\'s response failed grounding (invented date/time, wrong doctor, ignored the list, or unparseable format) — never escalating when real availability exists:', JSON.stringify({
+            conversationId, hasInvalidPair, wrongDoctorMentioned, ignoredRealSlots, allowedPairs: Array.from(allowedPairs),
+          }))
+          aiResponse = buildSafeSlotResponse(computedNextAvailableSlots, profileMap)
+          suppressAvailabilityEscalation = true
+        } else {
+          console.error('[ai-respond] RELIABILITY BLOCK — general-availability response mentioned a date/time/doctor not present in the real computed next-available slots:', JSON.stringify({
+            conversationId, hasInvalidPair, wrongDoctorMentioned,
+          }))
+          aiResponse = NO_AVAILABILITY_MESSAGE
+          await supabase.from('conversations').update({
+            escalated_at: new Date().toISOString(),
+            escalation_reason: 'אין רופא/ה זמין/ה לטיפול המבוקש בתאריך/שעה שהתבקשו',
+          }).eq('id', conversationId)
+        }
       }
     }
 
@@ -821,7 +857,11 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     // נציג במפורש) עלול להישאר בלי שום מענה עד שמישהי שמה לב ומדליקה
     // אותו חזרה. ההודעה שהבוט שלח (עם ההבטחה שנציג יחזור) כבר נשמרת
     // כרגיל ב-messages, אז "אינטראקציה אחרונה" בטבלת הלידים תציג אותה
-    if (escalationReason) {
+    // (יוסי, 01/09): לא מפעילים גם את זה כשהוחלט למעלה על SAFE_SLOT_RESPONSE
+    // — escalationReason כאן עשוי לשקף רק את הטקסט **המקורי** של המודל
+    // (למשל "מעביר לנציג" מתוך ניסוח שגוי שכבר הוחלף), לא את מה שבאמת
+    // נשלח ללקוח. יש זמינות אמיתית ⇒ שום הסלמה לא נובעת ממנה
+    if (escalationReason && !suppressAvailabilityEscalation) {
       await supabase.from('conversations').update({
         escalated_at: new Date().toISOString(),
         escalation_reason: escalationReason,

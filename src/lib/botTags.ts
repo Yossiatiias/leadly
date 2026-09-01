@@ -338,6 +338,30 @@ export function extractAllDateTimePairsInText(text: string): { date: string; tim
   return pairs
 }
 
+// ─── SAFE_SLOT_RESPONSE — תשובה דטרמיניסטית, נבנית ישירות מ-slots אמיתיים ────
+// (יוסי, 01/09, מקרה פרודקשן אמיתי): service="הלבנה", findNextAvailableSlots
+// החזירה 4 slots אמיתיים (01.09 11:00, 01.09 15:00, 02.09 13:00, 02.09 14:00)
+// — ובכל זאת הלקוח קיבל "לא מצאתי תור זמין" והועבר לנציג. שורש הבעיה: פעם
+// אחת ה-LLM התעלם מהרשימה שהוזרקה לו וענה מעצמו ("אין זמינות"), ופעם שנייה
+// ה-post-generation validator כנראה נכשל לפרש את הניסוח שלו ודרס תשובה
+// תקינה. INVARIANT עכשיו (route.ts): אם יש slots אמיתיים, שום כשל ניסוח/
+// ולידציה של ה-LLM לא יכול להפוך אותם ל"אין זמינות" — כשמתגלה כשל כזה,
+// לא חוזרים ל-NO_AVAILABILITY_MESSAGE (זה שמור אך ורק למקרה שבאמת אין
+// slots), אלא בונים את התשובה ישירות מהנתונים האמיתיים, בלי LLM בכלל
+export function buildSafeSlotResponse(
+  slots: { date: string; time: string; doctorId: string }[],
+  profileMap: Record<string, string>
+): string {
+  const HEB_DAY_NAMES_FULL = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+  const lines = slots.map(sl => {
+    const d = new Date(`${sl.date}T12:00:00Z`)
+    const dayName = HEB_DAY_NAMES_FULL[d.getUTCDay()]
+    const doctorName = profileMap[sl.doctorId]
+    return `יום ${dayName} ${sl.time}${doctorName ? ` (${doctorName})` : ''}`
+  })
+  return `יש כרגע כמה אפשרויות:\n\n${lines.join('\n')}\n\nמה הכי מתאים לך? 😊`
+}
+
 // ─── מיזוג ניתוח ליד (LEAD tag) לתוך שדות עדכון — לוגיקה טהורה, ────────────
 // בלי קריאות DB. STATUS_RANK מבטיח שסטטוס תמיד מתקדם קדימה, לא נסוג אחורה
 export const STATUS_RANK: Record<string, number> = {

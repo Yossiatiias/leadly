@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId } from './botTags'
+import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, buildSafeSlotResponse } from './botTags'
 
 describe('parseBotTags', () => {
   it('parses a full response with all four tags and strips them from the visible text', () => {
@@ -363,5 +363,49 @@ describe('extractEscalationFromText — fallback when the model promises a rep b
 
   it('catches an offer-phrased handoff ("אני יכול להעביר...לנציג...שיחזור אליך")', () => {
     expect(extractEscalationFromText('אם תרצה, אני יכול להעביר את הפנייה שלך לנציג שלנו שיחזור אליך בהקדם. האם זה בסדר?')).not.toBeNull()
+  })
+})
+
+// ─── buildSafeSlotResponse — תשובה דטרמיניסטית בנויה ישירות מ-slots אמיתיים ──
+// (יוסי, 01/09, מקרה פרודקשן אמיתי): הבסיס ל-INVARIANT "אם יש slots
+// אמיתיים, אף כשל ניסוח/ולידציה לא יכול להפוך אותם ל-'אין זמינות'"
+describe('buildSafeSlotResponse — deterministic message built only from real slots, never from the LLM', () => {
+  it('builds one line per slot with the correct Hebrew weekday and doctor name', () => {
+    const slots = [
+      { date: '2026-09-01', time: '11:00', doctorId: 'docA' }, // Tuesday
+      { date: '2026-09-02', time: '13:00', doctorId: 'docA' }, // Wednesday
+    ]
+    const msg = buildSafeSlotResponse(slots, { docA: 'ד"ר מסאוורה' })
+    expect(msg).toContain('יום שלישי 11:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום רביעי 13:00 (ד"ר מסאוורה)')
+  })
+
+  it('omits the doctor name when it is not found in profileMap, without crashing', () => {
+    const msg = buildSafeSlotResponse([{ date: '2026-09-01', time: '11:00', doctorId: 'unknown' }], {})
+    expect(msg).toContain('יום שלישי 11:00')
+    expect(msg).not.toContain('()')
+  })
+
+  it('never contains any date/time/doctor outside the given slots list', () => {
+    const slots = [{ date: '2026-09-01', time: '11:00', doctorId: 'docA' }]
+    const msg = buildSafeSlotResponse(slots, { docA: 'ד"ר מסאוורה', docB: 'ד"ר גבי סמל' })
+    expect(msg).not.toContain('גבי סמל')
+    expect(msg).not.toContain('15:00')
+  })
+
+  // המקרה האמיתי מפרודקשן — 4 slots אמיתיים
+  it('real production case: builds a correct message from the exact 4 real slots found', () => {
+    const slots = [
+      { date: '2026-09-01', time: '11:00', doctorId: 'docMesawarah' },
+      { date: '2026-09-01', time: '15:00', doctorId: 'docMesawarah' },
+      { date: '2026-09-02', time: '13:00', doctorId: 'docMesawarah' },
+      { date: '2026-09-02', time: '14:00', doctorId: 'docMesawarah' },
+    ]
+    const msg = buildSafeSlotResponse(slots, { docMesawarah: 'ד"ר מסאוורה' })
+    expect(msg).toContain('יום שלישי 11:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום שלישי 15:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום רביעי 13:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום רביעי 14:00 (ד"ר מסאוורה)')
+    expect(msg).not.toContain('לא מצאתי תור זמין')
   })
 })
