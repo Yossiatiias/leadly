@@ -11,7 +11,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -412,7 +412,19 @@ async function handleAiRespond(
     // צמודים כדי לאמת זוגות שלמים, לא רק שעות בודדות (ראה עיגון למטה)
     let nextAvailableBlock = ''
     let computedNextAvailableSlots: { date: string; time: string; doctorId: string }[] | null = null
-    if (looksLikeAvailabilityInquiry(combinedText)) {
+    // ─── זיהוי הקשרי (STAGE 1A, יוסי 01/09) — ROOT CAUSE, לא עוד ביטוי ──────
+    // קרה בפועל: הבוט שאל "יש לך העדפה לתאריך או שעה?", הלקוח ענה "מתי
+    // אפשר?" — looksLikeAvailabilityInquiry לא זיהתה את זה (לא "פנוי", לא
+    // ברשימת הביטויים), כל הבלוק דולג, וה-LLM ענה בלי grounding בכלל.
+    // הפתרון: לא עוד ביטוי-אחר-ביטוי אצל הלקוח — במקום זה, אם ה-**בוט**
+    // עצמו שאל על תאריך/שעה/זמינות בהודעתו האחרונה (אוצר מילים קטן ויציב,
+    // כי זה הניסוח שלנו, לא של אינספור לקוחות), כל תגובה של הלקוח שלא
+    // עוברת בבירור לנושא אחר (מחיר/מיקום/זהות רופא) נחשבת המשך לאותה
+    // שיחת-תזמון. משתמש רק ב-msgs שכבר קיימים — אין state חדש
+    const lastOutboundMessage = [...msgs].reverse().find(m => m.direction === 'outbound')?.content || ''
+    const isAvailabilityContextContinuation =
+      botAskedAboutScheduling(lastOutboundMessage) && !looksLikeSchedulingTopicShift(combinedText)
+    if (looksLikeAvailabilityInquiry(combinedText) || isAvailabilityContextContinuation) {
       const requestedDate = resolveActiveRequestedDate(combinedText, msgs, israelNow)
       // אין עדיין תגית LEAD לתור הזה (טרם קרינו ל-LLM) — משתמשים רק
       // בעדיפות 2 של resolveActiveService (סריקת הודעות נכנסות אחורה),

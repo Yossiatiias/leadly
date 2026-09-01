@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, buildSafeSlotResponse } from './botTags'
+import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, buildSafeSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift } from './botTags'
 
 describe('parseBotTags', () => {
   it('parses a full response with all four tags and strips them from the visible text', () => {
@@ -370,19 +370,19 @@ describe('extractEscalationFromText — fallback when the model promises a rep b
 // (יוסי, 01/09, מקרה פרודקשן אמיתי): הבסיס ל-INVARIANT "אם יש slots
 // אמיתיים, אף כשל ניסוח/ולידציה לא יכול להפוך אותם ל-'אין זמינות'"
 describe('buildSafeSlotResponse — deterministic message built only from real slots, never from the LLM', () => {
-  it('builds one line per slot with the correct Hebrew weekday and doctor name', () => {
+  it('builds one line per slot with the correct Hebrew weekday, full DD.MM date, and doctor name', () => {
     const slots = [
       { date: '2026-09-01', time: '11:00', doctorId: 'docA' }, // Tuesday
       { date: '2026-09-02', time: '13:00', doctorId: 'docA' }, // Wednesday
     ]
     const msg = buildSafeSlotResponse(slots, { docA: 'ד"ר מסאוורה' })
-    expect(msg).toContain('יום שלישי 11:00 (ד"ר מסאוורה)')
-    expect(msg).toContain('יום רביעי 13:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום שלישי, 01.09, בשעה 11:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום רביעי, 02.09, בשעה 13:00 (ד"ר מסאוורה)')
   })
 
   it('omits the doctor name when it is not found in profileMap, without crashing', () => {
     const msg = buildSafeSlotResponse([{ date: '2026-09-01', time: '11:00', doctorId: 'unknown' }], {})
-    expect(msg).toContain('יום שלישי 11:00')
+    expect(msg).toContain('יום שלישי, 01.09, בשעה 11:00')
     expect(msg).not.toContain('()')
   })
 
@@ -391,6 +391,21 @@ describe('buildSafeSlotResponse — deterministic message built only from real s
     const msg = buildSafeSlotResponse(slots, { docA: 'ד"ר מסאוורה', docB: 'ד"ר גבי סמל' })
     expect(msg).not.toContain('גבי סמל')
     expect(msg).not.toContain('15:00')
+  })
+
+  // (יוסי, 01/09, STAGE 1B): שני "ימי שלישי" בתאריכים שונים — חייבים
+  // להיות מובחנים ללקוח, לא רק "יום שלישי" פעמיים
+  it('disambiguates two Tuesdays on different dates — the customer sees distinct dates, not just the weekday twice', () => {
+    const slots = [
+      { date: '2026-09-01', time: '11:00', doctorId: 'docA' }, // שלישי השבוע
+      { date: '2026-09-08', time: '11:00', doctorId: 'docA' }, // שלישי שבוע הבא
+    ]
+    const msg = buildSafeSlotResponse(slots, { docA: 'ד"ר מסאוורה' })
+    expect(msg).toContain('יום שלישי, 01.09, בשעה 11:00')
+    expect(msg).toContain('יום שלישי, 08.09, בשעה 11:00')
+    // שתי השורות שונות זו מזו לגמרי — לא כפילות מבלבלת
+    const lines = msg.split('\n').filter(l => l.startsWith('יום'))
+    expect(new Set(lines).size).toBe(2)
   })
 
   // המקרה האמיתי מפרודקשן — 4 slots אמיתיים
@@ -402,10 +417,47 @@ describe('buildSafeSlotResponse — deterministic message built only from real s
       { date: '2026-09-02', time: '14:00', doctorId: 'docMesawarah' },
     ]
     const msg = buildSafeSlotResponse(slots, { docMesawarah: 'ד"ר מסאוורה' })
-    expect(msg).toContain('יום שלישי 11:00 (ד"ר מסאוורה)')
-    expect(msg).toContain('יום שלישי 15:00 (ד"ר מסאוורה)')
-    expect(msg).toContain('יום רביעי 13:00 (ד"ר מסאוורה)')
-    expect(msg).toContain('יום רביעי 14:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום שלישי, 01.09, בשעה 11:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום שלישי, 01.09, בשעה 15:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום רביעי, 02.09, בשעה 13:00 (ד"ר מסאוורה)')
+    expect(msg).toContain('יום רביעי, 02.09, בשעה 14:00 (ד"ר מסאוורה)')
     expect(msg).not.toContain('לא מצאתי תור זמין')
+  })
+})
+
+// ─── botAskedAboutScheduling / looksLikeSchedulingTopicShift — STAGE 1A ─────
+// (יוסי, 01/09, ROOT CAUSE): "מתי אפשר?" לא מזוהה ע"י looksLikeAvailabilityInquiry
+// כשלעצמה — אבל בהקשר של הבוט ששאל "יש לך העדפה לתאריך או שעה?" זו
+// תשובה חד-משמעית. פותר ברמת ה-context, לא עוד ביטוי אצל הלקוח
+describe('botAskedAboutScheduling — small, stable vocabulary of the BOT\'S OWN scheduling language', () => {
+  it('recognizes the real production question', () => {
+    expect(botAskedAboutScheduling('יש לך העדפה לתאריך או שעה לפגישה עם ד"ר עלא יונס?')).toBe(true)
+  })
+  it('recognizes other scheduling-preference phrasings the bot might use', () => {
+    expect(botAskedAboutScheduling('מתי נוח לך להגיע?')).toBe(true)
+    expect(botAskedAboutScheduling('יש לך מועד מועדף?')).toBe(true)
+    expect(botAskedAboutScheduling('אני יכול לבדוק את הזמינות הקרובה')).toBe(true)
+  })
+  it('does not flag an unrelated bot message', () => {
+    expect(botAskedAboutScheduling('מחיר העקירה הוא 500 ש"ח')).toBe(false)
+    expect(botAskedAboutScheduling('איך קוראים לך?')).toBe(false)
+  })
+})
+
+describe('looksLikeSchedulingTopicShift — customer reply clearly moves to a different topic', () => {
+  it('flags a price question', () => {
+    expect(looksLikeSchedulingTopicShift('כמה עולה הטיפול?')).toBe(true)
+  })
+  it('flags a location question', () => {
+    expect(looksLikeSchedulingTopicShift('איפה אתם נמצאים?')).toBe(true)
+  })
+  it('flags a doctor-identity question', () => {
+    expect(looksLikeSchedulingTopicShift('מי הרופא שמטפל בזה?')).toBe(true)
+  })
+  it('does not flag a vague availability-continuation reply', () => {
+    expect(looksLikeSchedulingTopicShift('מתי אפשר?')).toBe(false)
+    expect(looksLikeSchedulingTopicShift('אין לי העדפה')).toBe(false)
+    expect(looksLikeSchedulingTopicShift('לא משנה לי מתי')).toBe(false)
+    expect(looksLikeSchedulingTopicShift('תבדוק לי')).toBe(false)
   })
 })

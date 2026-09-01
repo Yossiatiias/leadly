@@ -1392,6 +1392,133 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     })
   })
 
+  // ─── STAGE 1A — CONTEXT-AWARE AVAILABILITY DETECTION ────────────────────
+  // (יוסי, 01/09, מקרה פרודקשן אמיתי): הבוט שאל "יש לך העדפה לתאריך או
+  // שעה לפגישה עם ד"ר עלא יונס?", הלקוח ענה "מתי אפשר?" — looksLikeAvailabilityInquiry
+  // לא זיהתה, כל הבלוק דילג, וה-LLM ענה בלי grounding בכלל (ראה השיחה
+  // האמיתית: "יש לנו מספר תורים פנויים... יום שלישי בשעה 11:00" — בלי
+  // תאריך, בלי שום בדיקה אמיתית מאחורי זה). כאן: זיהוי הקשרי לפי הודעת
+  // הבוט האחרונה, לא עוד ביטוי אצל הלקוח
+  describe('STAGE 1A/1B — context-aware availability detection + full-date SAFE_SLOT_RESPONSE (real production case)', () => {
+    function allWeekSchedule(open: string, close: string): { day: string; open: string; close: string; closed: boolean }[] {
+      return ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(day => ({ day, open, close, closed: false }))
+    }
+    function seedSchedulingContext() {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docB: allWeekSchedule('09:00', '11:00') }
+      fakeDb.seed('profiles', [{ id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להשתלה אצל ד"ר עלא יונס', sender_type: 'contact' },
+        { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'תודה! יש לך העדפה לתאריך או שעה לפגישה עם ד"ר עלא יונס?', sender_type: 'ai' },
+      ])
+    }
+    function ranAvailabilityFlow(): boolean {
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      return prompt.includes('התורים הפנויים הקרובים ביותר') || prompt.includes('זמינות אמיתית')
+    }
+
+    // A-E: תגובות עמומות/קצרות אחרי שהבוט שאל על תאריך/שעה — כולן צריכות
+    // להיכנס למסלול availability, בלי אף אחת מהן ברשימת AVAILABILITY_INQUIRY_PHRASES
+    const vagueContinuations: [string, string][] = [
+      ['A', 'מתי אפשר?'],
+      ['B', 'מה הכי קרוב?'],
+      ['C', 'אין לי העדפה'],
+      ['D', 'לא משנה לי מתי'],
+      ['E', 'תבדוק לי'],
+    ]
+    for (const [label, text] of vagueContinuations) {
+      it(`${label} — bot asked scheduling preference, customer replies "${text}": availability flow runs`, async () => {
+        seedSchedulingContext()
+        openaiReply = 'בטח! יש לנו כמה אפשרויות פנויות אצל ד"ר עלא יונס 😊\nLEAD:{"reason":"השתלות"}'
+
+        await callAiRespond({
+          conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: text,
+        })
+
+        expect(ranAvailabilityFlow()).toBe(true)
+      })
+    }
+
+    // F-G: תגובות שעוברות בבירור לנושא אחר — לא נכנסות למסלול availability
+    // למרות שהבוט שאל על תאריך/שעה קודם
+    const topicShifts: [string, string][] = [
+      ['F', 'כמה זה עולה?'],
+      ['G', 'איפה אתם נמצאים?'],
+    ]
+    for (const [label, text] of topicShifts) {
+      it(`${label} — bot asked scheduling preference, customer replies "${text}": availability flow does NOT run`, async () => {
+        seedSchedulingContext()
+        openaiReply = 'בשמחה, אענה לך על זה! 😊\nLEAD:{"reason":"השתלות"}'
+
+        await callAiRespond({
+          conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: text,
+        })
+
+        expect(ranAvailabilityFlow()).toBe(false)
+      })
+    }
+
+    // H: ביטויים ישירים קיימים ("מתי פנוי?") ממשיכים לעבוד בדיוק כמו היום —
+    // גם בלי הקשר של שאלת-scheduling קודמת מהבוט (regression, לא תלוי ב-1A)
+    it('H — direct existing phrase "מתי פנוי?" continues to work exactly as before, with no scheduling-context needed at all', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docB: allWeekSchedule('09:00', '11:00') }
+      fakeDb.seed('profiles', [{ id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה השתלה', sender_type: 'contact' },
+      ])
+      openaiReply = 'בטח! יש לנו כמה אפשרויות 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+      })
+
+      expect(ranAvailabilityFlow()).toBe(true)
+    })
+
+    // I: SAFE_SLOT_RESPONSE עם שני "ימי שלישי" בתאריכים שונים — הלקוח רואה
+    // תאריכים מובחנים בפועל (end-to-end, לא רק unit test על buildSafeSlotResponse)
+    it('I — SAFE_SLOT_RESPONSE with two Tuesdays on different dates: the customer sees distinct full dates, not just the weekday twice', async () => {
+      seedSchedulingContext()
+      // המודל מתעלם מה-slots האמיתיים ("אין זמינות") — מכריח SAFE_SLOT_RESPONSE
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי אפשר?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      // אם באמת יש שני "יום שלישי" ברשימה (סביר עם שבוע ימי-עבודה זהים
+      // בטווח 14 יום), כל אחד מהם חייב לכלול תאריך מלא משלו כדי להיות מובחן
+      const tuesdayLines = (sendCall!.body.message as string).split('\n').filter((l: string) => l.startsWith('יום שלישי'))
+      if (tuesdayLines.length > 1) {
+        expect(new Set(tuesdayLines).size).toBe(tuesdayLines.length) // כל שורה שונה (יש בה תאריך)
+      }
+      expect(sendCall!.body.message).toMatch(/\d{2}\.\d{2}/) // יש תאריך DD.MM בתשובה בפועל
+    })
+
+    // J: שחזור מדויק של השיחה האמיתית מפרודקשן
+    it('J — real production replay: bot asks preference, customer says "מתי אפשר?" — real availability engine runs, no free-form invented slots', async () => {
+      seedSchedulingContext()
+      openaiReply = 'יש לנו מספר תורים פנויים עם ד"ר עלא יונס:\n\n- יום שלישי בשעה 11:00\n- יום שלישי בשעה 15:00\n- יום רביעי בשעה 14:00\n\nמה הכי מתאים לך?\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי אפשר?',
+      })
+
+      // המסלול האמיתי רץ בפועל (לא דילג כמו בתקרית המקורית)
+      expect(ranAvailabilityFlow()).toBe(true)
+      // ותשובת ה-LLM (שהשמיטה תאריך, בדיוק כמו בפועל) לא נשלחה כמו שהיא —
+      // הוחלפה בתשובה מבוססת-נתונים עם תאריך מלא
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toMatch(/\d{2}\.\d{2}/)
+    })
+  })
+
   it('refuses to send at all when the business has no active WhatsApp connection (no silent cross-tenant fallback)', async () => {
     seedBaseline()
     fakeDb.tables.whatsapp_connections = [] // אין חיבור בכלל

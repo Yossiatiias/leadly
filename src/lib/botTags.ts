@@ -313,6 +313,30 @@ export function looksLikeAvailabilityInquiry(text: string): boolean {
   return text.includes('פנוי') && AVAILABILITY_DAY_HINT.test(text)
 }
 
+// ─── זיהוי הקשרי: הבוט עצמו שאל על תאריך/שעה/זמינות ─────────────────────────
+// (יוסי, 01/09, מקרה פרודקשן אמיתי): "מתי אפשר?" לא מזוהה ע"י
+// looksLikeAvailabilityInquiry (בלי "פנוי", לא ברשימת הביטויים) — אבל
+// כשההודעה **הקודמת של הבוט עצמו** שאלה "יש לך העדפה לתאריך או שעה?",
+// כל תגובה של הלקוח (קצרה, עמומה, לא מנוסחת כמו שאלת-זמינות קלאסית)
+// היא בבירור המשך לאותה שיחת-תזמון. פותר את זה ברמת ה-ROOT CAUSE — לא
+// עוד ביטוי-אחר-ביטוי אצל הלקוח, אלא הקשר מהצד השני של השיחה. אוצר
+// המילים כאן קטן ויציב בכוונה: זה הניסוח של הבוט **עצמו** (מוגדר ע"י
+// אותו system prompt קבוע), לא אינסוף הניסוחים האפשריים של לקוחות
+const BOT_SCHEDULING_MARKERS = ['תאריך', 'שעה', 'מועד', 'מתי נוח', 'העדפה', 'זמינות']
+export function botAskedAboutScheduling(text: string): boolean {
+  if (!text) return false
+  return BOT_SCHEDULING_MARKERS.some(m => text.includes(m))
+}
+
+// גם כשהבוט שאל על תאריך/שעה, לא כל תגובה קצרה היא בהכרח המשך של שיחת-
+// תזמון — אם התגובה עצמה עוברת בבירור לנושא מידעי אחר (מחיר/מיקום/זהות
+// רופא/שעות פעילות), זו סטייה אמיתית מהנושא, לא תשובת-זמינות עמומה
+const SCHEDULING_TOPIC_SHIFT_MARKERS = ['עולה', 'מחיר', 'עלות', 'איפה', 'כתובת', 'מיקום', 'מי הרופא', 'מי מבצע', 'שעות פעילות', 'שעות פתיחה']
+export function looksLikeSchedulingTopicShift(text: string): boolean {
+  if (!text) return false
+  return SCHEDULING_TOPIC_SHIFT_MARKERS.some(m => text.includes(m))
+}
+
 // כל השעות (HH:MM) המוזכרות בטקסט, לפי סדר הופעה — לצורך אימות שהתשובה
 // הסופית של הבוט לא מכילה שעה שלא הוחזרה בפועל מ-findAvailableSlots
 // (ai-respond/route.ts) — לא מספיק להזריק רשימה לפרומפט, כי ה-LLM עדיין
@@ -348,6 +372,11 @@ export function extractAllDateTimePairsInText(text: string): { date: string; tim
 // ולידציה של ה-LLM לא יכול להפוך אותם ל"אין זמינות" — כשמתגלה כשל כזה,
 // לא חוזרים ל-NO_AVAILABILITY_MESSAGE (זה שמור אך ורק למקרה שבאמת אין
 // slots), אלא בונים את התשובה ישירות מהנתונים האמיתיים, בלי LLM בכלל
+// (יוסי, 01/09, STAGE 1B): "יום שלישי 11:00" בלבד, בלי תאריך, יוצר עמימות
+// אמיתית כשכמה slots חולקים אותו יום-בשבוע בשבועות שונים בתוך טווח
+// findNextAvailableSlots (14 יום — הוכח קורה בפועל). כל שורה כוללת עכשיו
+// גם תאריך מלא (DD.MM) — לא מסתמכים על כך שה-LLM יכלול אותו בעצמו
+// (בדיוק מה שקרה בתקרית האמיתית: קיבל DD.MM.YYYY בפרומפט והשמיט אותו)
 export function buildSafeSlotResponse(
   slots: { date: string; time: string; doctorId: string }[],
   profileMap: Record<string, string>
@@ -356,8 +385,9 @@ export function buildSafeSlotResponse(
   const lines = slots.map(sl => {
     const d = new Date(`${sl.date}T12:00:00Z`)
     const dayName = HEB_DAY_NAMES_FULL[d.getUTCDay()]
+    const [, mm, dd] = sl.date.split('-')
     const doctorName = profileMap[sl.doctorId]
-    return `יום ${dayName} ${sl.time}${doctorName ? ` (${doctorName})` : ''}`
+    return `יום ${dayName}, ${dd}.${mm}, בשעה ${sl.time}${doctorName ? ` (${doctorName})` : ''}`
   })
   return `יש כרגע כמה אפשרויות:\n\n${lines.join('\n')}\n\nמה הכי מתאים לך? 😊`
 }
