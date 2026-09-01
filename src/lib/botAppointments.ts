@@ -261,9 +261,16 @@ export function extractOfferedDateTime(text: string): { date: string; time: stri
 // ודאות שכל הרופאים המוסמכים סגורים ביום המבוקש
 // בודק אם רופא/ה עומד/ת בדרישת "מינימום שעות מראש" שהוגדרה לו/ה
 // (employee_min_lead_hours) ביחס לזמן הנוכחי. 0/לא מוגדר = בלי מגבלה
+// (יוסי, 01/09): נמצא בפועל — 11:00 חזר כ-"פנוי" מ-findAvailableSlots כשהשעה
+// האמיתית כבר הייתה 12:09. שורש הבעיה: minHours=0/undefined גרם ל-`return
+// true` **בלי שום בדיקה** שה-slot בכלל בעתיד — הבדיקה נגד "עבר" הייתה
+// קיימת רק כתופעת לוואי של בדיקת min-lead-hours, ובוטלה לגמרי כשלא הוגדר
+// min-lead. כלל עסקי מפורש עכשיו: עם min-lead — >= now+minHours; בלי
+// min-lead — > now בלבד. לעולם לא slot בעבר, בלי קשר לשעות מרפאה/רופא/
+// appointments (אלה כולם נבדקים בנפרד, למעלה/מתחת לקריאה הזו)
 function meetsMinLeadTime(scheduledAt: Date, uid: string, employeeMinLeadHours?: Record<string, number>): boolean {
   const minHours = employeeMinLeadHours?.[uid]
-  if (!minHours) return true
+  if (!minHours) return scheduledAt.getTime() > Date.now()
   return scheduledAt.getTime() - Date.now() >= minHours * 3600000
 }
 

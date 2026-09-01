@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   normalizeApptDate, israelDateTime, extractApptFromText,
   saveOrRescheduleBotAppointment, type WorkingDay,
@@ -135,6 +135,14 @@ describe('extractOfferedDateTime — extracts a date+time the bot offered, even 
 })
 
 describe('hasQualifiedDoctorOnDate — verifies a real doctor is actually available before an offer is sent', () => {
+  // דטרמיניסטי, לא תלוי בתאריך שבו הבדיקה רצה — אותה גישה כמו שאר הקובץ
+  function nextWeekday(target: number): string {
+    const now = new Date()
+    const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
+  }
+
   const DOC_A = 'doc-a' // עובד רק שלישי/רביעי
   const empResponsibilities = { [DOC_A]: ['טיפולים משמרים'] }
   const employeeSchedules = {
@@ -152,7 +160,7 @@ describe('hasQualifiedDoctorOnDate — verifies a real doctor is actually availa
   })
 
   it('returns true for a date the doctor actually works (matching Tuesday)', () => {
-    expect(hasQualifiedDoctorOnDate('2026-09-01', 'טיפולים משמרים', empResponsibilities, employeeSchedules)).toBe(true)
+    expect(hasQualifiedDoctorOnDate(nextWeekday(2), 'טיפולים משמרים', empResponsibilities, employeeSchedules)).toBe(true)
   })
 
   it('does not block when the service is unknown/null (not enough information)', () => {
@@ -520,21 +528,40 @@ describe('findNextAvailableSlots — scans forward day by day for the first real
     expect(result).toEqual([{ date: day2, time: '09:00', doctorId: DOC_A }])
   })
 
-  // 3. slots בכמה ימים שונים בטווח — רק הראשונים כרונולוגית, עד maxResults
-  it('3 — returns only the earliest slots chronologically, capped at maxResults, across multiple days that all have availability', async () => {
-    const day0 = anchorDate(0)
-    // רופא שעובד כל יום 09:00-11:00 (60 דק') — 2 slots/יום, הרבה ימים זמינים
-    const anyDaySchedule = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
-      .map(day => ({ day, open: '09:00', close: '11:00', closed: false }))
-    const sb = mockSb()
-    const result = await findNextAvailableSlots(
-      sb, 'biz1', day0, 14, 'הלבנה',
-      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: anyDaySchedule }, {}, 60, undefined, 3
-    )
-    expect(result.length).toBe(3)
-    const dates = result.map(sl => sl.date)
-    expect(dates).toEqual([...dates].sort()) // כרונולוגי
-    expect(dates[0]).toBe(day0) // מתחיל מהיום הראשון בטווח שיש בו זמינות
+  // 3. slots בכמה ימים שונים בטווח — רק הראשונים כרונולוגית, עד maxResults.
+  // (יוסי, 01/09): חלון 09:00-11:00 קבוע נכשל אם הבדיקה רצה אחה"צ (השעות
+  // כבר עברו גם "היום" עצמו, אחרי תיקון meetsMinLeadTime — בצדק). מקפיאים
+  // שעון מקומי ל-06:00 בבוקר יום שלישי (2026-01-06, מרוחק מחצות, מאומת) —
+  // לא גלובלי לכל הקובץ, רק לבדיקה הזו — כדי שהבדיקה תהיה דטרמיניסטית
+  // בבוקר/צהריים/לילה/בעוד שנה, לא רק כשמריצים אותה בבוקר בפועל
+  describe('with a frozen local clock (09:00-11:00 must still be in the future)', () => {
+    const FROZEN_TUESDAY_MORNING = '2026-01-06T04:00:00.000Z' // = 06:00 שעון ישראל, יום שלישי מאומת
+    beforeEach(() => {
+      // toFake: ['Date'] בלבד — לא מקפיאים setTimeout/setInterval, כדי לא
+      // להשפיע על שום מנגנון תזמון אחר בקוד הנבדק (אין כזה כאן, אבל זו
+      // ההרגל הבטוח, ר' route.test.ts שם זה כן קריטי)
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(FROZEN_TUESDAY_MORNING))
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('3 — returns only the earliest slots chronologically, capped at maxResults, across multiple days that all have availability', async () => {
+      const day0 = anchorDate(0)
+      // רופא שעובד כל יום 09:00-11:00 (60 דק') — 2 slots/יום, הרבה ימים זמינים
+      const anyDaySchedule = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+        .map(day => ({ day, open: '09:00', close: '11:00', closed: false }))
+      const sb = mockSb()
+      const result = await findNextAvailableSlots(
+        sb, 'biz1', day0, 14, 'הלבנה',
+        { [DOC_A]: ['הלבנה'] }, { [DOC_A]: anyDaySchedule }, {}, 60, undefined, 3
+      )
+      expect(result.length).toBe(3)
+      const dates = result.map(sl => sl.date)
+      expect(dates).toEqual([...dates].sort()) // כרונולוגי
+      expect(dates[0]).toBe(day0) // מתחיל מהיום הראשון בטווח שיש בו זמינות
+    })
   })
 
   // 4. אין שום slot בכל הטווח — מערך ריק (מסלול ה-escalation נבדק ב-route.test.ts)
@@ -1086,5 +1113,122 @@ describe('saveOrRescheduleBotAppointment — secondaryService narrows to the doc
     })
     expect(r.ok).toBe(true)
     expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+})
+
+// ─── meetsMinLeadTime — no slot in the past, ever ────────────────────────────
+// (יוסי, 01/09, מקרה פרודקשן אמיתי): 11:00 חזר כ-"פנוי" כשהשעה האמיתית
+// כבר הייתה 12:09, כי minHours=0/undefined גרם ל-meetsMinLeadTime להחזיר
+// true בלי לבדוק שה-slot בכלל בעתיד. כלל עסקי: בלי min-lead — slot > now;
+// עם min-lead — slot >= now+minHours. לעולם לא slot בעבר
+describe('meetsMinLeadTime — no minLeadHours: falls back to "slot must simply be in the future" (via hasQualifiedDoctorOnDate)', () => {
+  const DOC_A = 'doc-a'
+  const empResponsibilities = { [DOC_A]: ['בדיקה'] }
+  const employeeSchedules = {} // עובד/ת כל יום — בודקים רק את חוק "לא בעבר"
+
+  function israelParts(d: Date): { date: string; time: string } {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d)
+    const get = (t: string) => fmt.find(p => p.type === t)?.value || ''
+    return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}` }
+  }
+
+  // 1. אין minLeadHours + slot שכבר עבר → BLOCKED
+  it('1 — no minLeadHours configured, slot already 30 minutes in the past: BLOCKED', () => {
+    const { date, time } = israelParts(new Date(Date.now() - 30 * 60000))
+    expect(hasQualifiedDoctorOnDate(date, 'בדיקה', empResponsibilities, employeeSchedules, time, {})).toBe(false)
+  })
+
+  // 2. אין minLeadHours + slot עתידי → ALLOWED
+  it('2 — no minLeadHours configured, slot 30 minutes in the future: ALLOWED', () => {
+    const { date, time } = israelParts(new Date(Date.now() + 30 * 60000))
+    expect(hasQualifiedDoctorOnDate(date, 'בדיקה', empResponsibilities, employeeSchedules, time, {})).toBe(true)
+  })
+
+  // 3. minLeadHours=2 + slot בעוד שעה → BLOCKED
+  it('3 — minLeadHours=2, slot only 1 hour away: BLOCKED', () => {
+    const { date, time } = israelParts(new Date(Date.now() + 1 * 3600000))
+    expect(hasQualifiedDoctorOnDate(date, 'בדיקה', empResponsibilities, employeeSchedules, time, { [DOC_A]: 2 })).toBe(false)
+  })
+
+  // 4. minLeadHours=2 + slot בעוד 3 שעות → ALLOWED
+  it('4 — minLeadHours=2, slot 3 hours away: ALLOWED', () => {
+    const { date, time } = israelParts(new Date(Date.now() + 3 * 3600000))
+    expect(hasQualifiedDoctorOnDate(date, 'בדיקה', empResponsibilities, employeeSchedules, time, { [DOC_A]: 2 })).toBe(true)
+  })
+})
+
+describe('meetsMinLeadTime propagation — no past slot survives through any of the four public entry points', () => {
+  const DOC_A = 'doc-a'
+  // שחזור מדויק של המקרה האמיתי: שלישי, 10:00-16:00, "עכשיו" קפוא ל-12:09 —
+  // 11:00 חייב להיחסם, 13:00+ חייב לעבור. Date בלבד מוקפא (לא setTimeout)
+  const FROZEN_TUESDAY_NOON = '2026-01-06T10:09:00.000Z' // = 12:09 שעון ישראל, יום שלישי מאומת
+  const schedule = { [DOC_A]: [{ day: 'שלישי', open: '10:00', close: '16:00', closed: false }] }
+  const responsibilities = { [DOC_A]: ['הלבנה'] }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(FROZEN_TUESDAY_NOON))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // 5. findAvailableSlots לא מחזירה שעות שכבר עברו היום
+  it('5 — findAvailableSlots does not return hours that have already passed today', async () => {
+    const today = new Date().toISOString().slice(0, 10) // 2026-01-06, בזמן הקפוא
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', today, 'הלבנה', responsibilities, schedule, {}, 60, undefined, 10
+    )
+    expect(result.some(sl => sl.time === '10:00')).toBe(false)
+    expect(result.some(sl => sl.time === '11:00')).toBe(false) // בדיוק המקרה האמיתי
+    expect(result.some(sl => sl.time === '13:00')).toBe(true)
+  })
+
+  // 6. findNextAvailableSlots לא מחזירה שעות שכבר עברו
+  it('6 — findNextAvailableSlots does not return hours that have already passed today', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const sb = mockSb()
+    const result = await findNextAvailableSlots(
+      sb, 'biz1', today, 14, 'הלבנה', responsibilities, schedule, {}, 60, undefined, 10
+    )
+    expect(result.some(sl => sl.date === today && sl.time === '11:00')).toBe(false)
+    expect(result.some(sl => sl.date === today && sl.time === '13:00')).toBe(true)
+  })
+
+  // 7. findAvailableDoctorForExactSlot לא מאשרת slot בעבר
+  it('7 — findAvailableDoctorForExactSlot never approves a slot already in the past', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const sb = mockSb()
+    const result = await findAvailableDoctorForExactSlot(
+      sb, 'biz1', today, '11:00', 60, 'הלבנה', responsibilities, schedule, {}
+    )
+    expect(result.status).not.toBe('available')
+  })
+
+  // 8. saveOrRescheduleBotAppointment לא מאפשר קביעה לזמן שכבר עבר —
+  // בודקים ספציפית את השכבה החדשה (meetsMinLeadTime), לא את מנגנון
+  // ה"תאריך בעבר" הישן: 30 דק' בעבר נמצא בתוך חלון החסד של שעה של המנגנון
+  // הישן (לא נדחה/מתגלגל שם), כך שהוא מגיע לשלב שיוך הרופא — ושם נדחה עכשיו
+  it('8 — saveOrRescheduleBotAppointment refuses a booking 30 minutes in the past (within the old date_in_past grace window, blocked by the new min-lead-time rule instead)', async () => {
+    const sb = mockSb()
+    const past = new Date(Date.now() - 30 * 60000)
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(past)
+    const get = (t: string) => fmt.find(p => p.type === t)?.value || ''
+    const date = `${get('year')}-${get('month')}-${get('day')}`
+    const time = `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}`
+
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date, time, service: 'הלבנה',
+      empResponsibilities: responsibilities,
+      employeeMinLeadHours: {}, // אובייקט אמיתי (לא undefined) — מפעיל את הבדיקה בכלל, ר' saveOrRescheduleBotAppointment
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+    expect(sb.state.lastAssignedTo).toBeFalsy()
   })
 })

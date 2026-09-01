@@ -602,15 +602,16 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     fakeDb.tables.businesses[0].settings.employee_schedules = {
       docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
     }
-    // 01.09.2026 הוא יום שלישי בפועל — הרופא כן עובד
-    openaiReply = 'יש לנו תור פנוי ביום שלישי הקרוב, 01.09.2026, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"סתימה"}'
+    const tuesday = nextWeekday(2) // יום שלישי הקרוב — הרופא כן עובד
+    const tuesdayDMY = tuesday.split('-').reverse().join('.')
+    openaiReply = `יש לנו תור פנוי ביום שלישי הקרוב, ${tuesdayDMY}, בשעה 10:00. האם זה מתאים לך? 😊\nLEAD:{"reason":"סתימה"}`
 
     await callAiRespond({
       conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'שלישי',
     })
 
     const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
-    expect(sendCall!.body.message).toContain('01.09.2026')
+    expect(sendCall!.body.message).toContain(tuesdayDMY)
   })
 
   // ─── בדיקת זמינות אמיתית בשעה מדויקת, לא רק ביום (יוסי, 31/08) ────────────
@@ -622,7 +623,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       fakeDb.tables.businesses[0].settings.employee_schedules = {
         docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
       }
-      const tuesday = '2026-09-01' // יום שלישי בפועל
+      const tuesday = nextWeekday(2) // יום שלישי בפועל
       fakeDb.seed('appointments', [{
         id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001',
         assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30,
@@ -648,7 +649,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       fakeDb.tables.businesses[0].settings.employee_schedules = {
         docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
       }
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       // תור קיים באותו יום, אבל בשעה אחרת שלא חופפת ל-10:00 — לא אמור לחסום
       fakeDb.seed('appointments', [{
         id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001',
@@ -672,7 +673,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
         docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
         docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
       }
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.seed('appointments', [{
         id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001',
         assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30,
@@ -696,7 +697,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
         docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
         docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
       }
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.seed('appointments', [
         { id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 1', patient_phone: '972500000001', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
         { id: 'existing2', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 2', patient_phone: '972500000002', assigned_to: 'docB', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
@@ -729,7 +730,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
         docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
         docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
       }
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.seed('appointments', [
         { id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח אחר', patient_phone: '972500000001', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
       ])
@@ -816,7 +817,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
         docA: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
         docB: [{ day: 'שלישי', open: '09:00', close: '16:00', closed: false }],
       }
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.seed('appointments', [
         { id: 'existing1', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 1', patient_phone: '972500000001', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
         { id: 'existing2', business_id: 'biz1', lead_id: null, patient_name: 'לקוח 2', patient_phone: '972500000002', assigned_to: 'docB', status: 'scheduled', scheduled_at: israelDateTimeISO(tuesday, '10:00'), duration_minutes: 30 },
@@ -859,7 +860,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     it('resolves the service from the current message, and only a qualified+working+free doctor can be offered', async () => {
       seedBaseline()
       seedGabiAndYounesAllClosedExceptTuesday()
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.tables.messages = [{
         id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
         content: 'אני רוצה השתלה ביום שלישי',
@@ -879,7 +880,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     it('still resolves the service from earlier context when the current turn is just "כן" and the LEAD tag has no reason', async () => {
       seedBaseline()
       seedGabiAndYounesAllClosedExceptTuesday()
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.tables.messages = [
         { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact', content: 'אני רוצה השתלה', created_at: '2026-08-31T10:00:00.000Z' },
         { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', sender_type: 'ai', content: 'יום שלישי מתאים?', created_at: '2026-08-31T10:00:05.000Z' },
@@ -900,7 +901,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     it('fails closed (escalates) when the service cannot be identified from the reason tag or any recent customer message', async () => {
       seedBaseline()
       seedGabiAndYounesAllClosedExceptTuesday()
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.tables.messages = [{
         id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', sender_type: 'contact',
         content: 'מתי אתם פתוחים',
@@ -921,7 +922,7 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     it('uses the service from the current conversation, not a stale lead.treatment_type from an unrelated earlier topic', async () => {
       seedBaseline()
       seedGabiAndYounesAllClosedExceptTuesday()
-      const tuesday = '2026-09-01'
+      const tuesday = nextWeekday(2)
       fakeDb.tables.conversations[0].lead_id = 'lead1'
       fakeDb.seed('leads', [{ id: 'lead1', business_id: 'biz1', name: 'לקוח', status: 'in_progress', treatment_type: 'הלבנת שיניים' }])
       fakeDb.tables.messages = [{
@@ -987,35 +988,83 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
   // עד כה המערכת ידעה רק לאמת שעה שכבר ניתנה, לא לענות בעצמה על שאלת
   // זמינות כללית — ראה מפרט מלא ב-findAvailableSlots (botAppointments.ts)
   describe('FIND AVAILABLE SLOTS — real available-slot listing computed before generation, grounded after it', () => {
-    // תרחיש G: "תרשום לי מתי פנוי" בלי לחזור על היום — היום כבר "פעיל"
-    // בשיחה כי הבוט עצמו שאל עליו קודם
-    it('G — uses the day already active in the conversation (bot asked about it) when the customer just says "תרשום לי מתי פנוי"', async () => {
-      seedBaseline()
-      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
-      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
-      fakeDb.tables.businesses[0].settings.employee_schedules = {
-        docA: [{ day: 'שלישי', open: '09:00', close: '11:00', closed: false }],
-      }
-      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
-      fakeDb.seed('messages', [
-        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה', sender_type: 'contact' },
-        { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'מה מתאים לך ביום שלישי?', sender_type: 'ai' },
-      ])
-      openaiReply = 'בטח! יש לנו פנוי ב-09:00 😊\nLEAD:{"reason":"הלבנה"}'
-
-      await callAiRespond({
-        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תרשום לי מתי פנוי',
+    // תרחישים G ו-J: שניהם סומכים על "שלישי" שנפתר ל**היום** (הלקוח/הבוט
+    // לא נותנים תאריך מפורש, וresolveActiveRequestedDate פותר שם-יום שחל
+    // גם היום ל-"היום עצמו", בכוונה — ר' nextDateForWeekday). חלון 09:00-
+    // 11:00/09:00-10:00 קבוע נכשל אם הבדיקה רצה אחה"צ (אחרי תיקון
+    // meetsMinLeadTime, בצדק — שעות שעברו היום כבר לא מוחזרות). מקפיאים
+    // שעון מקומי (Date בלבד — לא setTimeout, כדי לא לתקוע את ההשהיות
+    // המלאכותיות בתוך handleAiRespond) ל-06:00 בבוקר יום שלישי מאומת,
+    // רק לשתי הבדיקות האלה — לא גלובלי, לא ל-H/I שלא תלויות ב"היום"
+    describe('with a frozen local clock (today must genuinely be Tuesday morning, 09:00-11:00 still ahead)', () => {
+      const FROZEN_TUESDAY_MORNING = '2026-01-06T04:00:00.000Z' // = 06:00 שעון ישראל, יום שלישי מאומת
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date(FROZEN_TUESDAY_MORNING))
+      })
+      afterEach(() => {
+        vi.useRealTimers()
       })
 
-      // הזמינות האמיתית חושבה **לפני** הגנרציה והוזרקה לפרומפט עצמו
-      const prompt = openaiCalls[0]?.systemPrompt || ''
-      expect(prompt).toContain('זמינות אמיתית')
-      expect(prompt).toContain('09:00')
+      // תרחיש G: "תרשום לי מתי פנוי" בלי לחזור על היום — היום כבר "פעיל"
+      // בשיחה כי הבוט עצמו שאל עליו קודם
+      it('G — uses the day already active in the conversation (bot asked about it) when the customer just says "תרשום לי מתי פנוי"', async () => {
+        seedBaseline()
+        fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+        fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+        fakeDb.tables.businesses[0].settings.employee_schedules = {
+          docA: [{ day: 'שלישי', open: '09:00', close: '11:00', closed: false }],
+        }
+        fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+        fakeDb.seed('messages', [
+          { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה', sender_type: 'contact' },
+          { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'מה מתאים לך ביום שלישי?', sender_type: 'ai' },
+        ])
+        openaiReply = 'בטח! יש לנו פנוי ב-09:00 😊\nLEAD:{"reason":"הלבנה"}'
 
-      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
-      expect(sendCall!.body.message).toContain('09:00')
-      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
-      expect(conv!.escalated_at).toBeFalsy()
+        await callAiRespond({
+          conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תרשום לי מתי פנוי',
+        })
+
+        // הזמינות האמיתית חושבה **לפני** הגנרציה והוזרקה לפרומפט עצמו
+        const prompt = openaiCalls[0]?.systemPrompt || ''
+        expect(prompt).toContain('זמינות אמיתית')
+        expect(prompt).toContain('09:00')
+
+        const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+        expect(sendCall!.body.message).toContain('09:00')
+        const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+        expect(conv!.escalated_at).toBeFalsy()
+      })
+
+      // תרחיש J: ה-LLM "משפר" ומוסיף שעה שלא הייתה ברשימה האמיתית שהוזרקה
+      // לו. (יוסי, 01/09, אחרי מקרה פרודקשן): כשיש slots אמיתיים, כשל
+      // ניסוח של ה-LLM לא הופך יותר ל-"אין זמינות"/הסלמה — SAFE_SLOT_RESPONSE
+      it('J — a time the model invents beyond the real computed slots list is never sent — SAFE_SLOT_RESPONSE with the real slot instead, no escalation', async () => {
+        seedBaseline()
+        fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+        fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+        fakeDb.tables.businesses[0].settings.employee_schedules = {
+          docA: [{ day: 'שלישי', open: '09:00', close: '10:00', closed: false }], // רק 09:00 אפשרי (60 דק')
+        }
+        fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+        fakeDb.seed('messages', [
+          { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה ביום שלישי', sender_type: 'contact' },
+        ])
+        // 14:30 מומצאת — לא הייתה ברשימת השעות האמיתיות שהוזרקה לפרומפט
+        openaiReply = 'יש לנו פנוי ב-09:00 וגם ב-14:30 😊\nLEAD:{"reason":"הלבנה"}'
+
+        await callAiRespond({
+          conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+        })
+
+        const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+        expect(sendCall!.body.message).not.toContain('14:30')
+        expect(sendCall!.body.message).toContain('09:00') // ה-slot האמיתי כן מוצג
+        expect(sendCall!.body.message).not.toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+        const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+        expect(conv!.escalated_at).toBeFalsy() // יש זמינות אמיתית — אסור להסלים בגללה
+      })
     })
 
     // תרחיש H: "ברביעי פנוי?" — שם יום ישיר, פותר לתאריך קונקרטי (רביעי הקרוב)
@@ -1076,34 +1125,6 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       expect(conv!.escalated_at).toBeTruthy()
     })
 
-    // תרחיש J: ה-LLM "משפר" ומוסיף שעה שלא הייתה ברשימה האמיתית שהוזרקה לו.
-    // (יוסי, 01/09, אחרי מקרה פרודקשן): כשיש slots אמיתיים, כשל ניסוח של
-    // ה-LLM לא הופך יותר ל-"אין זמינות"/הסלמה — SAFE_SLOT_RESPONSE במקום
-    it('J — a time the model invents beyond the real computed slots list is never sent — SAFE_SLOT_RESPONSE with the real slot instead, no escalation', async () => {
-      seedBaseline()
-      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
-      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
-      fakeDb.tables.businesses[0].settings.employee_schedules = {
-        docA: [{ day: 'שלישי', open: '09:00', close: '10:00', closed: false }], // רק 09:00 אפשרי (60 דק')
-      }
-      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
-      fakeDb.seed('messages', [
-        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה ביום שלישי', sender_type: 'contact' },
-      ])
-      // 14:30 מומצאת — לא הייתה ברשימת השעות האמיתיות שהוזרקה לפרומפט
-      openaiReply = 'יש לנו פנוי ב-09:00 וגם ב-14:30 😊\nLEAD:{"reason":"הלבנה"}'
-
-      await callAiRespond({
-        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
-      })
-
-      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
-      expect(sendCall!.body.message).not.toContain('14:30')
-      expect(sendCall!.body.message).toContain('09:00') // ה-slot האמיתי כן מוצג
-      expect(sendCall!.body.message).not.toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
-      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
-      expect(conv!.escalated_at).toBeFalsy() // יש זמינות אמיתית — אסור להסלים בגללה
-    })
   })
 
   // ─── GENERAL NEXT AVAILABLE — "מתי יש לכם?"/"מתי פנוי?" בלי יום ספציפי ────
