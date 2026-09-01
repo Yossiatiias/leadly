@@ -4,7 +4,7 @@ import {
   saveOrRescheduleBotAppointment, type WorkingDay,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
   looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
-  findAvailableSlots, israelWeekday,
+  findAvailableSlots, findNextAvailableSlots, israelWeekday,
 } from './botAppointments'
 
 describe('normalizeApptDate', () => {
@@ -437,6 +437,151 @@ describe('findAvailableSlots — real available time slots for a given day (FIND
       { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: '09:00', close: '17:00', closed: false }] }, {}, 60
     )
     expect(result.length).toBe(4)
+  })
+
+  // (יוסי, 01/09, regression #8): המרפאה פתוחה 09:00-17:00, הרופא/ה מוגדר/ת
+  // עד 19:00 — findAvailableSlots חייבת לצמצם לחיתוך, לא להשתמש בלוח האישי
+  // בלבד. פרמטר businessWorkingHours אופציונלי — לא סופק בכל שאר הבדיקות
+  // למעלה, ולכן ההתנהגות הקודמת (רק לוח אישי) לא משתנה כשהוא לא מועבר
+  it('caps slots to the intersection of clinic hours and the doctor\'s personal hours — nothing after clinic closing even if the doctor personally works later', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] },
+      { [DOC_A]: [{ day, open: '09:00', close: '19:00', closed: false }] }, // הרופא עובד עד 19:00
+      {}, 60, undefined, 10,
+      [{ day, open: '09:00', close: '17:00', closed: false }] // אבל המרפאה סגורה מ-17:00
+    )
+    expect(result.every(sl => sl.time < '17:00')).toBe(true)
+    expect(result.some(sl => sl.time === '16:00')).toBe(true) // כן מוצע slot תקין קרוב לסגירה
+  })
+
+  it('returns no slots at all when the clinic itself is closed that day, even if the doctor\'s personal schedule shows open', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const result = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] },
+      { [DOC_A]: [{ day, open: '09:00', close: '17:00', closed: false }] },
+      {}, 60, undefined, 4,
+      [{ day, open: '', close: '', closed: true }]
+    )
+    expect(result).toEqual([])
+  })
+
+  it('is backward compatible — identical results when businessWorkingHours is omitted', async () => {
+    const tuesday = nextWeekday(2)
+    const day = israelWeekday(new Date(`${tuesday}T12:00:00Z`))
+    const sb = mockSb()
+    const withoutParam = await findAvailableSlots(
+      sb, 'biz1', tuesday, 'הלבנה', { [DOC_A]: ['הלבנה'] }, { [DOC_A]: narrowSchedule(day) }, {}, 60
+    )
+    expect(withoutParam.length).toBeGreaterThan(0)
+  })
+})
+
+// ─── findNextAvailableSlots — GENERAL NEXT AVAILABLE, בלי יום ספציפי ────────
+// (יוסי, 01/09): עוטפת findAvailableSlots (ללא שינוי בלוגיקת ה"פנוי באמת"
+// שלה) בלולאת סריקה קדימה — ראה מפרט מלא ב-findNextAvailableSlots עצמה
+describe('findNextAvailableSlots — scans forward day by day for the first real availability (GENERAL NEXT AVAILABLE)', () => {
+  const DOC_A = 'doc-a'
+  const DOC_B = 'doc-b'
+
+  function anchorDate(offsetDays = 0): string {
+    const now = new Date()
+    const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+    return new Date(base.getTime() + offsetDays * 86400000).toISOString().slice(0, 10)
+  }
+
+  // בונה employeeSchedules לרופא שעובד/ת בדיוק ביום השבוע של dateISO,
+  // 09:00-11:00 (כמו narrowSchedule למעלה) — שאר הימים לא מוגדרים בכלל,
+  // כדי לדמות "היום והיום הבא סגורים, ביום השלישי יש slot" בלי תלות
+  // ב"עכשיו" האמיתי בזמן הרצת הבדיקה
+  function scheduleForExactDate(dateISO: string): WorkingDay[] {
+    const day = israelWeekday(new Date(`${dateISO}T12:00:00Z`))
+    return [{ day, open: '09:00', close: '11:00', closed: false }]
+  }
+
+  // 2. היום והיום הבא ללא זמינות (הרופא לא מוגדר לעבוד בהם בכלל), ביום
+  // השלישי בטווח יש slot — מוחזר, בלי אסקלציה מוקדמת
+  it('2 — skips days with no real availability and returns the slot from the first day that actually has one', async () => {
+    const day0 = anchorDate(0), day2 = anchorDate(2)
+    const sb = mockSb()
+    // maxResults=1: מבודד את הבדיקה ל"מה נמצא ראשון כרונולוגית" — בלי זה,
+    // אותו שם-יום-בשבוע חוזר גם שבוע אחרי (day2+7) בתוך טווח 14 הימים,
+    // וזה נכון ורצוי (regression #3 בודקת בדיוק את זה), רק לא מה שנבדק כאן
+    const result = await findNextAvailableSlots(
+      sb, 'biz1', day0, 14, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: scheduleForExactDate(day2) }, {}, 60, undefined, 1
+    )
+    expect(result).toEqual([{ date: day2, time: '09:00', doctorId: DOC_A }])
+  })
+
+  // 3. slots בכמה ימים שונים בטווח — רק הראשונים כרונולוגית, עד maxResults
+  it('3 — returns only the earliest slots chronologically, capped at maxResults, across multiple days that all have availability', async () => {
+    const day0 = anchorDate(0)
+    // רופא שעובד כל יום 09:00-11:00 (60 דק') — 2 slots/יום, הרבה ימים זמינים
+    const anyDaySchedule = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+      .map(day => ({ day, open: '09:00', close: '11:00', closed: false }))
+    const sb = mockSb()
+    const result = await findNextAvailableSlots(
+      sb, 'biz1', day0, 14, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: anyDaySchedule }, {}, 60, undefined, 3
+    )
+    expect(result.length).toBe(3)
+    const dates = result.map(sl => sl.date)
+    expect(dates).toEqual([...dates].sort()) // כרונולוגי
+    expect(dates[0]).toBe(day0) // מתחיל מהיום הראשון בטווח שיש בו זמינות
+  })
+
+  // 4. אין שום slot בכל הטווח — מערך ריק (מסלול ה-escalation נבדק ב-route.test.ts)
+  it('4 — returns an empty array when nothing is available anywhere in the search window', async () => {
+    const day0 = anchorDate(0)
+    const sb = mockSb()
+    const result = await findNextAvailableSlots(
+      sb, 'biz1', day0, 14, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, {}, {}, 60 // אין employeeSchedules בכלל לאף יום
+    )
+    expect(result).toEqual([])
+  })
+
+  // 5. הלקוח ביקש רופא מסוים — כל ה-slots שייכים רק לו/ה, גם על פני כמה ימים
+  it('5 — restricts results to the explicitly-requested doctor across the whole scanned range', async () => {
+    const day0 = anchorDate(0)
+    const anyDaySchedule = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+      .map(day => ({ day, open: '09:00', close: '10:00', closed: false }))
+    const sb = mockSb()
+    const result = await findNextAvailableSlots(
+      sb, 'biz1', day0, 14, 'הלבנה',
+      { [DOC_A]: ['הלבנה'], [DOC_B]: ['הלבנה'] },
+      { [DOC_A]: anyDaySchedule, [DOC_B]: anyDaySchedule }, {}, 60,
+      DOC_B
+    )
+    expect(result.length).toBeGreaterThan(0)
+    expect(result.every(sl => sl.doctorId === DOC_B)).toBe(true)
+  })
+
+  // 6. השירות לא ידוע — fail-closed, אין סריקה בכלל
+  it('6 — fails closed when the service is unknown, without scanning any day', async () => {
+    const day0 = anchorDate(0)
+    const sb = mockSb()
+    const result = await findNextAvailableSlots(sb, 'biz1', day0, 14, null, { [DOC_A]: ['הלבנה'] }, {}, {}, 60)
+    expect(result).toEqual([])
+  })
+
+  it('stops scanning once maxResults is reached — the loop bound is exact, not "at least"', async () => {
+    const day0 = anchorDate(0)
+    const anyDaySchedule = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+      .map(day => ({ day, open: '09:00', close: '10:00', closed: false })) // slot אחד/יום
+    const sb = mockSb()
+    const result = await findNextAvailableSlots(
+      sb, 'biz1', day0, 14, 'הלבנה',
+      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: anyDaySchedule }, {}, 60, undefined, 2
+    )
+    expect(result.length).toBe(2)
   })
 })
 

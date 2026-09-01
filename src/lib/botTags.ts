@@ -321,6 +321,23 @@ export function extractAllTimesInText(text: string): string[] {
   return [...text.matchAll(/(\d{1,2}):(\d{2})/g)].map(([, h, m]) => `${h.padStart(2, '0')}:${m}`)
 }
 
+// כל הזוגות (תאריך DD.MM.YYYY, שעה HH:MM) שמופיעים קרוב זה לזה בטקסט —
+// (יוסי, 01/09) לצורך אימות רשימת "התורים הקרובים ביותר" (GENERAL NEXT
+// AVAILABLE, כמה תאריכים שונים באותה תשובה) — שם לא מספיק לבדוק שהשעה
+// "קיימת איפשהו ברשימה" (extractAllTimesInText, מתאים רק ליום בודד ידוע
+// מראש): אותה שעה יכולה להיות אמיתית ביום אחד ומומצאת ביום אחר. דורש
+// שהתאריך המלא יופיע ממש ליד השעה (עד 20 תווים ביניהם) — זה בדיוק הפורמט
+// שהפרומפט מתבקש להשתמש בו כשיש כמה תאריכים אפשריים (ראה ai-respond/route.ts)
+export function extractAllDateTimePairsInText(text: string): { date: string; time: string }[] {
+  const pairs: { date: string; time: string }[] = []
+  const re = /(\d{1,2})\.(\d{1,2})\.(\d{4})[^\d]{0,20}?(\d{1,2}):(\d{2})/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    pairs.push({ date: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`, time: `${m[4].padStart(2, '0')}:${m[5]}` })
+  }
+  return pairs
+}
+
 // ─── מיזוג ניתוח ליד (LEAD tag) לתוך שדות עדכון — לוגיקה טהורה, ────────────
 // בלי קריאות DB. STATUS_RANK מבטיח שסטטוס תמיד מתקדם קדימה, לא נסוג אחורה
 export const STATUS_RANK: Record<string, number> = {

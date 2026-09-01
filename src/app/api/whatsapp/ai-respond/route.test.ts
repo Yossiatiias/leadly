@@ -1103,6 +1103,123 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     })
   })
 
+  // ─── GENERAL NEXT AVAILABLE — "מתי יש לכם?"/"מתי פנוי?" בלי יום ספציפי ────
+  // (יוסי, 01/09): קרה בפועל — לקוח ביקש "מתי יש לכם?" בלי לתת יום, והבוט
+  // נפל תמיד לברירת המחדל ("לא מצאתי תור זמין") גם כשבפועל הייתה זמינות.
+  // סורק 14 יום קדימה (findNextAvailableSlots, עוטפת את findAvailableSlots
+  // הקיימת ללא שינוי בה) ומזריק תוצאה אמיתית מרובת-תאריכים, עם עיגון date+
+  // time+doctor נפרד (לא רק שעה בודדת — אותה שעה יכולה להיות אמיתית ביום
+  // אחד ומומצאת באחר)
+  describe('GENERAL NEXT AVAILABLE — no specific day given, scans forward for the first real slots', () => {
+    function allWeekSchedule(open: string, close: string): { day: string; open: string; close: string; closed: boolean }[] {
+      return ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(day => ({ day, open, close, closed: false }))
+    }
+    function allWeekClosed(): { day: string; open: string; close: string; closed: boolean }[] {
+      return ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(day => ({ day, open: '', close: '', closed: true }))
+    }
+
+    // 1. "אני צריך השתלה, מתי יש?" — בלי תאריך, סריקה קדימה מחזירה slots אמיתיים
+    it('1 — "אני צריך השתלה, מתי יש?" with no specific date returns real slots from the forward scan', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekSchedule('09:00', '11:00') }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני צריך השתלה', sender_type: 'contact' },
+      ])
+      openaiReply = 'בטח! יש לנו כמה אפשרויות פנויות 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      // הזמינות חושבה מראש והוזרקה לפרומפט, עם תאריך מלא (לא יום בודד ידוע)
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).toContain('התורים הפנויים הקרובים ביותר')
+      expect(prompt).toContain('09:00')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeFalsy()
+    })
+
+    // 4. אין שום slot בכל טווח 14 הימים — מסלול ההסלמה הקיים, בלי המצאה
+    it('4 — no slot anywhere in the 14-day window: falls back to the existing escalation route, exactly as before', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekClosed() }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני צריך השתלה', sender_type: 'contact' },
+      ])
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"השתלות"}\nESCALATE:["אין זמינות"]'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).toContain('לא נמצאה זמינות אמיתית')
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // 7. ה-LLM מוסיף תאריך/שעה שלא הוחזרו מהסריקה האמיתית — לא נשלח ללקוח
+    it('7 — a date/time the model invents beyond the real next-available list is never sent to the customer', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekSchedule('09:00', '10:00') } // slot יחיד/יום
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני צריך השתלה', sender_type: 'contact' },
+      ])
+      // 01.01.2099 מומצא — לעולם לא ברשימה האמיתית שחושבה
+      openaiReply = 'יש לנו פנוי ב-01.01.2099 09:00 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('01.01.2099')
+      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // הלקוח ביקש רופא מסוים, בלי יום ספציפי — כל האפשרויות שייכות רק לו/ה
+    it('restricts the general scan to the explicitly-requested doctor, never silently substituting another', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: allWeekSchedule('09:00', '11:00'), docB: allWeekSchedule('09:00', '11:00'),
+      }
+      fakeDb.seed('profiles', [
+        { id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+        { id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' },
+      ])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה השתלה אצל ד"ר עלא יונס, מתי יש לכם?', sender_type: 'contact' },
+      ])
+      openaiReply = 'בטח! יש לנו כמה אפשרויות אצל ד"ר עלא יונס 😊\nLEAD:{"reason":"השתלות"}'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      // "שיוך שירותים לרופאים" מציג את שני הרופאים תמיד (מידע כללי) — הבדיקה
+      // הרלוונטית היא שורת ה-slots האמיתית עצמה, לא הפרומפט כולו
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      const slotsLine = prompt.split('\n').find(l => l.startsWith('התורים הפנויים הקרובים ביותר'))
+      expect(slotsLine).toContain('עלא יונס')
+      expect(slotsLine).not.toContain('גבי סמל')
+    })
+  })
+
   it('refuses to send at all when the business has no active WhatsApp connection (no silent cross-tenant fallback)', async () => {
     seedBaseline()
     fakeDb.tables.whatsapp_connections = [] // אין חיבור בכלל

@@ -374,7 +374,14 @@ export async function findAvailableSlots(
   employeeMinLeadHours: Record<string, number> | undefined,
   durationMinutes: number,
   preferredDoctorId?: string | null,
-  maxResults = 4
+  maxResults = 4,
+  // שעות הפעילות הכלליות של המרפאה (working_hours_table) — נפרד מהלוח
+  // האישי של כל רופא/ה. פרמטר אופציונלי בסוף (לא שובר call sites קיימים):
+  // אם לא סופק, ההתנהגות זהה בדיוק לקודם (רק הלוח האישי נבדק). כשכן סופק,
+  // חלון השעות של כל רופא/ה מצטמצם לחיתוך בין הלוח האישי לשעות המרפאה —
+  // קרה בפועל: רופא מוגדר עד 19:00 אבל המרפאה סגורה מ-17:00, ובלי החיתוך
+  // הזה findAvailableSlots הייתה מציעה שעות שהמרפאה עצמה סגורה בהן
+  businessWorkingHours?: WorkingDay[]
 ): Promise<AvailableSlot[]> {
   // fail-closed: בלי שירות ידוע ובלי שיוך רופאים בעסק, אין שום בסיס אמיתי
   // להציע שעות — לא מנחשים (אותו עיקרון כמו resolveActiveService ב-botTags.ts
@@ -396,16 +403,27 @@ export async function findAvailableSlots(
   if (isNaN(probe.getTime())) return []
   const dayName = israelWeekday(probe)
 
+  // המרפאה סגורה כל היום הזה — אין שום slot, בלי קשר ללוח האישי של אף רופא/ה
+  const businessDayEntry = businessWorkingHours?.find(d => d.day === dayName)
+  if (businessWorkingHours?.length && (!businessDayEntry || businessDayEntry.closed || !businessDayEntry.open || !businessDayEntry.close)) return []
+
   // רק רופאים עם לוח אישי מוגדר ובעל שעות פתיחה/סגירה אמיתיות ביום הזה —
   // בלי לוח אישי (employeeSchedules[uid] ריק) אי אפשר לבנות רשת שעות
-  // אמיתית בכלל, אז לא מנחשים שעות ברירת מחדל; פשוט מדלגים על הרופא הזה
+  // אמיתית בכלל, אז לא מנחשים שעות ברירת מחדל; פשוט מדלגים על הרופא הזה.
+  // כשיש גם שעות מרפאה — מצמצמים לחיתוך (מאוחר מבין ה-open, מוקדם מבין ה-close)
   const doctorHours: Record<string, WorkingDay> = {}
   for (const uid of qualified) {
     const sched = employeeSchedules[uid]
     if (!sched?.length) continue
     const entry = sched.find(d => d.day === dayName)
     if (!entry || entry.closed || !entry.open || !entry.close) continue
-    doctorHours[uid] = entry
+    let { open, close } = entry
+    if (businessDayEntry?.open && businessDayEntry?.close) {
+      open = open > businessDayEntry.open ? open : businessDayEntry.open
+      close = close < businessDayEntry.close ? close : businessDayEntry.close
+      if (open >= close) continue // אין חפיפה בין שעות הרופא/ה לשעות המרפאה ביום הזה
+    }
+    doctorHours[uid] = { day: dayName, open, close, closed: false }
   }
   const openDoctors = Object.keys(doctorHours)
   if (openDoctors.length === 0) return []
@@ -467,6 +485,50 @@ export async function findAvailableSlots(
       results.push({ date: dateISO, time, doctorId: uid })
       break
     }
+  }
+  return results
+}
+
+// ─── GENERAL NEXT AVAILABLE — "מתי יש לכם?"/"מתי פנוי?" בלי יום ספציפי ──────
+// (יוסי, 01/09): findAvailableSlots למעלה דורשת תאריך קונקרטי. כשהלקוח לא
+// נתן יום בכלל ("מתי יש לכם?"), resolveActiveRequestedDate מחזירה null,
+// וכל היכולת מדלגת — קרה בפועל: הבוט נפל לתשובת ברירת המחדל הישנה ("לא
+// מצאתי תור זמין") גם כשבפועל הייתה זמינות אמיתית תוך יומיים-שלושה. הפונקציה
+// הזו לא בונה שום לוגיקת זמינות חדשה — היא רק **עוטפת** את findAvailableSlots
+// הקיימת (ללא שינוי בה) בלולאה שסורקת יום-יום קדימה, ועוצרת ברגע שנאספו
+// maxResults slots אמיתיים או שנגמר הטווח. כל תנאי ה"פנוי באמת" (שירות,
+// שיוך רופא, לוח אישי, min-lead, חפיפת appointments, duration מהגדרת
+// השירות) כבר נאכפים בתוך findAvailableSlots עצמה, פעם אחת, לכל יום —
+// אין כאן שום כפילות/גרסה מקבילה של אותה בדיקה
+export async function findNextAvailableSlots(
+  sb: any, businessId: string,
+  startDateISO: string, // היום הראשון לבדיקה (בדרך כלל "היום" בשעון ישראל)
+  daysAhead: number,
+  service: string | null | undefined,
+  empResponsibilities: Record<string, string[]>,
+  employeeSchedules: Record<string, WorkingDay[]>,
+  employeeMinLeadHours: Record<string, number> | undefined,
+  durationMinutes: number,
+  preferredDoctorId?: string | null,
+  maxResults = 4,
+  businessWorkingHours?: WorkingDay[]
+): Promise<AvailableSlot[]> {
+  // אותו fail-closed כמו findAvailableSlots — נבדק כאן גם כדי לא לבזבז
+  // daysAhead שאילתות DB סתם כשאין שום בסיס אמיתי לחיפוש
+  if (!service || Object.keys(empResponsibilities).length === 0) return []
+
+  const anchor = new Date(`${startDateISO}T12:00:00Z`) // עוגן בצהריים, ראה nextDateForWeekday למעלה — אותה טכניקה, בלי בעיית חיתוך יום
+  if (isNaN(anchor.getTime())) return []
+
+  const results: AvailableSlot[] = []
+  for (let i = 0; i < daysAhead && results.length < maxResults; i++) {
+    const dateISO = new Date(anchor.getTime() + i * 86400000).toISOString().slice(0, 10)
+    const daySlots = await findAvailableSlots(
+      sb, businessId, dateISO, service,
+      empResponsibilities, employeeSchedules, employeeMinLeadHours,
+      durationMinutes, preferredDoctorId, maxResults - results.length, businessWorkingHours
+    )
+    results.push(...daySlots)
   }
   return results
 }

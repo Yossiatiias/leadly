@@ -5,13 +5,13 @@ import {
   normalizeApptDate, israelDateTime,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
   looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
-  findAvailableSlots, resolveActiveRequestedDate,
+  findAvailableSlots, findNextAvailableSlots, resolveActiveRequestedDate,
   type BotApptResult,
 } from '@/lib/botAppointments'
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -405,6 +405,13 @@ async function handleAiRespond(
     // בפועל היא **אחרי** הגנרציה, למטה (איפה שגם שאר עיגון ההצעות רץ)
     let availableSlotsBlock = ''
     let computedSlotsThisTurn: { date: string; time: string; doctorId: string }[] | null = null
+    // GENERAL NEXT AVAILABLE ("מתי יש לכם?", בלי יום ספציפי) — נפרד בכוונה
+    // מ-computedSlotsThisTurn (יום בודד, ראה למעלה): כשיש כמה תאריכים
+    // אפשריים באותה תשובה, אימות "השעה קיימת איפשהו ברשימה" לא מספיק —
+    // אותה שעה יכולה להיות אמיתית ביום אחד ומומצאת באחר. נשמר עם date+time
+    // צמודים כדי לאמת זוגות שלמים, לא רק שעות בודדות (ראה עיגון למטה)
+    let nextAvailableBlock = ''
+    let computedNextAvailableSlots: { date: string; time: string; doctorId: string }[] | null = null
     if (looksLikeAvailabilityInquiry(combinedText)) {
       const requestedDate = resolveActiveRequestedDate(combinedText, msgs, israelNow)
       // אין עדיין תגית LEAD לתור הזה (טרם קרינו ל-LLM) — משתמשים רק
@@ -423,6 +430,8 @@ async function handleAiRespond(
           business?.settings?.employee_min_lead_hours || {},
           isNaN(inquiryDuration) ? 60 : inquiryDuration,
           preferredDoctorIdForInquiry,
+          4,
+          s.working_hours_table,
         )
         computedSlotsThisTurn = slots
         const [dy, dm, dd] = requestedDate.split('-')
@@ -431,6 +440,40 @@ async function handleAiRespond(
           availableSlotsBlock = `\nזמינות אמיתית ב-${dd}.${dm}.${dy}: ${slotsText}\n**חובה**: הלקוח שאל על זמינות/שעות פנויות — הצג לו אך ורק שעות מתוך הרשימה הזו (אפשר לבחור 2-4 מהן, אין צורך להציג את כולן). אסור להוסיף, לשנות או להמציא שעה שלא מופיעה כאן, גם אם היא נשמעת סבירה.`
         } else {
           availableSlotsBlock = `\nלא נמצאה זמינות אמיתית ב-${dd}.${dm}.${dy} לשירות המבוקש. הלקוח שאל על זמינות/שעות פנויות — אל תמציא שעה. אמור בעדינות שלא מצאת תור זמין (ראה הניסוח הקבוע בחוקים למטה) ושתעביר את הבקשה לנציג.`
+        }
+      } else if (inquiryService) {
+        // ─── GENERAL NEXT AVAILABLE — "מתי יש לכם?"/"מתי פנוי?" ───────────
+        // (יוסי, 01/09): קרה בפועל — לקוח ביקש "מתי יש לכם?" בלי לתת יום,
+        // ולבוט לא הייתה שום יכולת לחפש קדימה, אז נפל תמיד לברירת המחדל
+        // הישנה ("לא מצאתי תור זמין") גם כשבפועל הייתה זמינות תוך ימים
+        // ספורים. סורקים 14 יום קדימה (אותו טווח כבר מוצג ל-LLM בלוח
+        // התאריכים למטה — upcomingDatesText — כך שאין כאן אופק חדש שהמודל
+        // לא מכיר, ומספיק כדי לתפוס גם רופא/ה שעובד/ת רק יום-יומיים בשבוע)
+        const NEXT_AVAILABLE_SEARCH_DAYS = 14
+        const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap)
+        const matchedInquirySvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => sv.name?.includes(inquiryService))
+        const inquiryDuration = matchedInquirySvc?.duration ? parseInt(String(matchedInquirySvc.duration)) : 60
+        const todayISO = israelNow.toISOString().slice(0, 10)
+        const slots = await findNextAvailableSlots(
+          supabase, businessId,
+          todayISO, NEXT_AVAILABLE_SEARCH_DAYS, inquiryService,
+          business?.settings?.employee_responsibilities || {},
+          business?.settings?.employee_schedules || {},
+          business?.settings?.employee_min_lead_hours || {},
+          isNaN(inquiryDuration) ? 60 : inquiryDuration,
+          preferredDoctorIdForInquiry,
+          4,
+          s.working_hours_table,
+        )
+        computedNextAvailableSlots = slots
+        if (slots.length > 0) {
+          const slotsText = slots.map(sl => {
+            const [yy, mm, dd] = sl.date.split('-')
+            return `${dd}.${mm}.${yy} ${sl.time}${profileMap[sl.doctorId] ? ` (${profileMap[sl.doctorId]})` : ''}`
+          }).join(', ')
+          nextAvailableBlock = `\nהתורים הפנויים הקרובים ביותר בפועל (${NEXT_AVAILABLE_SEARCH_DAYS} הימים הקרובים): ${slotsText}\n**חובה**: הלקוח שאל על זמינות כללית בלי לציין יום — הצג לו אך ורק אפשרויות מתוך הרשימה הזו (2-4 מהן). לכל אפשרות ציין תאריך מלא בפורמט DD.MM.YYYY בדיוק כפי שמופיע כאן, צמוד לשעה. אסור להוסיף, לשנות או להמציא תאריך/שעה/רופא שלא מופיעים ברשימה הזו.`
+        } else {
+          nextAvailableBlock = `\nלא נמצאה זמינות אמיתית לשירות המבוקש ב-${NEXT_AVAILABLE_SEARCH_DAYS} הימים הקרובים. הלקוח שאל על זמינות כללית — אל תמציא תאריך/שעה. אמור בעדינות שלא מצאת תור זמין (ראה הניסוח הקבוע בחוקים למטה) ושתעביר את הבקשה לנציג.`
         }
       }
     }
@@ -454,7 +497,7 @@ ${genderInstructionBlock}
 ${business?.settings?.description || ''}
 כתובת: ${business?.address || ''} | אתר: ${business?.website || ''} | שעות פעילות: ${workingHoursText || 'לא הוגדרו'}
 ${servicesText ? `\nשירותים:\n${servicesText}` : ''}
-${staffText}${closedDatesText}${existingApptText}${availableSlotsBlock}
+${staffText}${closedDatesText}${existingApptText}${availableSlotsBlock}${nextAvailableBlock}
 ${qaText ? `\nQ&A:\n${qaText}` : ''}
 
 חוקים:
@@ -629,6 +672,30 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
       if (inventedTime) {
         console.error('[ai-respond] RELIABILITY BLOCK — availability response mentioned a time not present in the real computed slots list:', JSON.stringify({
           conversationId, inventedTime, allowedTimes: Array.from(allowedTimes),
+        }))
+        aiResponse = NO_AVAILABILITY_MESSAGE
+        await supabase.from('conversations').update({
+          escalated_at: new Date().toISOString(),
+          escalation_reason: 'אין רופא/ה זמין/ה לטיפול המבוקש בתאריך/שעה שהתבקשו',
+        }).eq('id', conversationId)
+      }
+    }
+
+    // ─── עיגון "התורים הקרובים ביותר" (GENERAL NEXT AVAILABLE) ────────────
+    // כאן יש כמה תאריכים אפשריים באותה תשובה — לא מספיק לבדוק ששעה "קיימת
+    // איפשהו ברשימה" (כמו למעלה, שם כל הרשימה היא ליום אחד ידוע). בודקים
+    // זוגות תאריך+שעה שלמים (extractAllDateTimePairsInText) מול הרשימה
+    // האמיתית, ובנפרד — ששום שם רופא/ה שלא ברשימה לא מוזכר בתשובה בכלל
+    if (computedNextAvailableSlots !== null && !apptData) {
+      const allowedPairs = new Set(computedNextAvailableSlots.map(sl => `${sl.date}|${sl.time}`))
+      const allowedDoctorNames = new Set(computedNextAvailableSlots.map(sl => profileMap[sl.doctorId]).filter(Boolean))
+      const mentionedPairs = extractAllDateTimePairsInText(aiResponse)
+      const invalidPair = mentionedPairs.find(p => !allowedPairs.has(`${p.date}|${p.time}`))
+      const allDoctorNames = Object.values(profileMap)
+      const wrongDoctorMentioned = allDoctorNames.find(name => name && aiResponse.includes(name) && !allowedDoctorNames.has(name))
+      if (invalidPair || wrongDoctorMentioned) {
+        console.error('[ai-respond] RELIABILITY BLOCK — general-availability response mentioned a date/time/doctor not present in the real computed next-available slots:', JSON.stringify({
+          conversationId, invalidPair, wrongDoctorMentioned, allowedPairs: Array.from(allowedPairs),
         }))
         aiResponse = NO_AVAILABILITY_MESSAGE
         await supabase.from('conversations').update({
