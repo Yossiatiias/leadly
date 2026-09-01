@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, buildSafeSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift } from './botTags'
+import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, resolveActiveServiceAnchor } from './botTags'
 
 describe('parseBotTags', () => {
   it('parses a full response with all four tags and strips them from the visible text', () => {
@@ -459,5 +459,121 @@ describe('looksLikeSchedulingTopicShift — customer reply clearly moves to a di
     expect(looksLikeSchedulingTopicShift('אין לי העדפה')).toBe(false)
     expect(looksLikeSchedulingTopicShift('לא משנה לי מתי')).toBe(false)
     expect(looksLikeSchedulingTopicShift('תבדוק לי')).toBe(false)
+  })
+})
+
+// ─── resolveActiveServiceAnchor + scoped extractCustomerRequestedDoctorId ────
+// (יוסי, 01/09, FIX 1, מקרה פרודקשן אמיתי): "אשמח לד"ר עלא" ... "בעצם אני
+// רוצה ד"ר גבי" ... "בעצם אני רוצה הלבנת שיניים, מי מבצע?" — הלקוח עבר
+// דרך 3 נושאים, ובכל זאת extractCustomerRequestedDoctorId (הלא-מוגבלת)
+// המשיכה להחזיר את ההזכרה הראשונה (עלא יונס), שלא רלוונטית יותר, ומגבילה
+// בטעות חיפוש זמינות לשירות חדש לגמרי שהוא לא מוסמך לו בכלל
+describe('resolveActiveServiceAnchor — same result as resolveActiveService, plus where the active topic was established', () => {
+  const services = [{ name: 'השתלות' }, { name: 'הלבנה' }]
+
+  it('priority 2 (history scan): anchor points at the message where the service was found', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה השתלה' },
+      { direction: 'outbound', content: 'בטח, מתי נוח?' },
+      { direction: 'inbound', content: 'בעצם אני רוצה הלבנת שיניים' },
+    ]
+    const { service, sinceIndex } = resolveActiveServiceAnchor(null, messages, services)
+    expect(service).toBe('הלבנה')
+    expect(sinceIndex).toBe(2)
+  })
+
+  it('priority 1 (inline reason from current turn): anchor points at the current message only', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה השתלה' },
+      { direction: 'outbound', content: 'בטח, מתי נוח?' },
+      { direction: 'inbound', content: 'מתי אפשר?' },
+    ]
+    const { service, sinceIndex } = resolveActiveServiceAnchor('הלבנה', messages, services)
+    expect(service).toBe('הלבנה')
+    expect(sinceIndex).toBe(2) // messages.length - 1
+  })
+
+  it('returns sinceIndex 0 when no service can be resolved at all', () => {
+    const messages = [{ direction: 'inbound', content: 'שלום' }]
+    const { service, sinceIndex } = resolveActiveServiceAnchor(null, messages, services)
+    expect(service).toBeNull()
+    expect(sinceIndex).toBe(0)
+  })
+})
+
+describe('extractCustomerRequestedDoctorId with sinceIndex — doctor preference scoped to the active topic, not the whole conversation', () => {
+  const doctorsById = { docA: 'ד"ר עלא יונס', docB: 'ד"ר גבי סמל', docC: 'ד"ר מסאוורה' }
+
+  // 1/10 — התרחיש האמיתי המלא: עלא → גבי → הלבנה, ללא הזכרה חוזרת
+  it('1 — real multi-topic case: an old doctor mention from an abandoned topic does not constrain a brand-new service, when scoped to where the new topic started', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה תור עם ד"ר עלא יונס' },
+      { direction: 'outbound', content: 'בטח, מתי נוח?' },
+      { direction: 'inbound', content: 'בעצם אני רוצה ד"ר גבי סמל' },
+      { direction: 'outbound', content: 'בטח, מתי נוח?' },
+      { direction: 'inbound', content: 'בעצם אני רוצה תור להלבנת שיניים' }, // <- שירות חדש, sinceIndex=4
+      { direction: 'outbound', content: 'הלבנת שיניים מבצע ד"ר מסאוורה. מתי נוח?' },
+      { direction: 'inbound', content: 'מתי יש?' },
+    ]
+    // ללא scoping (ברירת מחדל, sinceIndex=0) — ההתנהגות הישנה, הבעייתית:
+    // מחזירה את ההזכרה האחרונה מכל ההיסטוריה (גבי, index 2) — לא רלוונטית
+    // יותר לנושא הנוכחי (הלבנה), בדיוק כמו הבאג האמיתי בפרודקשן
+    expect(extractCustomerRequestedDoctorId(messages, doctorsById)).toBe('docB')
+    // עם scoping לנושא הפעיל (מ-sinceIndex=4, ההודעה שקבעה "הלבנה")
+    expect(extractCustomerRequestedDoctorId(messages, doctorsById, 4)).toBeNull() // אין preference פעיל
+  })
+
+  // 2 — service switch מנקה preference ישן, גם בלי לשחזר את כל השיחה
+  it('2 — a new service introduced in a later message clears the old doctor preference, when scoped from that message', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה תור עם ד"ר גבי סמל להשתלות' },
+      { direction: 'outbound', content: 'בטח, מתי נוח?' },
+      { direction: 'inbound', content: 'בעצם אני רוצה הלבנת שיניים' }, // שירות חדש, בלי להזכיר את גבי שוב, sinceIndex=2
+    ]
+    expect(extractCustomerRequestedDoctorId(messages, doctorsById, 2)).toBeNull()
+  })
+
+  // 3 — אותו רופא פעיל נשמר כשהלקוח לא עבר נושא
+  it('3 — the same active doctor preference is retained across a vague scheduling reply within the same topic', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה ד"ר גבי סמל' }, // sinceIndex=0 (topic never changed)
+      { direction: 'outbound', content: 'בטח, מתי נוח?' },
+      { direction: 'inbound', content: 'מתי אפשר?' },
+    ]
+    expect(extractCustomerRequestedDoctorId(messages, doctorsById, 0)).toBe('docB')
+  })
+
+  // 4 — בקשה מפורשת ברורה לרופא לא-מוסמך, בנושא הנוכחי, לא נעלמת
+  it('4 — an explicit current-topic request for a doctor (even one not qualified for the service) is still captured, not silently dropped', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה הלבנת שיניים אצל ד"ר עלא יונס' }, // sinceIndex=0
+    ]
+    expect(extractCustomerRequestedDoctorId(messages, doctorsById, 0)).toBe('docA')
+  })
+
+  // 5 — אזכור ע"י הבוט בלבד אינו נחשב preference של הלקוח (התנהגות קיימת,
+  // לא השתנתה — הפונקציה תמיד סרקה רק inbound; מוודאים שזה נשאר כך)
+  it('5 — a doctor named only by the bot is never treated as the customer\'s preference', () => {
+    const messages = [
+      { direction: 'inbound', content: 'אני רוצה הלבנת שיניים, מי מבצע אצלכם?' },
+      { direction: 'outbound', content: 'הלבנת שיניים מבצע ד"ר מסאוורה. מתי נוח?' },
+      { direction: 'inbound', content: 'מתי יש?' },
+    ]
+    expect(extractCustomerRequestedDoctorId(messages, doctorsById, 0)).toBeNull()
+  })
+})
+
+// ─── buildSafeExactSlotResponse — FIX 2 ─────────────────────────────────────
+describe('buildSafeExactSlotResponse — deterministic single-slot response, built only from the verified exact-slot result', () => {
+  it('builds a full day+date+time+doctor confirmation', () => {
+    const msg = buildSafeExactSlotResponse('2026-09-02', '14:00', 'ד"ר מסאוורה')
+    expect(msg).toContain('יום רביעי, 02.09, בשעה 14:00')
+    expect(msg).toContain('ד"ר מסאוורה')
+    expect(msg).toContain('פנוי')
+  })
+  it('omits the doctor phrase cleanly when no doctor name is known', () => {
+    const msg = buildSafeExactSlotResponse('2026-09-02', '14:00', null)
+    expect(msg).toContain('יום רביעי, 02.09, בשעה 14:00')
+    expect(msg).not.toContain('אצל ')
   })
 })

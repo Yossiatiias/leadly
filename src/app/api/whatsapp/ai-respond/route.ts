@@ -11,7 +11,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -428,10 +428,12 @@ async function handleAiRespond(
       const requestedDate = resolveActiveRequestedDate(combinedText, msgs, israelNow)
       // אין עדיין תגית LEAD לתור הזה (טרם קרינו ל-LLM) — משתמשים רק
       // בעדיפות 2 של resolveActiveService (סריקת הודעות נכנסות אחורה),
-      // בדיוק כמו שעיגון ההצעה למטה עושה כש-inlineReason חסר
-      const inquiryService = resolveActiveService(null, msgs, business?.settings?.services || [])
+      // בדיוק כמו שעיגון ההצעה למטה עושה כש-inlineReason חסר. sinceIndex
+      // (יוסי, 01/09, FIX 1) מגביל את חיפוש "רופא מבוקש" להודעות מאז
+      // שהשירות הפעיל הזה נקבע — לא לכל היסטוריית השיחה (ר' resolveActiveServiceAnchor)
+      const { service: inquiryService, sinceIndex: serviceAnchorIndex } = resolveActiveServiceAnchor(null, msgs, business?.settings?.services || [])
       if (requestedDate && inquiryService) {
-        const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap)
+        const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap, serviceAnchorIndex)
         const matchedInquirySvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => sv.name?.includes(inquiryService))
         const inquiryDuration = matchedInquirySvc?.duration ? parseInt(String(matchedInquirySvc.duration)) : 60
         const slots = await findAvailableSlots(
@@ -462,7 +464,7 @@ async function handleAiRespond(
         // התאריכים למטה — upcomingDatesText — כך שאין כאן אופק חדש שהמודל
         // לא מכיר, ומספיק כדי לתפוס גם רופא/ה שעובד/ת רק יום-יומיים בשבוע)
         const NEXT_AVAILABLE_SEARCH_DAYS = 14
-        const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap)
+        const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap, serviceAnchorIndex)
         const matchedInquirySvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => sv.name?.includes(inquiryService))
         const inquiryDuration = matchedInquirySvc?.duration ? parseInt(String(matchedInquirySvc.duration)) : 60
         const todayISO = israelNow.toISOString().slice(0, 10)
@@ -768,7 +770,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
         // בתור הנוכחי; אם חסר, סורק אחורה בהודעות **הנכנסות** של הלקוח
         // באותה שיחה (תופס גם "השתלה" → "יום שני?" → "כן", שבו התור
         // האחרון לא מזכיר את השירות בכלל אבל הוא עדיין ידוע מהקונטקסט)
-        const offerService = resolveActiveService(inlineAnalysis?.reason, msgs, business?.settings?.services || [])
+        const { service: offerService, sinceIndex: offerServiceAnchorIndex } = resolveActiveServiceAnchor(inlineAnalysis?.reason, msgs, business?.settings?.services || [])
 
         // ─── FAIL-CLOSED, לא FAIL-OPEN, כשלא ידוע איזה שירות מבוקש ──────────
         // זה בדיוק מה שקרה בפועל עם ד"ר גבי סמל: כש-offerService יצא null,
@@ -812,32 +814,40 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
           if (slotCheck.status === 'unavailable') {
             exactSlotBlocked = true
           } else if (slotCheck.status === 'available') {
-            // ההצעה עשויה להזכיר שם רופא/ה ספציפי/ת שאינו/ה מי שבאמת נמצא/ת
-            // פנוי/ה בשעה הזו. יש הבדל קריטי בין שני מקרים (יוסי, 31/08):
-            // (א) ה-LLM הזכיר/בחר את השם מיוזמתו — הלקוח לא ביקש רופא/ה
-            //     ספציפי/ת בעצמו. יש כבר רופא/ה אמיתי/ת פנוי/ה (slotCheck.doctorId)
-            //     — מתקנים רק את השם בטקסט, לא מעבירים לנציג על לא-כלום.
-            // (ב) הלקוח **בעצמו** ביקש את הרופא/ה הזה/ו בשם, בהודעה נכנסת
-            //     משלו — לא מחליפים בשקט, שומרים על מסלול ההעברה לנציג
-            //     הקיים. ההבחנה מבוססת על מי בפועל כתב את השם
-            //     (extractCustomerRequestedDoctorId סורק רק הודעות נכנסות),
-            //     לא ניחוש מטקסט תשובת ה-AI
+            // (יוסי, 01/09, FIX 2, מקרה פרודקשן אמיתי): "מחר ב-14 יש מצב?"
+            // — הבדיקה הזו אימתה status:'available' אצל ד"ר מסאוורה, ובכל
+            // זאת ה-LLM ענה "לא מצאתי תור זמין" — סתירה גמורה לעובדה
+            // שהקוד עצמו כבר אימת. לא מסתפקים יותר בתיקון-שם-בטקסט (fragile,
+            // ולא תופס בכלל את המקרה של "אין" כשבאמת יש) — כשיש זמינות
+            // אמיתית מאומתת, בונים תשובה דטרמיניסטית ישירות מהנתונים
+            // (buildSafeExactSlotResponse), בלי תלות בניסוח ה-LLM בכלל.
+            // עדיין שומרים על ההבחנה הקריטית (יוסי, 31/08): אם הלקוח
+            // **בעצמו** ביקש רופא/ה ספציפי/ת בשם (בהודעה נכנסת משלו,
+            // בהיקף הנושא הפעיל — extractCustomerRequestedDoctorId עם
+            // sinceIndex), והרופא/ה הזמין/ה בפועל שונה — לא מחליפים בשקט,
+            // שומרים על מסלול ההעברה לנציג הקיים
             const trueDoctorName = profileMap[slotCheck.doctorId] || null
             const allDoctorNames = Object.values(profileMap)
             const wrongName = allDoctorNames.find(name => name && aiResponse.includes(name) && name !== trueDoctorName)
             if (wrongName) {
-              const customerRequestedDoctorId = extractCustomerRequestedDoctorId(msgs, profileMap)
+              const customerRequestedDoctorId = extractCustomerRequestedDoctorId(msgs, profileMap, offerServiceAnchorIndex)
               if (customerRequestedDoctorId && customerRequestedDoctorId !== slotCheck.doctorId) {
                 exactSlotBlocked = true
                 console.error('[ai-respond] RELIABILITY BLOCK — customer explicitly requested a doctor who is not actually free at that exact time, not silently substituting:', JSON.stringify({
                   conversationId, offered, requestedDoctorId: customerRequestedDoctorId, trueDoctorName,
                 }))
-              } else {
-                aiResponse = aiResponse.split(wrongName).join(trueDoctorName || wrongName)
-                console.log('[ai-respond] corrected an LLM-mentioned doctor name in a free-text offer to the doctor actually found available (customer never requested a specific doctor):', JSON.stringify({
-                  conversationId, offered, wrongName, trueDoctorName,
-                }))
               }
+            }
+            if (!exactSlotBlocked) {
+              aiResponse = buildSafeExactSlotResponse(offered.date, offered.time, trueDoctorName)
+              // (יוסי, 01/09): כמו ב-SAFE_SLOT_RESPONSE — escalationReason
+              // כבר חושב למעלה מתוך הטקסט **המקורי** של המודל (שיכול היה
+              // לומר "מעביר לנציג" מתוך אותה סתירה שאנחנו מתקנים כרגע).
+              // יש זמינות אמיתית מאומתת ⇒ שום הסלמה לא נובעת ממנה
+              suppressAvailabilityEscalation = true
+              console.log('[ai-respond] SAFE_EXACT_SLOT_RESPONSE — real availability verified by code for this exact date/time, response built deterministically (never trusting the model\'s own wording, whether it said yes with a wrong doctor or said no in contradiction to a real slot):', JSON.stringify({
+                conversationId, offered, trueDoctorName,
+              }))
             }
           }
         }

@@ -208,11 +208,19 @@ export function extractMentionedDoctorId(
 // רק הודעות **נכנסות** מהלקוח. אם הלקוח מעולם לא הזכיר שם רופא בעצמו,
 // כל אזכור שם בהצעה הוא יוזמה של המודל, לא בקשה שלו — מותר לתקן אותו
 // בשקט בלי להעביר לנציג (ראה השימוש ב-ai-respond/route.ts)
+// sinceIndex (יוסי, 01/09, FIX 1): מגביל את הסריקה להודעות מהאינדקס הזה
+// והלאה בלבד — "העדפת רופא" נשארת קשורה ל-**נושא/שירות הפעיל**, לא לכל
+// היסטוריית השיחה. בלי זה, בקשת רופא ישנה מנושא שכבר ננטש (למשל "אשמח
+// לד"ר עלא" ואז "בעצם אני רוצה הלבנת שיניים") ממשיכה "לדבוק" ומגבילה
+// בטעות חיפוש זמינות לשירות חדש לגמרי שהרופא ההוא בכלל לא מוסמך לו.
+// ברירת המחדל (0) שומרת על ההתנהגות הישנה — סריקת כל ההיסטוריה — לקריאות
+// שלא מעבירות עוגן (backward compatible)
 export function extractCustomerRequestedDoctorId(
   messages: { direction: string; content: string }[],
   doctorsById: Record<string, string>,
+  sinceIndex = 0,
 ): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
+  for (let i = messages.length - 1; i >= sinceIndex; i--) {
     const m = messages[i]
     if (m.direction !== 'inbound') continue
     for (const [uid, name] of Object.entries(doctorsById)) {
@@ -281,21 +289,42 @@ export function matchServiceReason(reason: string | null | undefined, services: 
 // אם שתי העדיפויות נכשלות — מחזיר null. הקורא (ai-respond/route.ts) חייב
 // להתייחס ל-null כאן כ"לא ידוע בוודאות" ולנקוט fail-closed (לא לשלוח
 // הצעת תור לא-מאומתת), לא fail-open כמו שקרה בפועל
-export function resolveActiveService(
+// ─── גרסה עם "עוגן" — מחזירה גם **איפה** השירות הפעיל נקבע ─────────────────
+// (יוסי, 01/09, FIX 1): הבסיס לתיקון "doctor preference זולג בין נושאים".
+// מקרה אמיתי: הלקוח ביקש ד"ר עלא יונס, עבר לד"ר גבי סמל, ואז עבר לגמרי
+// לנושא חדש ("בעצם אני רוצה הלבנת שיניים") — אבל extractCustomerRequestedDoctorId
+// המשיכה להחזיר את ההזכרה הישנה של עלא יונס, כי היא סרקה את **כל** ההיסטוריה
+// בלי תלות בנושא הפעיל. sinceIndex כאן הוא האינדקס ב-messages שבו השירות
+// הפעיל **נקבע** — עדיפות 1 (inlineReason, תור נוכחי): messages.length-1
+// (רק ההודעה הנוכחית עצמה נחשבת "באותו רגע"); עדיפות 2 (סריקת היסטוריה):
+// האינדקס של ההודעה הנכנסת שבה נמצא השירות. קוראים שרוצים לדעת "מה כבר
+// נאמר **מאז שהנושא הזה התחיל**" (כמו preferred-doctor scoping) משתמשים
+// ב-sinceIndex הזה כדי לחתוך את הסריקה שלהם, לא לסרוק את כל השיחה
+export function resolveActiveServiceAnchor(
   inlineReason: string | null | undefined,
   messages: { direction: string; content: string }[],
   services: { name: string }[]
-): string | null {
+): { service: string | null; sinceIndex: number } {
   const fromReason = matchServiceReason(inlineReason, services)
-  if (fromReason && fromReason !== 'אחר') return fromReason
+  if (fromReason && fromReason !== 'אחר') {
+    return { service: fromReason, sinceIndex: Math.max(0, messages.length - 1) }
+  }
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]
     if (m.direction !== 'inbound') continue
     const fromMessage = matchServiceReason(m.content, services)
-    if (fromMessage && fromMessage !== 'אחר') return fromMessage
+    if (fromMessage && fromMessage !== 'אחר') return { service: fromMessage, sinceIndex: i }
   }
-  return null
+  return { service: null, sinceIndex: 0 }
+}
+
+export function resolveActiveService(
+  inlineReason: string | null | undefined,
+  messages: { direction: string; content: string }[],
+  services: { name: string }[]
+): string | null {
+  return resolveActiveServiceAnchor(inlineReason, messages, services).service
 }
 
 // ─── זיהוי "מה יש בכלל" (FIND AVAILABLE SLOTS) לעומת בדיקת שעה ספציפית ──────
@@ -377,19 +406,39 @@ export function extractAllDateTimePairsInText(text: string): { date: string; tim
 // findNextAvailableSlots (14 יום — הוכח קורה בפועל). כל שורה כוללת עכשיו
 // גם תאריך מלא (DD.MM) — לא מסתמכים על כך שה-LLM יכלול אותו בעצמו
 // (בדיוק מה שקרה בתקרית האמיתית: קיבל DD.MM.YYYY בפרומפט והשמיט אותו)
+const HEB_DAY_NAMES_FULL = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+
+// "יום X, DD.MM, בשעה HH:MM" — משותף לכל תשובת-זמינות דטרמיניסטית, כדי
+// שכל מקום שמציג slot יציג יום+תאריך+שעה באותו פורמט, לא רק יום+שעה
+function formatDayDateTime(dateISO: string, time: string): string {
+  const d = new Date(`${dateISO}T12:00:00Z`)
+  const dayName = HEB_DAY_NAMES_FULL[d.getUTCDay()]
+  const [, mm, dd] = dateISO.split('-')
+  return `יום ${dayName}, ${dd}.${mm}, בשעה ${time}`
+}
+
 export function buildSafeSlotResponse(
   slots: { date: string; time: string; doctorId: string }[],
   profileMap: Record<string, string>
 ): string {
-  const HEB_DAY_NAMES_FULL = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
   const lines = slots.map(sl => {
-    const d = new Date(`${sl.date}T12:00:00Z`)
-    const dayName = HEB_DAY_NAMES_FULL[d.getUTCDay()]
-    const [, mm, dd] = sl.date.split('-')
     const doctorName = profileMap[sl.doctorId]
-    return `יום ${dayName}, ${dd}.${mm}, בשעה ${sl.time}${doctorName ? ` (${doctorName})` : ''}`
+    return `${formatDayDateTime(sl.date, sl.time)}${doctorName ? ` (${doctorName})` : ''}`
   })
   return `יש כרגע כמה אפשרויות:\n\n${lines.join('\n')}\n\nמה הכי מתאים לך? 😊`
+}
+
+// ─── SAFE_EXACT_SLOT_RESPONSE — תשובה דטרמיניסטית לבדיקת שעה מדויקת אחת ─────
+// (יוסי, 01/09, FIX 2, מקרה פרודקשן אמיתי): "מחר ב-14 יש מצב?" —
+// findAvailableDoctorForExactSlot אימתה בפועל status:'available' אצל
+// ד"ר מסאוורה, ובכל זאת ה-LLM ענה "לא מצאתי תור זמין". CODE מחליט על
+// העובדה (יש/אין, איזה רופא, איזו שעה) — ה-LLM לא רשאי להפוך את זה.
+// כשקוד מוודא זמינות אמיתית לשעה מדויקת אחת, התשובה נבנית ישירות מהנתונים
+// המאומתים (date/time/doctorId), בלי תלות בניסוח של ה-LLM בכלל
+export function buildSafeExactSlotResponse(
+  dateISO: string, time: string, doctorName: string | null
+): string {
+  return `כן 😊 ${formatDayDateTime(dateISO, time)} פנוי${doctorName ? ` אצל ${doctorName}` : ''}. תרצה שאקבע לך?`
 }
 
 // ─── מיזוג ניתוח ליד (LEAD tag) לתוך שדות עדכון — לוגיקה טהורה, ────────────
