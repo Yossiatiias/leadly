@@ -308,6 +308,95 @@ export function hasQualifiedDoctorOnDate(
   })
 }
 
+export type ServiceDoctorAvailabilityStatus = 'no_match' | 'unverified' | 'fully_blocked' | 'has_calendar'
+
+// ─── שיוך שירות→רופא/ה מול "יש בכלל יומן פתוח" — לא "יש slot היום" ──────────
+// (דרישה עסקית): closed:true בלוח האישי של רופא/ה הוא חסימת-קביעה-
+// אוטומטית מכוונת (למשל מומחה שמתואם ידנית, לא דרך הבוט) — הוא לא אומר
+// "השירות לא ניתן" ולא "אין תורים בכלל". לפני התיקון הזה, hasQualifiedDoctorOnDate/
+// findAvailableSlots פשוט חזרו "אין זמינות" בשני מקרים שונים לגמרי (אין
+// רופא/ה משויכ/ת בכלל, לעומת יש רופא/ה משויכ/ת אבל בלי יומן פתוח), וה-route
+// לא יכול היה להבחין ביניהם כדי לבחור את הניסוח הנכון. הפונקציה הזו עונה
+// רק על "האם יש בכלל בסיס לחפש שעות אוטומטית לשירות הזה":
+//
+// (ביקורת קוד) ⚠️ ארבעה status אמיתיים, ורק אחד מהם "אימות" מלא —
+// unverified הוא status רביעי, נפרד מפורשות מ-has_calendar (לא מתחזה
+// לאימות שלא בוצע בפועל):
+//   1) שירות משויך לרופא/ה עם יומן פתוח מאומת → has_calendar. ✅ אימות מלא —
+//      **היחיד** שמתיר קביעה/הצעה אוטומטית ב-strict mode (ר' route.ts).
+//   2) השירות קיים, אבל אין אף רופא/ה משויכ/ת אליו כלל (empResponsibilities
+//      לא ריק, אבל אין שורה מתאימה) → no_match. ✅ נחסם תמיד (גם בלי strict).
+//   3) empResponsibilities **ריק/חסר לגמרי** עבור העסק (אין שום שיוך שירותים
+//      מוגדר, לאף שירות) → unverified. אין שום נתון לאמת מולו.
+//   4) יש רופא/ה משויכ/ת, אבל **אין לאף אחד/ת מהם/ן employee_schedules
+//      מוגדר בכלל** (המפתח חסר, לא [] ריק) → unverified — לא ניתן לאמת
+//      יומן פתוח, גם אם אין שום סיבה לחשוב שהוא סגור.
+//   5) יש רופא/ה משויכ/ת, ולפחות אחד/ת מהם/ן יש employee_schedules מוגדר,
+//      אבל **כולם** (מי שיש להם לוח בכלל) closed בכל הימים → fully_blocked.
+//      ✅ נחסם תמיד (גם בלי strict) — זו המטרה המקורית של הפונקציה הזו.
+// עדיפות בין רופאים מרובים לאותו שירות: אם **לפחות אחד/ת** מהם/ן מאומת/ת
+// כפתוח/ה (מקרה 1) — מוחזר has_calendar (עדיפות עליונה, זמינות אמיתית
+// קיימת). אחרת, אם **לפחות אחד/ת** אין לו/ה לוח בכלל (מקרה 4) — unverified
+// (אי אפשר לשלול זמינות). רק אם **לכולם** יש לוח והם **כולם** סגורים —
+// fully_blocked (מקרה 5, וידאנו בפועל שאין אף אחד פתוח).
+//
+// ⚠️ שימו לב, שינוי התנהגות מבוקר: לפני הביקורת הזו, מקרים 3/4 הוחזרו
+// כ-has_calendar (permissive, זהה להתנהגות הפתוחה הקיימת עדיין ב-
+// hasQualifiedDoctorOnDate/findAvailableSlots — קוד ליבה שלא נגעתי בו).
+// עכשיו הם unverified: ב-route.ts, unverified מטופל כ-has_calendar בפועל
+// (לא חוסם) **אלא אם** business.settings.strict_service_doctor_booking===true
+// — כך שאין שינוי התנהגות בפועל לאף עסק קיים בלי הדגל (ר' route.ts,
+// forcedHandoffStatus + strictMode)
+const HEB_WEEKDAYS = new Set(['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'])
+
+function isValidHHMM(t: unknown): t is string {
+  return typeof t === 'string' && /^\d{1,2}:\d{2}$/.test(t)
+}
+function hhmmToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+// ─── שורת לוח שבאמת אפשר לסמוך עליה כ"יום פתוח מאומת" ───────────────────────
+// (ביקורת קוד): closed:false לבד לא מספיק — שורה עם יום לא תקין, או בלי
+// שעות פתיחה/סגירה תקינות, או עם close<=open (נתונים פגומים) היא לא הוכחה
+// אמיתית ל"יש כאן יומן פתוח", גם אם מישהו/הי לא סימן/ה אותה closed:true.
+// כזו נחשבת "לא ניתנת לאימות" (unverified), לא "פתוחה" וגם לא "סגורה"
+function isUsableOpenScheduleRow(row: { day?: string; open?: string; close?: string; closed?: boolean } | null | undefined): boolean {
+  if (!row) return false
+  if (row.closed === true) return false
+  if (!row.day || !HEB_WEEKDAYS.has(row.day)) return false
+  if (!isValidHHMM(row.open) || !isValidHHMM(row.close)) return false
+  return hhmmToMinutes(row.close) > hhmmToMinutes(row.open)
+}
+
+export function getServiceDoctorAvailabilityStatus(
+  service: string | null | undefined,
+  empResponsibilities: Record<string, string[]>,
+  employeeSchedules: Record<string, { day: string; open?: string; close?: string; closed: boolean }[]>
+): ServiceDoctorAvailabilityStatus {
+  if (!service) return 'no_match'
+  if (Object.keys(empResponsibilities).length === 0) return 'unverified'
+  const qualified = Object.entries(empResponsibilities)
+    .filter(([, svcs]) => svcs.some(s => service.includes(s) || s.includes(service)))
+    .map(([uid]) => uid)
+  if (qualified.length === 0) return 'no_match'
+
+  let anyUnverified = false
+  for (const uid of qualified) {
+    const sched = employeeSchedules[uid]
+    if (!sched?.length) { anyUnverified = true; continue }
+    for (const row of sched) {
+      if (row.closed === true) continue // מסומן סגור במפורש — עובדה אמיתית, לא unverified
+      if (isUsableOpenScheduleRow(row)) return 'has_calendar' // עדיפות עליונה — יומן פתוח מאומת בפועל
+      // closed !== true, אבל השורה פגומה/חסרה (יום לא תקין, שעות חסרות/פסולות,
+      // close<=open) — אי אפשר לדעת אם זה באמת פתוח, לא נחשב "מאומת סגור"
+      anyUnverified = true
+    }
+  }
+  return anyUnverified ? 'unverified' : 'fully_blocked'
+}
+
 export type SlotAvailabilityCheck =
   | { status: 'unknown' } // אין מספיק מידע כדי לבדוק (שירות/שיוך לא ידועים) — לא חוסמים
   | { status: 'available'; doctorId: string }
@@ -635,6 +724,14 @@ export async function saveOrRescheduleBotAppointment(sb: any, params: {
   // ב-ai-respond/route.ts) — מכובד/ת אם עדיין מוסמך/ת, כדי שהאישור הסופי
   // לא יסתור את מה שכבר נאמר ללקוח
   preferredDoctorId?: string | null
+  // (דרישה עסקית, strict mode) — ברירת מחדל false/undefined = בדיוק
+  // ההתנהגות הקיימת, בלי שום שינוי (backward compatible לכל עסק שלא
+  // מגדיר business.settings.strict_service_doctor_booking). כשמוגדר true:
+  // קביעה אוטומטית מתאפשרת רק כשיש רופא/ה עם employee_schedules מאומת
+  // ופתוח בפועל (getServiceDoctorAvailabilityStatus === 'has_calendar') —
+  // no_match/unverified/fully_blocked כולם חוסמים, גם אם המצב הרגיל
+  // (fail-open) היה מאפשר לקבוע בלי רופא/ה משויכ/ת בפועל
+  strictServiceDoctorBooking?: boolean
 }): Promise<BotApptResult> {
   const { businessId, leadId, patientName, patientPhone, date, time } = params
   const service = (params.service && params.service !== 'null' && params.service !== 'טיפול') ? params.service : null
@@ -728,6 +825,7 @@ export async function saveOrRescheduleBotAppointment(sb: any, params: {
     }
 
     const qualifiedBeforeAvailability = qualified
+    const strict = !!params.strictServiceDoctorBooking
 
     // לא מציעים רופא/ה שסגור/ה באותו יום לפי הלוח האישי שלו/ה (employee_schedules,
     // נפרד משעות הפעילות הכלליות של העסק שכבר נבדקו למעלה). קרה בפועל
@@ -737,9 +835,15 @@ export async function saveOrRescheduleBotAppointment(sb: any, params: {
     if (params.employeeSchedules) {
       qualified = qualified.filter(uid => {
         const sched = params.employeeSchedules?.[uid]
-        if (!sched?.length) return true // אין לוח אישי מוגדר — לא חוסמים
+        // (strict mode): בלי strict — אין לוח אישי מוגדר = לא חוסמים
+        // (permissive, כמו תמיד). עם strict — בלי לוח אין דרך לאמת יומן
+        // פתוח בפועל, אז לא נחשב/ת כשיר/ה (unverified, לא has_calendar)
+        if (!sched?.length) return !strict
         return checkWithinWorkingHours(scheduledAt, time, sched).ok
       })
+    } else if (strict) {
+      // strict, אבל אין employeeSchedules בכלל בפרמטרים — אי אפשר לאמת שום דבר
+      qualified = []
     }
 
     // מינימום שעות מראש: רופא/ה שהוגדרה לו/ה דרישת "X שעות מראש" ולא
@@ -763,9 +867,18 @@ export async function saveOrRescheduleBotAppointment(sb: any, params: {
       }
     }
 
-    if (!assignedTo && qualifiedBeforeAvailability.length > 0) {
+    // (strict mode): בלי strict — נחסם רק כשהיו רופאים מתאימים
+    // לשירות (qualifiedBeforeAvailability) שהפכו ללא-זמינים (הישן, ללא
+    // שינוי). עם strict — נחסם גם כש-qualifiedBeforeAvailability ריק
+    // מלכתחילה (no_match: שירות ידוע, אבל אף רופא/ה לא משויכ/ת אליו) —
+    // "אין אימות" חוסם תמיד ב-strict, לא רק "היה אימות ונכשל"
+    if (!assignedTo && (strict || qualifiedBeforeAvailability.length > 0)) {
       noDoctorAvailable = true
     }
+  } else if (params.strictServiceDoctorBooking) {
+    // strict, אבל אין שירות ידוע בכלל, או שאין שום שיוך שירותים מוגדר
+    // בעסק (empResponsibilities ריק) — אי אפשר לאמת דבר, לא קובעים בלי אימות
+    noDoctorAvailable = true
   }
 
   if (noDoctorAvailable) {

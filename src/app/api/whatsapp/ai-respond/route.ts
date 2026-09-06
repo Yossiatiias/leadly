@@ -5,13 +5,14 @@ import {
   normalizeApptDate, israelDateTime,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
   looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
-  findAvailableSlots, findNextAvailableSlots, resolveActiveRequestedDate,
+  findAvailableSlots, findNextAvailableSlots, resolveActiveRequestedDate, resolveDateMentionInText,
+  getServiceDoctorAvailabilityStatus, type ServiceDoctorAvailabilityStatus,
   type BotApptResult,
 } from '@/lib/botAppointments'
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -61,6 +62,103 @@ function formatWorkingHours(table: { day: string; open: string; close: string; c
   return groups
     .map(g => `${g.days.length > 1 ? `${g.days[0]}-${g.days[g.days.length - 1]}` : g.days[0]}: ${g.label}`)
     .join(', ')
+}
+
+type WhatsappConnection = { api_url: string; instance_id: string; api_token: string }
+type SendOutcome = { ok: true } | { ok: false; response: ReturnType<typeof NextResponse.json> }
+
+// ─── טעינת חיבור Green API הפעיל של העסק — מקור אמת יחיד ────────────────────
+// (ביקורת קוד): היה משוכפל בשני מקומות (המסלול הרגיל בסוף
+// handleAiRespond, ומסלול ה-early-return הדטרמיניסטי) — עכשיו קריאה אחת בלבד
+async function loadWhatsappConnection(businessId: string): Promise<WhatsappConnection | null> {
+  const { data: conn } = await supabase
+    .from('whatsapp_connections')
+    .select('api_token, api_url, instance_id')
+    .eq('business_id', businessId)
+    .eq('bot_enabled', true)
+    .single()
+
+  if (!conn?.api_url || !conn?.instance_id || !conn?.api_token) return null
+  return conn
+}
+
+// ─── ליבה משותפת: שליחה + שמירת הודעה יוצאת + ניקוי תזכורת שבשלה ────────────
+// (ביקורת קוד): המסלול הרגיל (סוף handleAiRespond) ומסלול ה-
+// early-return הדטרמיניסטי (REMIND) בנו כל אחד עותק נפרד של send+save —
+// כל שינוי עתידי (שדה חדש, טיפול שגיאה נוסף) היה צריך להיזכר פעמיים, ובדיוק
+// ככה התגלה שה-early-return שכח clearDueReminderByConversation (ראה למטה).
+// מקור אמת יחיד עכשיו. עיכוב אנושי/אינדיקטור הקלדה נשארים אצל הקורא (שונים
+// בין המסלולים, קוסמטיים בלבד) — לא חלק מהליבה המשותפת
+async function sendAndPersistBotMessage(
+  conn: WhatsappConnection, conversationId: string, businessId: string, senderPhone: string, aiResponse: string
+): Promise<SendOutcome> {
+  const greenInstance = cleanInstanceId(conn.instance_id)
+  const chatId = `${senderPhone}@c.us`
+
+  const sendRes = await fetch(
+    buildGreenApiUrl(conn.api_url, greenInstance, 'sendMessage', conn.api_token),
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message: aiResponse }) }
+  )
+  if (!sendRes.ok) {
+    console.error('Send failed:', await sendRes.text())
+    return { ok: false, response: NextResponse.json({ error: 'Failed to send message' }, { status: 500 }) }
+  }
+
+  await supabase.from('messages').insert({
+    conversation_id: conversationId,
+    business_id: businessId,
+    direction: 'outbound',
+    content: aiResponse,
+    sender_type: 'ai',
+  })
+
+  await supabase.from('conversations')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', conversationId)
+
+  // הבוט יצר קשר עם הלקוח → תזכורת בשלה יורדת (אותו כלל בדיוק בשני המסלולים —
+  // אם באותה הודעה נקבעה/מתעדכנת תזכורת חדשה, היא נכתבת בנפרד אחרי הקריאה הזו)
+  await clearDueReminderByConversation(supabase, conversationId)
+
+  return { ok: true }
+}
+
+// ─── אסקלציה + בחירת ניסוח לפי הצלחה/כישלון בפועל ───────────────────────────
+// (ביקורת קוד): לעולם לא אומרים ללקוח "הועבר"/"טופל" בלי שהאסקלציה עצמה
+// נשמרה בהצלחה ב-DB. משמש גם מ-handleAiRespond (הסלמה כפויה, fully_blocked/
+// no_match/unverified) וגם ממסלול ה-REMIND הדטרמיניסטי (כישלון שמירת תזכורת)
+async function escalateAndBuildResponse(conversationId: string, reason: string): Promise<string> {
+  const { error } = await supabase.from('conversations').update({
+    escalated_at: new Date().toISOString(),
+    escalation_reason: reason,
+  }).eq('id', conversationId)
+  if (error) {
+    console.error('[ai-respond] escalation persistence failed — not confirming transfer to the customer:', JSON.stringify({ conversationId, reason, error }))
+    return buildHandoffUnconfirmedResponse()
+  }
+  console.log('[ai-respond] flagged for human rep:', JSON.stringify({ conversationId, reason }))
+  return buildHandoffToRepResponse()
+}
+
+// ─── שליחת תשובה דטרמיניסטית ויציאה — עוקף לגמרי קריאה למודל/בירור טיפול ────
+// (דרישה עסקית, REMIND): כשמתגלה בקוד שהלקוח ביקש חזרה מאוחרת יותר,
+// עוצרים לגמרי — לא קוראים ל-LLM, לא ממשיכים בירור טיפול/הצעת תור באותה
+// הודעה. עדיין עוברים דרך אותה ליבת שליחה/שמירה (sendAndPersistBotMessage)
+// כמו תשובה רגילה, כדי שההיסטוריה/ה-CRM יישארו עקביים
+async function sendDeterministicAndReturn(
+  conversationId: string, businessId: string, senderPhone: string, aiResponse: string
+) {
+  const conn = await loadWhatsappConnection(businessId)
+  if (!conn) {
+    console.error('[ai-respond] no active WhatsApp connection for business — refusing to send:', businessId)
+    return NextResponse.json({ error: 'No active WhatsApp connection for this business' }, { status: 400 })
+  }
+
+  const result = await sendAndPersistBotMessage(conn, conversationId, businessId, senderPhone, aiResponse)
+  if (!result.ok) return result.response
+
+  return NextResponse.json({ ok: true })
 }
 
 const MIN_RESPONSE_INTERVAL_MS = 5_000 // 5 שניות בין תשובות
@@ -275,6 +373,18 @@ async function handleAiRespond(
     const s = business?.settings || {}
     const workingHoursText = formatWorkingHours(s.working_hours_table)
 
+    // ─── strict_service_doctor_booking — הגדרה per-עסק, ברירת מחדל false ────
+    // (דרישה עסקית): מערכת multi-tenant — אסור לשנות התנהגות גלובלית
+    // לכל העסקים בלי החלטת תאימות מפורשת. ברירת המחדל (false/לא מוגדר)
+    // שומרת בדיוק על ההתנהגות הקיימת (unverified מטופל כמו has_calendar —
+    // לא חוסם). true (לדוגמה: שקד קליניק) מהדק: קביעה/הצעה אוטומטית
+        // מתאפשרת רק כשיש שיוך שירות-רופא ולוח פתוח שאומתו בפועל
+    // (has_calendar בלבד) — no_match/fully_blocked/unverified כולם חוסמים.
+    // אין שם עסק/רופא מקודד — זו הגדרה ב-DB (businesses.settings), לא בקוד
+    const strictServiceDoctorBooking = business?.settings?.strict_service_doctor_booking === true
+    const shouldForceHandoff = (status: ServiceDoctorAvailabilityStatus): boolean =>
+      status === 'no_match' || status === 'fully_blocked' || (status === 'unverified' && strictServiceDoctorBooking)
+
     // Business exceptions (closed dates)
     const exceptions: {date: string; reason: string}[] = s.business_exceptions || []
     const upcomingClosed = exceptions
@@ -384,6 +494,148 @@ async function handleAiRespond(
     const israelOffset = isrOffsetH * 60 * 60 * 1000
     const israelNow = new Date(Date.now() + israelOffset)
 
+    // ─── חזרה מאוחרת יותר (REMIND) — אכיפה קשיחה בקוד, לא רק ציות המודל ────
+    // (דרישה עסקית): אם הלקוח מבקש שנחזור אליו, עוצרים לגמרי — בקוד,
+    // לפני קריאה למודל בכלל — את בירור הטיפול/הצעת התור באותה הודעה. state
+    // נשמר על conversations כדי שהודעת המשך ("מחר ב-14:00", בלי שום מילת-
+    // טריגר) עדיין תובן כשעת החזרה המבוקשת, לא כהמשך בירור טיפול/תור
+    // (ביקורת קוד — סדר deploy/migration): אם המיגרציה
+    // (pending_callback_migration.sql) עוד לא רצה, השאילתה הזו תיכשל
+    // (עמודות לא קיימות) — לא זורקים, אבל כן רושמים ללוג במפורש, כדי
+    // שהתנוונות שקטה של הפיצ'ר (הודעת המשך לא תזוהה כהשלמת REMIND) תהיה
+    // גלויה בלוגים ולא רק "משהו לא עובד" בלי עקבות
+    const { data: callbackRow, error: callbackReadError } = await supabase
+      .from('conversations')
+      .select('pending_callback_active, pending_callback_date, pending_callback_time')
+      .eq('id', conversationId)
+      .maybeSingle()
+    if (callbackReadError) {
+      console.error('[ai-respond] pending_callback columns read failed — migration likely not applied yet:', JSON.stringify(callbackReadError))
+    }
+    // (ביקורת קוד, migration types): pending_callback_time הוא TIME WITHOUT
+    // TIME ZONE ב-DB — PostgREST מחזיר אותו כ-"HH:MM:SS" (עם שניות), לא
+    // "HH:MM" כמו שהקוד כותב/מצפה (extractAllTimesInText/israelDateTime
+    // דורשים HH:MM בדיוק). מנרמלים כאן פעם אחת, מיד אחרי הקריאה
+    const storedPendingTime = callbackRow?.pending_callback_time
+      ? String(callbackRow.pending_callback_time).slice(0, 5)
+      : null
+
+    if (callbackRow?.pending_callback_active || looksLikeLaterCallbackRequest(combinedText)) {
+      // ביטול מפורש תוך כדי המתנה ("לא משנה", "אני אחזור אליכם") — לא
+      // ממשיכים לשאול יום/שעה בלי סוף. רלוונטי רק כשכבר ממתינים בפועל;
+      // הודעה ראשונה שרק "נשמעת" כמו ביטול (בלי מצב ממתין) לא מגיעה
+      // לכאן בכלל, כי looksLikeLaterCallbackRequest לא הייתה מזהה אותה
+      if (callbackRow?.pending_callback_active && looksLikeCallbackCancellation(combinedText)) {
+        await ensureLeadExists(supabase, conversationId, businessId, senderPhone, combinedText)
+        const { error: cancelUpdateError } = await supabase.from('conversations').update({
+          pending_callback_active: false, pending_callback_date: null, pending_callback_time: null,
+        }).eq('id', conversationId)
+        if (cancelUpdateError) console.error('[ai-respond] pending_callback cancel-state update failed:', JSON.stringify(cancelUpdateError))
+        console.log('[ai-respond] callback request cancelled by customer:', JSON.stringify({ conversationId }))
+        return await sendDeterministicAndReturn(conversationId, businessId, senderPhone, buildCallbackCancelledResponse())
+      }
+
+      const dateFromText = resolveDateMentionInText(combinedText, israelNow)
+      const timeFromText = extractAllTimesInText(combinedText)[0] || null
+      let resolvedDate = dateFromText || callbackRow?.pending_callback_date || null
+      let resolvedTime = timeFromText || storedPendingTime || null
+
+      // ─── לעולם לא זמן בעבר, ולעולם לא תאריך רחוק/שגוי בטעות ────────────────
+      // (ביקורת קוד): strictly-future בלבד — בלי שום סבילות של
+      // זמן-בעבר, לא שעה ולא דקה. שונה במכוון מ"חלון חסד" של שעה אחורה
+      // שקיים באימות תגית REMIND הרגילה למטה (זה מיועד לפער-שעון/רשת אצל
+      // המודל — לא רלוונטי כאן, אין מודל בנתיב הזה בכלל). probe ו-Date.now()
+      // הם שני instants מוחלטים (UTC) — ההשוואה ביניהם כבר "שעון ישראל
+      // הנוכחי מול callbackAt", בלי תלות בשעון קיץ/חורף (israelDateTime
+      // בונה את ה-instant מתוך שעון ישראל, לא רק Date.now() המקומי). תקרת
+      // עתיד רחוק (400 יום) נשארה, כדי לא לשמור תאריך שגוי-בעליל (הזיית פרסור)
+      if (resolvedDate && resolvedTime) {
+        const probe = israelDateTime(resolvedDate, resolvedTime)
+        const maxAhead = Date.now() + 400 * 86400000
+        const inValidRange = probe && probe.getTime() > Date.now() && probe.getTime() < maxAhead
+        if (!inValidRange) {
+          console.error('[ai-respond] callback date/time rejected — not strictly in the future (or out of range), asking again instead of saving it (never guessing tomorrow):', JSON.stringify({ conversationId, resolvedDate, resolvedTime }))
+          resolvedDate = null
+          resolvedTime = null
+        }
+      }
+
+      if (resolvedDate && resolvedTime) {
+        // מזהי יום+שעה שלמים ותקינים — סוגרים את בקשת החזרה: שומרים REMIND
+        // בקוד (לא תלוי בכך שהמודל יכתוב תגית), דרך אותו flow-יצירת-ליד קיים
+        // (ensureLeadExists) כדי שהכתיבה ל-leads.next_followup לא תיכשל
+        // בשקט כשעוד אין ליד לשיחה הזו. שומרים תחילה את resolvedDate/Time
+        // גם על conversations (לפני שמנסים לכתוב את התזכורת עצמה) — כך
+        // שגם אם זו ההודעה הראשונה (יום+שעה בהודעה אחת) ה-state נשאר
+        // בר-שחזור אם הכתיבה בהמשך נכשלת, ולא "נעלם" בלי עקבות
+        await ensureLeadExists(supabase, conversationId, businessId, senderPhone, combinedText)
+        await supabase.from('conversations').update({
+          pending_callback_active: true,
+          pending_callback_date: resolvedDate,
+          pending_callback_time: resolvedTime,
+        }).eq('id', conversationId)
+
+        const { data: convRowForCallback } = await supabase
+          .from('conversations').select('lead_id').eq('id', conversationId).single()
+        const when = israelDateTime(resolvedDate, resolvedTime)
+
+        // (ביקורת קוד): אף פעם לא מאמינים סתם ל-update — בודקים error,
+        // וקוראים בחזרה מה-DB לוודא שהערך שבאמת נשמר תואם למה שביקשנו.
+        // רק אחרי אימות אמיתי מנקים את ה-pending state ומודיעים ללקוח
+        // שנקבע — אחרת ה-state נשאר (בר-ניסיון-חוזר בפעם הבאה שהלקוח כותב)
+        // ונשלחת תשובה כנה, לא הבטחה שלא התממשה
+        let reminderVerified = false
+        if (convRowForCallback?.lead_id && when) {
+          const { error: followupUpdateError } = await supabase.from('leads')
+            .update({ next_followup: when.toISOString() })
+            .eq('id', convRowForCallback.lead_id)
+          if (followupUpdateError) {
+            console.error('[ai-respond] callback next_followup update failed:', JSON.stringify({ conversationId, error: followupUpdateError }))
+          } else {
+            const { data: verifyLead, error: verifyError } = await supabase.from('leads')
+              .select('next_followup').eq('id', convRowForCallback.lead_id).maybeSingle()
+            if (verifyError) {
+              console.error('[ai-respond] callback next_followup read-back failed:', JSON.stringify({ conversationId, error: verifyError }))
+            } else if (verifyLead?.next_followup && new Date(verifyLead.next_followup).getTime() === when.getTime()) {
+              reminderVerified = true
+            } else {
+              console.error('[ai-respond] callback next_followup read-back mismatch — not confirming to the customer:', JSON.stringify({ conversationId, expected: when.toISOString(), got: verifyLead?.next_followup }))
+            }
+          }
+        }
+
+        if (reminderVerified) {
+          const { error: finalizeUpdateError } = await supabase.from('conversations').update({
+            pending_callback_active: false, pending_callback_date: null, pending_callback_time: null,
+          }).eq('id', conversationId)
+          if (finalizeUpdateError) console.error('[ai-respond] pending_callback finalize-state update failed:', JSON.stringify(finalizeUpdateError))
+          console.log('[ai-respond] callback REMIND saved and verified (code-enforced):', JSON.stringify({ conversationId, when: when?.toISOString() }))
+          return await sendDeterministicAndReturn(conversationId, businessId, senderPhone, buildCallbackConfirmedResponse(resolvedDate, resolvedTime))
+        }
+
+        // לא הצלחנו לוודא שהתזכורת נשמרה — לא אומרים ללקוח "נקבע". ה-state
+        // (pending_callback_active/date/time) כבר נשמר למעלה, כך שניסיון
+        // חוזר טבעי (הודעה הבאה של הלקוח) יכול להשלים את מה שנכשל כאן.
+        // מסמנים גם אסקלציה לטיפול ידני, ומודיעים בכנות רק אם היא עצמה נשמרה
+        const handoffMessage = await escalateAndBuildResponse(conversationId, 'לא הצלחנו לאמת שמירת תזכורת חזרה ללקוח — נדרש טיפול ידני')
+        return await sendDeterministicAndReturn(conversationId, businessId, senderPhone, handoffMessage)
+      } else {
+        // עוד חסר יום/שעה תקינים — שומרים את מה שכבר ידוע ושואלים רק על
+        // החסר, בלי להמשיך בירור טיפול/הצעת תור באותה הודעה. יוצרים ליד
+        // גם כאן (לא רק בסגירה הסופית) — כל הודעה שנשלחת ללקוח, כולל זו,
+        // חייבת להיות משויכת לליד, בדיוק כמו בכל תשובה רגילה של הבוט
+        await ensureLeadExists(supabase, conversationId, businessId, senderPhone, combinedText)
+        const { error: pendingUpdateError } = await supabase.from('conversations').update({
+          pending_callback_active: true,
+          pending_callback_date: resolvedDate,
+          pending_callback_time: resolvedTime,
+        }).eq('id', conversationId)
+        if (pendingUpdateError) console.error('[ai-respond] pending_callback partial-state update failed:', JSON.stringify(pendingUpdateError))
+        const missing = !resolvedDate && !resolvedTime ? 'both' : (!resolvedDate ? 'date' : 'time')
+        return await sendDeterministicAndReturn(conversationId, businessId, senderPhone, buildCallbackAskForTimeResponse(missing))
+      }
+    }
+
     // בנה רשימת ימי השבוע הקרובים (14 ימים) לפרומפט — למנוע חישובי תאריך שגויים של המודל
     const HEB_DAY_NAMES_PROMPT = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
     const upcomingDatesText = Array.from({ length: 14 }, (_, i) => {
@@ -412,6 +664,17 @@ async function handleAiRespond(
     // צמודים כדי לאמת זוגות שלמים, לא רק שעות בודדות (ראה עיגון למטה)
     let nextAvailableBlock = ''
     let computedNextAvailableSlots: { date: string; time: string; doctorId: string }[] | null = null
+
+    // ─── מומחה/ה בלי יומן פתוח, או שירות בלי שיוך ודאי — נאסף כאן, נאכף ────
+    // באופן דטרמיניסטי אחרי שהמודל עונה (דרישה עסקית): closed:true
+    // בלוח האישי הוא חסימת-קביעה-אוטומטית מכוונת (מומחה שמתואם ידנית), לא
+    // "השירות לא ניתן"/"אין תורים" — וכשאין שום שיוך שירות→רופא/ה ודאי,
+    // אסור לנחש. בשני המקרים: לא מציגים שעות, לא אומרים "אין זמינות",
+    // מעבירים לנציג. נקבע כאן ובעוד שני מקומות למטה (בדיקת APPT ישיר,
+    // עיגון הצעה חופשית) — הראשון שקובע אותו "מנצח" לשאר התור
+    let forcedHandoffStatus: ServiceDoctorAvailabilityStatus | null = null
+    let pendingForcedEscalationReason: string | null = null
+
     // ─── זיהוי הקשרי (STAGE 1A, יוסי 01/09) — ROOT CAUSE, לא עוד ביטוי ──────
     // קרה בפועל: הבוט שאל "יש לך העדפה לתאריך או שעה?", הלקוח ענה "מתי
     // אפשר?" — looksLikeAvailabilityInquiry לא זיהתה את זה (לא "פנוי", לא
@@ -432,7 +695,15 @@ async function handleAiRespond(
       // (יוסי, 01/09, FIX 1) מגביל את חיפוש "רופא מבוקש" להודעות מאז
       // שהשירות הפעיל הזה נקבע — לא לכל היסטוריית השיחה (ר' resolveActiveServiceAnchor)
       const { service: inquiryService, sinceIndex: serviceAnchorIndex } = resolveActiveServiceAnchor(null, msgs, business?.settings?.services || [])
-      if (requestedDate && inquiryService) {
+      if (inquiryService) {
+        const inquiryStatus = getServiceDoctorAvailabilityStatus(
+          inquiryService,
+          business?.settings?.employee_responsibilities || {},
+          business?.settings?.employee_schedules || {},
+        )
+        if (shouldForceHandoff(inquiryStatus)) forcedHandoffStatus = inquiryStatus
+      }
+      if (requestedDate && inquiryService && !forcedHandoffStatus) {
         const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap, serviceAnchorIndex)
         const matchedInquirySvc = (business?.settings?.services || []).find((sv: { name: string; duration?: string | number }) => sv.name?.includes(inquiryService))
         const inquiryDuration = matchedInquirySvc?.duration ? parseInt(String(matchedInquirySvc.duration)) : 60
@@ -455,7 +726,7 @@ async function handleAiRespond(
         } else {
           availableSlotsBlock = `\nלא נמצאה זמינות אמיתית ב-${dd}.${dm}.${dy} לשירות המבוקש. הלקוח שאל על זמינות/שעות פנויות — אל תמציא שעה. אמור בעדינות שלא מצאת תור זמין (ראה הניסוח הקבוע בחוקים למטה) ושתעביר את הבקשה לנציג.`
         }
-      } else if (inquiryService) {
+      } else if (inquiryService && !forcedHandoffStatus) {
         // ─── GENERAL NEXT AVAILABLE — "מתי יש לכם?"/"מתי פנוי?" ───────────
         // (יוסי, 01/09): קרה בפועל — לקוח ביקש "מתי יש לכם?" בלי לתת יום,
         // ולבוט לא הייתה שום יכולת לחפש קדימה, אז נפל תמיד לברירת המחדל
@@ -660,6 +931,32 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
       }
     }
 
+    // ─── אישור תור ישיר (APPT) לשירות ששייך למומחה/ה בלי יומן פתוח ─────────
+    // (דרישה עסקית 4): מכסה גם את המקרה שהמודל כתב APPT ישירות, בלי
+    // לעבור דרך "עיגון הצעה חופשית" למטה. בלי strict mode: מיושם רק על
+    // fully_blocked (עובדה בדוקה: יש רופא/ה משויכ/ת, אבל בלי אף יום פתוח
+    // בלוח) — לא על no_match/unverified: no_match דרך תגית APPT (ניסוח
+    // שירות לא מוכר) הוא מנגנון קיים ומכוון אחר (RELIABILITY FLAG למטה,
+    // אחרי השמירה בפועל) — לא נוגעים בו כאן כברירת מחדל, כדי לא לחסום תור
+    // על סמך ניסוח בלבד, רק על סמך עובדה מאומתת בלוח. ב-strict mode (ביקורת
+    // קוד): "רק has_calendar מתיר קביעה אוטומטית" — no_match/
+    // unverified חוסמים גם כאן, לא רק fully_blocked
+    if (apptData?.service && !forcedHandoffStatus) {
+      const resolvedApptService = matchServiceReason(apptData.service, business?.settings?.services || [])
+      const serviceForStatusCheck = (resolvedApptService && resolvedApptService !== 'אחר') ? resolvedApptService : apptData.service
+      const apptStatus = getServiceDoctorAvailabilityStatus(
+        serviceForStatusCheck,
+        business?.settings?.employee_responsibilities || {},
+        business?.settings?.employee_schedules || {},
+      )
+      const forceHereApptCheck = apptStatus === 'fully_blocked'
+        || (strictServiceDoctorBooking && (apptStatus === 'no_match' || apptStatus === 'unverified'))
+      if (forceHereApptCheck) {
+        forcedHandoffStatus = apptStatus
+        apptData = null
+      }
+    }
+
     // זיהוי פערי ידע — GAP:[שאלה]
     // כותבים ישירות למסד ולא דרך fetch לעצמנו: קריאה כזו תלויה ב-URL חיצוני
     // ובייצור היא נפלה בשקט על localhost — ולכן אף פער לא נרשם מעולם.
@@ -787,6 +1084,16 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
           console.error('[ai-respond] RELIABILITY BLOCK — cannot verify a doctor offer without a known service (fail-closed, not fail-open):', JSON.stringify({
             conversationId, offered,
           }))
+        } else if ((() => {
+          const offerStatus = getServiceDoctorAvailabilityStatus(
+            offerService,
+            business?.settings?.employee_responsibilities || {},
+            business?.settings?.employee_schedules || {},
+          )
+          if (shouldForceHandoff(offerStatus)) { forcedHandoffStatus = offerStatus; return true }
+          return false
+        })()) {
+          // מומחה/ה בלי יומן פתוח, או בלי שיוך ודאי — נאכף למטה, לא כאן
         } else {
         available = hasQualifiedDoctorOnDate(
           offered.date, offerService,
@@ -852,7 +1159,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
           }
         }
         }
-        if (!available || exactSlotBlocked) {
+        if ((!available || exactSlotBlocked) && !forcedHandoffStatus) {
           console.error('[ai-respond] RELIABILITY BLOCK — offered a date/time with no qualified doctor actually available, replacing with an honest answer:', JSON.stringify({
             conversationId, offered, offerService, exactSlotBlocked,
           }))
@@ -866,6 +1173,29 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
           }).eq('id', conversationId)
         }
       }
+    }
+
+    // ─── מומחה/ה בלי יומן פתוח, או שירות בלי שיוך ודאי — דריסה סופית ────────
+    // (דרישה עסקית): לא מסתפקים בהנחיית-פרומפט — דורסים את תשובת
+    // המודל בקוד, בלי תלות בניסוח שלו, כדי שהוא לא יוכל עדיין לומר "אין
+    // תורים"/"הטיפול לא זמין" או להציע שעה. גם אם forcedHandoffStatus
+    // נקבע דרך APPT ישיר (ולא רק דרך בירור זמינות/הצעה חופשית) — לא מבצעים
+    // קביעה אוטומטית ללא שיוך ודאי + יומן פתוח מאומתים
+    let forcedHandoffResponsePending = false
+    if (forcedHandoffStatus) {
+      console.error('[ai-respond] FORCED HANDOFF — service maps to a doctor with no open calendar, or no clear doctor mapping; never showing hours or claiming unavailable, always handing off to a rep:', JSON.stringify({
+        conversationId, forcedHandoffStatus,
+      }))
+      // (ביקורת קוד): aiResponse נקבע רק **אחרי** שנדע אם האסקלציה עצמה
+      // נשמרה בהצלחה (למטה, אחרי ensureLeadExists) — לא מבטיחים "הועבר"
+      // לפני שזה אומת ב-DB
+      forcedHandoffResponsePending = true
+      apptData = null
+      pendingForcedEscalationReason = forcedHandoffStatus === 'fully_blocked'
+        ? 'טיפול אצל מומחה/ה בלי יומן פתוח לקביעה אוטומטית — נדרש תיאום ידני'
+        : forcedHandoffStatus === 'unverified'
+        ? 'לא ניתן לאמת יומן פתוח לשירות המבוקש (strict mode) — נדרשת בדיקה אנושית'
+        : 'לא נמצא שיוך ודאי בין השירות המבוקש לרופא/ה — נדרשת בדיקה אנושית'
     }
 
     // ─── צור ליד אם לא קיים (לפני שמירת תור) ────────────────────────────
@@ -889,6 +1219,15 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
         escalation_reason: escalationReason,
       }).eq('id', conversationId)
       console.log('[ai-respond] flagged for human rep (bot keeps answering):', JSON.stringify({ conversationId, reason: escalationReason }))
+    }
+
+    // נכתב **אחרי** ensureLeadExists למעלה (דרישה עסקית): כך שכשהליד
+    // עוד לא היה קיים לשיחה הזו, הוא כבר נוצר ומקושר (conversations.lead_id)
+    // לפני שמסמנים escalated_at — אותו flow קיים בדיוק כמו הבלוק שלמעלה,
+    // לא כתיבה עצמאית שעלולה "להיעלם" עבור נציגה שמסתכלת דרך מסך הלידים
+    if (pendingForcedEscalationReason) {
+      const handoffMessage = await escalateAndBuildResponse(conversationId, pendingForcedEscalationReason)
+      if (forcedHandoffResponsePending) aiResponse = handoffMessage
     }
 
     // ─── שמור/הזז תור לפני שליחת ההודעה — הצלחה נשלחת רק אחרי אימות ─────
@@ -936,6 +1275,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
         employeeMinLeadHours: s.employee_min_lead_hours || {},
         businessExceptions: exceptions,
         preferredDoctorId,
+        strictServiceDoctorBooking,
       })
 
       if (!apptResult.ok) {
@@ -1157,14 +1497,8 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     // חובה שיגיעו מהחיבור של העסק הזה בפועל — אין fallback למשתני סביבה
     // גלובליים. עם יותר מלקוח אחד פעיל, fallback שקט כזה עלול לגרום
     // לשליחת הודעה מהמספר של עסק אחר. עדיף כישלון מפורש על שקט מסוכן.
-    const { data: conn } = await supabase
-      .from('whatsapp_connections')
-      .select('api_token, api_url, instance_id')
-      .eq('business_id', businessId)
-      .eq('bot_enabled', true)
-      .single()
-
-    if (!conn?.api_url || !conn?.instance_id || !conn?.api_token) {
+    const conn = await loadWhatsappConnection(businessId)
+    if (!conn) {
       console.error('[ai-respond] no active WhatsApp connection for business — refusing to send:', businessId)
       return NextResponse.json({ error: 'No active WhatsApp connection for this business' }, { status: 400 })
     }
@@ -1182,35 +1516,9 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     // אינדיקטור הקלדה נשאר גלוי זמן קצר (קוצר מ-1-3 שניות ל-0.6-1.2)
     await new Promise(r => setTimeout(r, 600 + Math.floor(Math.random() * 600)))
 
-    // ─── שלח הודעה ────────────────────────────────────────────────────────
-    const sendRes = await fetch(
-      buildGreenApiUrl(conn.api_url, greenInstance, 'sendMessage', conn.api_token),
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: aiResponse }) }
-    )
-
-    if (!sendRes.ok) {
-      console.error('Send failed:', await sendRes.text())
-      return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
-    }
-
-    // ─── שמור הודעה יוצאת ─────────────────────────────────────────────────
-    await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      business_id:     businessId,
-      direction:       'outbound',
-      content:         aiResponse,
-      sender_type:     'ai',
-    })
-
-    await supabase.from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
-
-    // ─── תזכורת ───────────────────────────────────────────────────────────
-    // הבוט יצר קשר עם הלקוח → תזכורת בשלה יורדת.
-    // אם באותה הודעה נקבעה תזכורת חדשה, היא תיכתב מיד אחרי הניקוי.
-    await clearDueReminderByConversation(supabase, conversationId)
+    // ─── שלח הודעה + שמור + נקה תזכורת שבשלה — ליבה משותפת (ראה למעלה) ──────
+    const sendResult = await sendAndPersistBotMessage(conn, conversationId, businessId, senderPhone, aiResponse)
+    if (!sendResult.ok) return sendResult.response
 
     if (remindData?.date && remindData?.time) {
       const normDate = normalizeApptDate(remindData.date)

@@ -98,6 +98,8 @@ class FakeQuery {
   }
 
   async maybeSingle() {
+    const forced = this.db.consumeForcedError(this.table, this.op, this.payload)
+    if (forced) return { data: null, error: forced }
     if (this.op === 'select') return { data: this.matched()[0] ?? null, error: null }
     const { rows, error } = this.runWriteSafe()
     if (error) return { data: null, error }
@@ -105,6 +107,8 @@ class FakeQuery {
   }
 
   async single() {
+    const forced = this.db.consumeForcedError(this.table, this.op, this.payload)
+    if (forced) return { data: null, error: forced }
     if (this.op === 'select') {
       const rows = this.matched()
       if (rows.length === 0) return { data: null, error: { message: 'no rows' } }
@@ -118,6 +122,8 @@ class FakeQuery {
 
   // מאפשר `await` ישיר בלי .single()/.maybeSingle() — כמו בקוד האמיתי
   then(resolve: (v: { data: Row[] | null; error: any }) => void) {
+    const forced = this.db.consumeForcedError(this.table, this.op, this.payload)
+    if (forced) { resolve({ data: null, error: forced }); return }
     if (this.op === 'select') {
       resolve({ data: this.matched(), error: null })
       return
@@ -147,6 +153,7 @@ export class FakeDb {
   uniqueConstraints: Record<string, string[]> = {}
   storageFiles: Array<{ bucket: string; path: string }> = []
   private counters: Record<string, number> = {}
+  private forcedErrors: Record<string, Array<{ remaining: number; match?: (payload: any) => boolean }>> = {}
 
   nextId(table: string): string {
     this.counters[table] = (this.counters[table] || 0) + 1
@@ -159,6 +166,37 @@ export class FakeDb {
 
   setUniqueConstraint(table: string, cols: string[]) {
     this.uniqueConstraints[table] = cols
+  }
+
+  // ─── הזרקת כשל מדומה — בדיקת נתיבי error-handling אמיתיים ──────────────────
+  // (ביקורת קוד — נקודות 1/2): קוד שבודק error מ-Supabase צריך בדיקה
+  // שבאמת מדמה כישלון, לא רק את מסלול ה-happy-path. גורם לקריאה הבאה
+  // שתואמת table+op (ואופציונלית match על ה-payload, כדי לפגוע בדיוק
+  // בקריאה הרצויה כשאותה טבלה מתעדכנת כמה פעמים באותה ריצה — למשל
+  // conversations מתעדכן גם לנעילת עיבוד וגם למגדר וגם לאסקלציה) להחזיר
+  // {data:null, error} במקום להצליח כרגיל — בדיוק כמו שהקוד האמיתי
+  // מקבל מ-Supabase בכשל אמיתי (timeout, RLS, וכו')
+  failNextWrite(
+    table: string, op: 'select' | 'insert' | 'update' | 'delete',
+    opts: { times?: number; match?: (payload: any) => boolean } = {}
+  ) {
+    const key = `${table}:${op}`
+    this.forcedErrors[key] = this.forcedErrors[key] || []
+    this.forcedErrors[key].push({ remaining: opts.times ?? 1, match: opts.match })
+  }
+
+  consumeForcedError(table: string, op: string, payload?: any): { message: string; code: string } | null {
+    const key = `${table}:${op}`
+    const list = this.forcedErrors[key]
+    if (!list?.length) return null
+    for (let i = 0; i < list.length; i++) {
+      const entry = list[i]
+      if (entry.match && !entry.match(payload)) continue
+      entry.remaining--
+      if (entry.remaining <= 0) list.splice(i, 1)
+      return { message: `forced test error on ${key}`, code: 'FORCED_TEST_ERROR' }
+    }
+    return null
   }
 
   client() {

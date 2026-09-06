@@ -434,9 +434,11 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"הלבנה"}`
 
   // קרה בפועל (יוסי, 19/08): ד"ר גבי סמל סגר את כל ימי העבודה שלו, וד"ר
   // עלא יונס (הרופא המוסמך היחיד האחר לשיקום פה מלא) גם הוא סגור בכל
-  // הימים. יוסי קבע: כשאין רופא זמין בפועל, הבוט אומר זאת בנימוס ומעביר
-  // לנציג — לא קובע בכל זאת. בודקים גם שזה מסומן "ממתין לנציג" לצוות
-  it('tells the customer no doctor is available and flags the conversation for a rep, when every qualified doctor is closed', async () => {
+  // הימים. נקבע (דרישה עסקית 4): closed:true בכל הימים הוא חסימת-
+  // קביעה-אוטומטית מכוונת (מומחה שמתואם ידנית), לא "הטיפול לא ניתן"/"אין
+  // תורים" — הבוט לא קובע וגם לא אומר "לא מצאתי תור זמין", אלא דורס
+  // דטרמיניסטית להודעה שהבקשה הועברה לנציג לתיאום, ומסמן "ממתין לנציג" לצוות
+  it('tells the customer their request was handed off to a rep for manual coordination — never "no appointment"/"unavailable" — when every qualified doctor is closed', async () => {
     seedBaseline()
     fakeDb.tables.businesses[0].settings.services = [{ name: 'שיקום פה מלא', active: true, duration: '60' }]
     fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['שיקום פה מלא'], docB: ['שיקום פה מלא'] }
@@ -458,16 +460,57 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"שיקום הפה"}`
     })
     const json = await res.json()
 
-    expect(json.appointment?.ok).toBe(false)
-    expect(json.appointment?.error).toBe('no_doctor_available')
+    // אין קביעה אוטומטית בכלל — לא נשמר תור, ולא מוצג "כישלון" טכני
+    expect(json.appointment).toBeUndefined()
     expect(fakeDb.tables.appointments).toHaveLength(0)
 
     const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
-    expect(sendCall!.body.message).toContain('נציג')
+    expect(sendCall!.body.message).toContain('הועברה')
     expect(sendCall!.body.message).not.toContain('תקלה טכנית')
+    expect(sendCall!.body.message).not.toContain('לא מצאתי')
+    expect(sendCall!.body.message).not.toContain('לא זמין')
 
     const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
     expect(conv!.escalated_at).toBeTruthy()
+    // הליד נוצר לפני שסימנו escalated_at — לא כתיבה עצמאית שעלולה "להיעלם"
+    expect(conv!.lead_id).toBeTruthy()
+  })
+
+  // ─── דרישה עסקית 2 (ביקורת שלישית): לא מבטיחים "הועברה" בלי אימות ─────────
+  it('when the forced-handoff escalation write itself fails: never tells the customer the request was transferred — uses the honest unconfirmed wording instead', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'שיקום פה מלא', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['שיקום פה מלא'], docB: ['שיקום פה מלא'] }
+    fakeDb.tables.businesses[0].settings.employee_schedules = {
+      docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+      docB: [{ day: 'שלישי', open: '', close: '', closed: true }],
+    }
+    fakeDb.seed('profiles', [
+      { id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' },
+      { id: 'docB', full_name: 'ד"ר עלא יונס', business_id: 'biz1' },
+    ])
+    const tuesday = nextWeekday(2)
+    openaiReply = `בשמחה! קבענו לך תור לשיקום הפה ביום שלישי ה-${tuesday.split('-').reverse().join('.')} בשעה 12:00 😊
+LEAD:{"name":"דנה","reason":"שיקום הפה"}
+APPT:{"date":"${tuesday}","time":"12:00","service":"שיקום הפה"}`
+    // פוגע בדיוק בעדכון שמסמן escalated_at, לא בעדכונים אחרים של conversations
+    // (נעילת עיבוד, מגדר וכו') שקורים באותה ריצה
+    fakeDb.failNextWrite('conversations', 'update', { match: (p: any) => !!p && 'escalated_at' in p })
+
+    const res = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'רוצה תור לשיקום הפה',
+    })
+    const json = await res.json()
+
+    expect(json.appointment).toBeUndefined()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).not.toContain('הועברה') // לא הבטחה שקרית
+    expect(sendCall!.body.message).not.toContain('לא מצאתי')
+    expect(sendCall!.body.message).not.toContain('לא זמין')
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    // הכתיבה נכשלה — escalated_at לא בהכרח נשמר, ובוודאי שלא הובטח ללקוח
+    expect(conv!.escalated_at).toBeFalsy()
   })
 
   // קרה בפועל (יוסי, 19/08, שנית): המודל כתב ב-APPT.service את תחום
@@ -985,7 +1028,14 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
       expect(sendCall!.body.message).not.toContain('31.08.2026')
       expect(sendCall!.body.message).not.toContain('10:00')
-      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      // דרישה עסקית 4 (מאוחר יותר מהתיקון המקורי): ד"ר גבי סמל סגור/ה בכל
+      // הימים — closed:true הוא חסימת-קביעה-אוטומטית מכוונת (מומחה שמתואם
+      // ידנית), לא "אין תור זמין". התשובה עברה מ-NO_AVAILABILITY_MESSAGE
+      // הכללי להודעת handoff דטרמיניסטית ("מועבר לנציג לתיאום"), לא
+      // "לא מצאתי"/"לא זמין"
+      expect(sendCall!.body.message).not.toContain('לא מצאתי')
+      expect(sendCall!.body.message).not.toContain('לא זמין')
+      expect(sendCall!.body.message).toContain('הועברה')
       const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
       expect(conv!.escalated_at).toBeTruthy()
     })
@@ -1104,14 +1154,17 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       expect(conv!.escalated_at).toBeFalsy()
     })
 
-    // תרחיש I: אין זמינות אמיתית בכלל — לא ממציאים שעה, נשארים על מנגנון
-    // ההסלמה הקיים (אותו ניסוח קבוע, אותה תגית escalated_at)
-    it('I — no real availability found: falls back to the existing escalation message, no invented time', async () => {
+    // תרחיש I: אין זמינות אמיתית בכלל, אבל כן יש רופא/ה מוסמכ/ת עם לוח פתוח
+    // (busy, לא fully_blocked) — לא ממציאים שעה, נשארים על מנגנון ההסלמה
+    // הקיים (אותו ניסוח קבוע, אותה תגית escalated_at)
+    it('I — a qualified doctor exists with an open calendar but no real slot in the window: falls back to the existing escalation message, no invented time', async () => {
       seedBaseline()
       fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
       fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
       fakeDb.tables.businesses[0].settings.employee_schedules = {
-        docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+        // רביעי פתוח (לא fully_blocked) — אבל הלקוח שאל על שלישי, שבו
+        // הרופא/ה סגור/ה, ולכן אין slot אמיתי באותו יום ספציפי שנבדק
+        docA: [{ day: 'שלישי', open: '', close: '', closed: true }, { day: 'רביעי', open: '09:00', close: '17:00', closed: false }],
       }
       fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
       fakeDb.seed('messages', [
@@ -1128,6 +1181,37 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
 
       const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
       expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // דרישה עסקית 4: כשהרופא/ה המוסמכ/ת היחיד/ה סגור/ה בכל הימים (fully_blocked),
+    // לא מציגים שעות ולא אומרים "לא מצאתי תור זמין" — מעבירים לנציג לתיאום
+    it('fully_blocked doctor (closed every day) for the requested service: never shows hours, never says "no appointment found" — hands off to a rep instead', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+      }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה תור להלבנה ביום שלישי', sender_type: 'contact' },
+      ])
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+      })
+
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).not.toContain('לא נמצאה זמינות אמיתית')
+      expect(prompt).not.toContain('זמינות אמיתית ב-')
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('לא מצאתי')
+      expect(sendCall!.body.message).not.toContain('לא זמין')
+      expect(sendCall!.body.message).toContain('הועברה')
       const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
       expect(conv!.escalated_at).toBeTruthy()
     })
@@ -1173,15 +1257,26 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       expect(conv!.escalated_at).toBeFalsy()
     })
 
-    // 4. אין שום slot בכל טווח 14 הימים — מסלול ההסלמה הקיים, בלי המצאה
-    it('4 — no slot anywhere in the 14-day window: falls back to the existing escalation route, exactly as before', async () => {
+    // 4. אין שום slot בכל טווח 14 הימים, אבל הרופא/ה כן עובד/ת יום אחד
+    // בשבוע (busy, לא fully_blocked כי יש יום פתוח) — מסלול ההסלמה הקיים
+    it('4 — a qualified doctor with an open calendar has no slot anywhere in the 14-day window: falls back to the existing escalation route, exactly as before', async () => {
       seedBaseline()
       fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
       fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
-      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekClosed() }
+      // יום אחד פתוח (לא fully_blocked) — אבל כל השעות בו כבר תפוסות
+      // (appointments existing) כך שבפועל אין slot פנוי בכל 14 הימים
+      fakeDb.tables.businesses[0].settings.employee_schedules = {
+        docA: [{ day: 'ראשון', open: '09:00', close: '10:00', closed: false }],
+      }
       fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
       fakeDb.seed('messages', [
         { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני צריך השתלה', sender_type: 'contact' },
+      ])
+      const sunday1 = nextWeekday(0)
+      const sunday2 = nextWeekday(0, sunday1)
+      fakeDb.seed('appointments', [
+        { id: 'a1', business_id: 'biz1', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(sunday1, '09:00'), duration_minutes: 60 },
+        { id: 'a2', business_id: 'biz1', assigned_to: 'docA', status: 'scheduled', scheduled_at: israelDateTimeISO(sunday2, '09:00'), duration_minutes: 60 },
       ])
       openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"השתלות"}\nESCALATE:["אין זמינות"]'
 
@@ -1193,6 +1288,33 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
       expect(prompt).toContain('לא נמצאה זמינות אמיתית')
       const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
       expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.escalated_at).toBeTruthy()
+    })
+
+    // דרישה עסקית 4: fully_blocked (סגור/ה בכל 7 הימים) בזמינות כללית —
+    // לא מציגים "אין תור זמין", מעבירים לנציג לתיאום
+    it('fully_blocked doctor (closed every day) in a general-availability search: hands off to a rep, never shows/claims no availability in the usual wording', async () => {
+      seedBaseline()
+      fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+      fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+      fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekClosed() }
+      fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+      fakeDb.seed('messages', [
+        { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני צריך השתלה', sender_type: 'contact' },
+      ])
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.'
+
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+      })
+
+      const prompt = openaiCalls[0]?.systemPrompt || ''
+      expect(prompt).not.toContain('לא נמצאה זמינות אמיתית')
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).not.toContain('לא מצאתי')
+      expect(sendCall!.body.message).not.toContain('לא זמין')
+      expect(sendCall!.body.message).toContain('הועברה')
       const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
       expect(conv!.escalated_at).toBeTruthy()
     })
@@ -1353,17 +1475,21 @@ APPT:{"date":"${tuesday}","time":"12:00","service":"בדיקה כללית לא �
     })
 
     // 5. computedSlots ריק — ההתנהגות הקיימת נשמרת בדיוק
-    it('5 — no real slots anywhere: keeps the existing NO_AVAILABILITY_MESSAGE + escalation, unchanged', async () => {
+    // דרישה עסקית 4: fully_blocked (allWeekClosed) — לא "אין תור זמין",
+    // מעבירים לנציג לתיאום (ראה גם התיאור המלא ב-getServiceDoctorAvailabilityStatus)
+    it('5 — fully_blocked doctor (closed every day): hands off to a rep, never claims "no availability" in the usual wording', async () => {
       seedGeneralInquiry()
       fakeDb.tables.businesses[0].settings.employee_schedules = { docA: allWeekClosed() }
-      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.\nLEAD:{"reason":"השתלות"}\nESCALATE:["אין זמינות"]'
+      openaiReply = 'לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.'
 
       await callAiRespond({
         conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
       })
 
       const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
-      expect(sendCall!.body.message).toBe('לצערי לא מצאתי תור זמין 🙏 אני מעביר את הבקשה לנציג שיחזור אליך בהקדם.')
+      expect(sendCall!.body.message).not.toContain('לא מצאתי')
+      expect(sendCall!.body.message).not.toContain('לא זמין')
+      expect(sendCall!.body.message).toContain('הועברה')
       const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
       expect(conv!.escalated_at).toBeTruthy()
     })
@@ -1856,5 +1982,435 @@ describe('ai-respond POST — follow-up processing for messages that arrive mid-
 
     // הנעילה תמיד משוחררת לגמרי בסיום — גם אחרי לולאת follow-up
     expect(fakeDb.tables.conversations[0].ai_processing_started_at).toBeNull()
+  })
+})
+
+// ─── חזרה מאוחרת יותר (REMIND) — אכיפה קשיחה בקוד, דו-שלבית ─────────────────
+// (דרישה עסקית 3): לא רק "הבטחה" של המודל — עצירה מלאה של בירור
+// טיפול/הצעת תור בקוד, גם דרך שתי הודעות נפרדות (יום בלי שעה בהודעה 1,
+// שעה בלי מילת-טריגר בהודעה 2)
+describe('later-callback request (REMIND) — code-enforced, two-turn regression', () => {
+  it('turn 1: asks only for the missing day/time, never calls the model, never offers an appointment', async () => {
+    seedBaseline()
+    const res = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מאוחר יותר בבקשה',
+    })
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+
+    // לא נקראה בכלל למודל — עצירה מלאה, לא רק ניסוח שונה שלו
+    expect(openaiCalls.length).toBe(0)
+
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('יום')
+    expect(sendCall!.body.message).toContain('שעה')
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.pending_callback_active).toBe(true)
+  })
+
+  it('turn 2 (separate message, no trigger words at all): a bare day+time completes the callback request, saves next_followup, and still never calls the model', async () => {
+    seedBaseline()
+    // הודעה 1: מפעילה את מצב ההמתנה, בלי יום/שעה
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מאוחר יותר בבקשה',
+    })
+    expect(fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')!.pending_callback_active).toBe(true)
+
+    // מדמה שהודעה 2 הגיעה יותר משנייה בודדת ה-rate-limit של 5 שניות (לא
+    // חלק מהתכונה הנבדקת כאן — שתי הודעות אמיתיות בוואטסאפ כמעט אף פעם לא
+    // מגיעות תוך פחות מ-5 שניות; בלי זה, הבדיקה עצמה הייתה נחסמת ע"י
+    // ה-rate-limit הקיים, לא ע"י שום דבר קשור ל-REMIND)
+    for (const m of fakeDb.tables.messages) {
+      if (m.direction === 'outbound') m.created_at = new Date(Date.now() - 10000).toISOString()
+    }
+
+    // הודעה 2: "מחר ב-14:00" — בלי שום מילת-טריגר, אבל ה-state עדיין ממתין
+    const res2 = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מחר ב-14:00',
+    })
+    const json2 = await res2.json()
+    expect(json2.ok).toBe(true)
+    expect(openaiCalls.length).toBe(0) // גם בהודעה השנייה — עדיין לא נקרא למודל בכלל
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.pending_callback_active).toBe(false)
+    expect(conv!.lead_id).toBeTruthy() // נוצר ליד כדי שהכתיבה ל-next_followup לא תיכשל בשקט
+
+    const lead = fakeDb.tables.leads.find((l: any) => l.id === conv!.lead_id)
+    expect(lead!.next_followup).toBeTruthy()
+
+    const sendCall = sentMessages.filter(m => m.url.includes('sendMessage'))[1]
+    expect(sendCall!.body.message).toContain('נחזור אליך')
+  })
+
+  it('a single message that already contains both day and time (no separate trigger phrase needed after) still saves next_followup directly and skips the model', async () => {
+    seedBaseline()
+    const res = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מחר ב-14:00',
+    })
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    expect(openaiCalls.length).toBe(0)
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.pending_callback_active).toBe(false)
+    const lead = fakeDb.tables.leads.find((l: any) => l.id === conv!.lead_id)
+    expect(lead!.next_followup).toBeTruthy()
+  })
+
+  // דרישה עסקית 3 (ביקורת אחרונה): "אני אחזור אליכם" הוא הכיוון ההפוך —
+  // לא בקשה שנחזור אליו/ה. לא נכנסים לכל מנגנון ה-REMIND בכלל, וממשיכים
+  // בירור/מענה רגיל (קריאה למודל כרגיל)
+  it('"אני אחזור אליכם" (customer will contact us) does not trigger the callback flow at all — the model is still called normally', async () => {
+    seedBaseline()
+    openaiReply = 'בסדר גמור, נשמח לשמוע ממך 😊'
+    const res = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'בסדר, אני אחזור אליכם מאוחר יותר',
+    })
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    expect(openaiCalls.length).toBe(1) // המודל כן נקרא — זו לא בקשת REMIND
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.pending_callback_active).toBeFalsy()
+  })
+
+  // דרישה עסקית 3: זמן בעבר — לא נשמר next_followup בעבר, ממשיכים לשאול
+  it('a callback time that has already passed today is rejected — asks again instead of saving a past reminder', async () => {
+    seedBaseline()
+    // "היום ב-00:01" יהיה כמעט תמיד בעבר בזמן שהבדיקה רצה בפועל (היום
+    // עצמו, אבל שעה שכבר עברה כמעט תמיד) — משתמשים בזמן קבוע במקום כדי
+    // שהבדיקה תהיה דטרמיניסטית בכל שעה שהיא רצה בפועל
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-06T10:00:00.000Z')) // שלישי, 12:00 בישראל
+    try {
+      const res = await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי היום ב-09:00',
+      })
+      const json = await res.json()
+      expect(json.ok).toBe(true)
+      expect(openaiCalls.length).toBe(0)
+
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      // לא סוגרים את הבקשה עם זמן שכבר עבר — ממשיכים לבקש יום/שעה
+      expect(conv!.pending_callback_active).toBe(true)
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('יום')
+      expect(sendCall!.body.message).toContain('שעה')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // דרישה עסקית 3 (ביקורת שנייה): "פחות משעה בעבר" אסור להתקבל רק בגלל
+  // שזה פחות משעה — סובלנות טכנית מינימלית בלבד (60 שניות), לא "חלון חסד"
+  // של שעה. 30 דקות בעבר היו מתקבלות (בטעות) תחת הסובלנות הישנה של שעה —
+  // הבדיקה הזו נכשלת אם מישהו יחזיר בטעות את חלון השעה
+  it('a callback time only 30 minutes in the past is still rejected — no next_followup saved, keeps asking, never guesses a future time on its own', async () => {
+    seedBaseline()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-06T10:00:00.000Z')) // שלישי, 12:00 בישראל
+    try {
+      const res = await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי היום ב-11:30',
+      })
+      const json = await res.json()
+      expect(json.ok).toBe(true)
+      expect(openaiCalls.length).toBe(0)
+
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv!.pending_callback_active).toBe(true)
+      // לא ניחשנו מועד עתידי חלופי (למשל "מחר") — פשוט חוזרים לשאול
+      const lead = fakeDb.tables.leads.find((l: any) => l.id === conv!.lead_id)
+      expect(lead?.next_followup).toBeFalsy()
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      expect(sendCall!.body.message).toContain('יום')
+      expect(sendCall!.body.message).toContain('שעה')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // דרישה עסקית 3: שעה/יום מעורפלים ("מתישהו") — לא נחשב פתרון, ממשיכים לשאול
+  it('a vague, unparseable time ("מתישהו") is treated as still missing — keeps asking, never guesses', async () => {
+    seedBaseline()
+    const res = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מתישהו',
+    })
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    expect(openaiCalls.length).toBe(0)
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.pending_callback_active).toBe(true)
+    expect(conv!.pending_callback_date).toBeFalsy()
+    expect(conv!.pending_callback_time).toBeFalsy()
+  })
+
+  // דרישה עסקית 3: ביטול תוך כדי המתנה — לא ממשיכים לשאול יום/שעה
+  it('cancelling mid-wait ("לא משנה, אני אחזור אליכם") clears the pending state without asking for a day/time again', async () => {
+    seedBaseline()
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מאוחר יותר',
+    })
+    expect(fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')!.pending_callback_active).toBe(true)
+
+    for (const m of fakeDb.tables.messages) {
+      if (m.direction === 'outbound') m.created_at = new Date(Date.now() - 10000).toISOString()
+    }
+
+    const res2 = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'לא משנה, אני אחזור אליכם',
+    })
+    const json2 = await res2.json()
+    expect(json2.ok).toBe(true)
+    expect(openaiCalls.length).toBe(0)
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.pending_callback_active).toBe(false)
+    expect(conv!.pending_callback_date).toBeFalsy()
+    expect(conv!.pending_callback_time).toBeFalsy()
+    // ביטול לא יוצר next_followup — לא "מנחשים" תזכורת שהלקוח בעצם ויתר עליה
+    const lead = fakeDb.tables.leads.find((l: any) => l.id === conv!.lead_id)
+    expect(lead?.next_followup).toBeFalsy()
+
+    const sendCall = sentMessages.filter(m => m.url.includes('sendMessage'))[1]
+    expect(sendCall!.body.message).not.toContain('יום')
+    expect(sendCall!.body.message).not.toContain('שעה')
+  })
+
+  // דרישה עסקית 2 (ביקורת אחרונה): המסלול הדטרמיניסטי עובר דרך אותה ליבת
+  // שליחה/שמירה כמו התשובה הרגילה — כולל ניקוי תזכורת שכבר בשלה
+  it('the deterministic callback path also clears an already-due reminder, exactly like the normal send pipeline', async () => {
+    seedBaseline()
+    fakeDb.seed('leads', [{ id: 'lead1', business_id: 'biz1', phone: '972500000000', name: 'לקוח', next_followup: new Date(Date.now() - 60000).toISOString() }])
+    fakeDb.tables.conversations[0].lead_id = 'lead1'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מאוחר יותר',
+    })
+
+    const lead = fakeDb.tables.leads.find((l: any) => l.id === 'lead1')
+    expect(lead!.next_followup).toBeNull()
+  })
+
+  // ─── דרישה עסקית 1 (ביקורת שלישית): אימות שמירה אמיתי, לא "ירינו וזהו" ────
+  describe('callback reminder persistence is verified, not assumed', () => {
+    it('when the leads.next_followup update itself fails: does not tell the customer it was scheduled, keeps pending_callback_active so a retry can succeed later', async () => {
+      seedBaseline()
+      fakeDb.failNextWrite('leads', 'update')
+
+      const res = await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מחר ב-14:00',
+      })
+      const json = await res.json()
+      expect(json.ok).toBe(true)
+      expect(openaiCalls.length).toBe(0)
+
+      const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      // ה-state נשאר "ממתין" (בר-ניסיון-חוזר), לא נמחק כאילו הצליח
+      expect(conv!.pending_callback_active).toBe(true)
+      expect(conv!.pending_callback_date).toBeTruthy()
+      expect(conv!.pending_callback_time).toBeTruthy()
+
+      const lead = fakeDb.tables.leads.find((l: any) => l.id === conv!.lead_id)
+      expect(lead?.next_followup).toBeFalsy()
+
+      const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+      // לא הבטחה שקרית — לא "נקבע"/"הועברה" בלי אימות אמיתי
+      expect(sendCall!.body.message).not.toContain('נחזור אליך ב')
+    })
+
+    it('when the read-back verification query itself fails (cannot confirm what was actually saved): does not tell the customer it was scheduled', async () => {
+      seedBaseline()
+      await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מאוחר יותר',
+      })
+      const conv1 = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv1!.pending_callback_active).toBe(true) // עוד אין יום/שעה
+
+      // הכתיבה עצמה (leads.update) מצליחה, אבל שאילתת האימות-בחזרה
+      // (leads.select) נכשלת — לא ניתן לוודא שהערך שבאמת נשמר תואם למה
+      // שביקשנו, אז לא מאשרים ללקוח למרות שהכתיבה "עברה" ברמת ה-API
+      fakeDb.failNextWrite('leads', 'select')
+      for (const m of fakeDb.tables.messages) {
+        if (m.direction === 'outbound') m.created_at = new Date(Date.now() - 10000).toISOString()
+      }
+      const res2 = await callAiRespond({
+        conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מחר ב-14:00',
+      })
+      const json2 = await res2.json()
+      expect(json2.ok).toBe(true)
+
+      const conv2 = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+      expect(conv2!.pending_callback_active).toBe(true)
+      const sendCall = sentMessages.filter(m => m.url.includes('sendMessage'))[1]
+      expect(sendCall!.body.message).not.toContain('נחזור אליך ב')
+    })
+  })
+
+  // ⚠️ הבדיקה הזו בודקת rate-limiting, לא idempotency אמיתית — הן לא אותו
+  // דבר (ביקורת קוד): rate-limit חוסם רק קריאות קרובות בזמן;
+  // מניעת עיבוד כפול אמיתי של אותה הודעת וואטסאפ (whatsapp_message_id)
+  // קורית **לפני** ai-respond בכלל, בשכבת ה-ingest (whatsappIngest.ts:56-62,
+  // מגובה גם באילוץ ייחודי ב-DB — supabase/messages_dedup_migration.sql) —
+  // כבר יש לזה בדיקה אמיתית קיימת: webhook/route.test.ts:103 ("does not
+  // process the same whatsapp message twice (unique-constraint dedup) and
+  // does not trigger ai-respond again"), שמאמתת שהודעה עם whatsapp_message_id
+  // שכבר קיים לא נוצרת פעמיים ושה-webhook לא מפעיל את הבוט שוב — גם מחוץ
+  // לחלון rate-limit (זה בכלל שכבה נפרדת, לא תלוי בזמן). זו הבדיקה כאן
+  // ממשיכה לבדוק rate-limiting בלבד, בשמה הנכון
+  it('rate limiting (not the same as idempotency): a second ai-respond call within the 5-second window is skipped, not a duplicate reminder/message', async () => {
+    seedBaseline()
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מחר ב-14:00',
+    })
+    const sentCountAfterFirst = sentMessages.filter(m => m.url.includes('sendMessage')).length
+    const conv1 = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    const leadIdAfterFirst = conv1!.lead_id
+    const nextFollowupAfterFirst = fakeDb.tables.leads.find((l: any) => l.id === leadIdAfterFirst)?.next_followup
+
+    // אותו webhook "מגיע שוב" תוך כדי חלון ה-rate-limit (5 שניות) —
+    // לא מזיזים את השעון בין הקריאות, בדיוק כמו webhook כפול אמיתי
+    const res2 = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'תחזרו אלי מחר ב-14:00',
+    })
+    const json2 = await res2.json()
+    expect(json2.skipped).toBe('rate_limited')
+
+    expect(sentMessages.filter(m => m.url.includes('sendMessage')).length).toBe(sentCountAfterFirst)
+    const nextFollowupAfterSecond = fakeDb.tables.leads.find((l: any) => l.id === leadIdAfterFirst)?.next_followup
+    expect(nextFollowupAfterSecond).toBe(nextFollowupAfterFirst)
+  })
+})
+
+// ─── no_match — no clear service→doctor mapping ─────────────────────────────
+// (דרישה עסקית 6): אם אין התאמה ודאית — לא מנחשים, לא מציעים תור,
+// מעבירים לבדיקה אנושית. שונה מ-fully_blocked (שם יש שיוך ודאי, רק אין
+// יומן פתוח) — כאן אין שום שיוך ודאי לשירות המבוקש בכלל
+describe('no_match — a known service the business defined, with a doctor↔service mapping configured, but no doctor mapped to this specific service', () => {
+  it('never guesses/offers an appointment for an availability inquiry — hands off to a rep instead', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'יישור שיניים', active: true, duration: '60' }]
+    // יש שיוך שירותים מוגדר בעסק, אבל לא לשירות הזה בכלל
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+    fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה יישור שיניים', sender_type: 'contact' },
+    ])
+    openaiReply = 'בטח, יש לנו כמה אפשרויות פנויות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+    })
+
+    const prompt = openaiCalls[0]?.systemPrompt || ''
+    expect(prompt).not.toContain('התורים הפנויים הקרובים ביותר')
+
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).not.toContain('לא מצאתי')
+    expect(sendCall!.body.message).not.toContain('לא זמין')
+    expect(sendCall!.body.message).toContain('הועברה')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+    expect(fakeDb.tables.appointments).toHaveLength(0)
+  })
+})
+
+// ─── שיוך שירות-רופא: קביעה אוטומטית רק עם התאמה מלאה בשלושה תנאים ──────────
+// (דרישה עסקית 5): שירות ברשימת השירותים הפעילה + שיוך ודאי
+// ב-employee_responsibilities + לוח פתוח ב-employee_schedules — ורק אז
+describe('auto-offer requires the full three-way match (service in services + mapped in employee_responsibilities + verified open schedule)', () => {
+  it('offers real hours normally when all three conditions hold', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+    fakeDb.tables.businesses[0].settings.employee_schedules = {
+      docA: [{ day: 'שלישי', open: '10:00', close: '16:00', closed: false }],
+    }
+    fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה הלבנה ביום שלישי', sender_type: 'contact' },
+    ])
+    openaiReply = 'בטח, יש לנו כמה אפשרויות פנויות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+    })
+
+    const prompt = openaiCalls[0]?.systemPrompt || ''
+    expect(prompt).toContain('זמינות אמיתית ב-')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeFalsy()
+  })
+})
+
+// ─── strict_service_doctor_booking — הגדרה per-עסק, ברירת מחדל false ────────
+// (דרישה עסקית, ביקורת קוד): מערכת multi-tenant — בלי הדגל, שום
+// עסק לא מקבל שינוי התנהגות. עם הדגל (למשל שקד קליניק), unverified
+// (empResponsibilities/employee_schedules חסרים) מעביר לנציג בדיוק כמו
+// no_match/fully_blocked, לא רק אלה
+describe('strict_service_doctor_booking business setting', () => {
+  it('default (flag not set): an unverified service (no employee_responsibilities configured at all) is treated like has_calendar — no forced handoff, exactly like before this setting existed', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+    // אין employee_responsibilities בכלל — לא מוגדר strict_service_doctor_booking
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה הלבנה', sender_type: 'contact' },
+    ])
+    openaiReply = 'בטח, יש לנו כמה אפשרויות פנויות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+    })
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeFalsy()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).not.toContain('נציג המרפאה, שיחזור')
+  })
+
+  it('strict_service_doctor_booking=true: the same unverified case now hands off to a rep instead of proceeding', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.strict_service_doctor_booking = true
+    // עדיין אין employee_responsibilities בכלל — unverified
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה הלבנה', sender_type: 'contact' },
+    ])
+    openaiReply = 'בטח, יש לנו כמה אפשרויות פנויות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש לכם?',
+    })
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    expect(sendCall!.body.message).not.toContain('לא מצאתי')
+  })
+
+  it('strict_service_doctor_booking=true does not affect a fully-verified has_calendar case — still offers real hours normally', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'הלבנה', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.strict_service_doctor_booking = true
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['הלבנה'] }
+    fakeDb.tables.businesses[0].settings.employee_schedules = {
+      docA: [{ day: 'שלישי', open: '10:00', close: '16:00', closed: false }],
+    }
+    fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה הלבנה ביום שלישי', sender_type: 'contact' },
+    ])
+    openaiReply = 'בטח, יש לנו כמה אפשרויות פנויות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי פנוי?',
+    })
+
+    const prompt = openaiCalls[0]?.systemPrompt || ''
+    expect(prompt).toContain('זמינות אמיתית ב-')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeFalsy()
   })
 })

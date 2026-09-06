@@ -4,7 +4,7 @@ import {
   saveOrRescheduleBotAppointment, type WorkingDay,
   resolveRelativeDayOffset, findRelativeDayOffsetInHistory, israelDateISOOffset,
   looksLikeSchedulingReply, extractOfferedDateTime, hasQualifiedDoctorOnDate, findAvailableDoctorForExactSlot,
-  findAvailableSlots, findNextAvailableSlots, israelWeekday,
+  findAvailableSlots, findNextAvailableSlots, israelWeekday, getServiceDoctorAvailabilityStatus,
 } from './botAppointments'
 
 describe('normalizeApptDate', () => {
@@ -391,35 +391,38 @@ describe('findAvailableSlots — real available time slots for a given day (FIND
   })
 
   // F. employee_min_lead_hours — שעות מוקדמות מדי לא מוחזרות
+  // (ביקורת קוד: predeploy ירוק): הבדיקה המקורית חישבה "עכשיו+2 שעות"
+  // מול Date.now() אמיתי, בלי לקבע שעון — קרוב לחצות בישראל, closeHour
+  // (`Math.min(23, sh+4)`) התכווץ לאותה שעה כמו openHour (חלון 23:00-23:00,
+  // בפועל סגור), והבדיקה "unblocked" נכשלה. תוקן ע"י קיבוע שעון ישראל
+  // ל-14:00 (אמצע יום, בלי סיכון גלישת חצות) — דטרמיניסטי בכל שעה שהבדיקה
+  // רצה בפועל. לא נגעתי בלוגיקת הזמינות עצמה, רק בקיבוע הזמן בבדיקה
   it('F — excludes slots that are too soon for a doctor who requires minimum lead time', async () => {
-    // יום/שעות שכולם קרובים מדי ל"עכשיו" (2-4 שעות קדימה) מול דרישה של 24 שעות
-    function israelParts(d: Date): { date: string; time: string } {
-      const fmt = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-      }).formatToParts(d)
-      const get = (t: string) => fmt.find(p => p.type === t)?.value || ''
-      return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}` }
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-01-06T10:00:00.000Z')) // שלישי, 12:00 בישראל (חורף, +2)
+      // "עכשיו + 2 שעות" = 14:00 בישראל, אותו יום — קרוב מדי מול דרישה
+      // של 24 שעות מראש, אבל בבירור בעתיד (לא קרוב לחצות בטעות)
+      const soon = { date: '2026-01-06', time: '14:00' }
+      const day = israelWeekday(new Date(`${soon.date}T12:00:00Z`))
+      const sb = mockSb()
+
+      const blocked = await findAvailableSlots(
+        sb, 'biz1', soon.date, 'הלבנה',
+        { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: '14:00', close: '18:00', closed: false }] },
+        { [DOC_A]: 24 }, 60
+      )
+      expect(blocked).toEqual([])
+
+      const unblocked = await findAvailableSlots(
+        sb, 'biz1', soon.date, 'הלבנה',
+        { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: '14:00', close: '18:00', closed: false }] },
+        {}, 60
+      )
+      expect(unblocked.length).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
     }
-    const soon = israelParts(new Date(Date.now() + 2 * 3600000))
-    const day = israelWeekday(new Date(`${soon.date}T12:00:00Z`))
-    const [sh] = soon.time.split(':').map(Number)
-    const openHour = String(Math.max(0, sh)).padStart(2, '0')
-    const closeHour = String(Math.min(23, sh + 4)).padStart(2, '0')
-    const sb = mockSb()
-
-    const blocked = await findAvailableSlots(
-      sb, 'biz1', soon.date, 'הלבנה',
-      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: `${openHour}:00`, close: `${closeHour}:00`, closed: false }] },
-      { [DOC_A]: 24 }, 60
-    )
-    expect(blocked).toEqual([])
-
-    const unblocked = await findAvailableSlots(
-      sb, 'biz1', soon.date, 'הלבנה',
-      { [DOC_A]: ['הלבנה'] }, { [DOC_A]: [{ day, open: `${openHour}:00`, close: `${closeHour}:00`, closed: false }] },
-      {}, 60
-    )
-    expect(unblocked.length).toBeGreaterThan(0)
   })
 
   it('fails closed (returns no slots) when the service is unknown', async () => {
@@ -1230,5 +1233,204 @@ describe('meetsMinLeadTime propagation — no past slot survives through any of 
     expect(r.ok).toBe(false)
     expect(r.error).toBe('no_doctor_available')
     expect(sb.state.lastAssignedTo).toBeFalsy()
+  })
+})
+
+// ─── saveOrRescheduleBotAppointment — strictServiceDoctorBooking ────────────
+// (דרישה עסקית, strict mode): ברירת מחדל false/undefined = בדיוק
+// ההתנהגות הקיימת, ללא שינוי — כל הבדיקות למעלה (בלי strict) ממשיכות
+// לעבור בדיוק כמו קודם. true מהדק: קביעה אוטומטית מתאפשרת רק עם רופא/ה
+// עם יומן פתוח מאומת בפועל
+describe('saveOrRescheduleBotAppointment — strictServiceDoctorBooking (opt-in, default false = no behavior change)', () => {
+  const DOC_A = 'doc-a'
+
+  function nextWeekday(target: number, baseISO?: string): string {
+    const base = baseISO
+      ? new Date(`${baseISO}T12:00:00Z`)
+      : (() => {
+          const now = new Date()
+          return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12))
+        })()
+    const offset = ((target - base.getUTCDay() + 7) % 7) || 7
+    return new Date(base.getTime() + offset * 86400000).toISOString().slice(0, 10)
+  }
+
+  it('allows booking normally (backward compatible) when strictServiceDoctorBooking is not set, even with no doctor mapping at all', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'בדיקה',
+      empResponsibilities: {}, // אין שום שיוך שירותים בעסק
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBeFalsy() // נשמר בלי רופא/ה משויכ/ת, בדיוק כמו קודם
+  })
+
+  it('blocks booking when strict and there is no doctor↔service mapping at all for the business (unverified)', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'בדיקה',
+      empResponsibilities: {},
+      strictServiceDoctorBooking: true,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+  })
+
+  it('blocks booking when strict and the service is known but no doctor is mapped to it (no_match)', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'הלבנה',
+      empResponsibilities: { [DOC_A]: ['השתלות'] },
+      strictServiceDoctorBooking: true,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+  })
+
+  it('blocks booking when strict and the mapped doctor has no employee_schedules defined at all (unverified — cannot confirm an open calendar)', async () => {
+    const tuesday = nextWeekday(2)
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['השתלות'] },
+      employeeSchedules: {},
+      strictServiceDoctorBooking: true,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('no_doctor_available')
+  })
+
+  it('allows booking when strict and the mapped doctor has a verified, open schedule (has_calendar)', async () => {
+    const tuesday = nextWeekday(2)
+    const day = 'שלישי'
+    const sb = mockSb()
+    const r = await saveOrRescheduleBotAppointment(sb, {
+      ...baseParams, date: tuesday, time: '12:00', service: 'השתלות',
+      empResponsibilities: { [DOC_A]: ['השתלות'] },
+      employeeSchedules: { [DOC_A]: [{ day, open: '09:00', close: '17:00', closed: false }] },
+      strictServiceDoctorBooking: true,
+    })
+    expect(r.ok).toBe(true)
+    expect(sb.state.lastAssignedTo).toBe(DOC_A)
+  })
+})
+
+// ─── getServiceDoctorAvailabilityStatus — דרישה עסקית 4/5/6 ─────────────────
+// closed:true הוא חסימת-קביעה-אוטומטית מכוונת (מומחה שמתואם ידנית), לא
+// "הטיפול לא ניתן"/"אין תורים בכלל" — והיעדר שיוך ודאי בין שירות לרופא/ה
+// אסור לנחש, מעבירים לבדיקה אנושית. ארבע תוצאות אפשריות: no_match/
+// unverified/fully_blocked/has_calendar — ר' ההערה המלאה מעל ההגדרה עצמה
+describe('getServiceDoctorAvailabilityStatus', () => {
+  it('1 — no_match when no service is known at all', () => {
+    expect(getServiceDoctorAvailabilityStatus(null, { docA: ['הלבנה'] }, {})).toBe('no_match')
+  })
+
+  // (ביקורת קוד): unverified, לא has_calendar — "אין מידע לחסום
+  // לפיו" הוא לא אותו דבר כמו "וידאתי שיש יומן פתוח". route.ts מטפל
+  // ב-unverified בפועל בדיוק כמו has_calendar כברירת מחדל (permissive,
+  // אותה התנהגות בדיוק כמו לפני התיקון — ר' shouldForceHandoff), אלא אם
+  // business.settings.strict_service_doctor_booking===true
+  it('2 — unverified (not has_calendar!) when there is no doctor-service mapping defined for the business at all — no data exists to verify against', () => {
+    expect(getServiceDoctorAvailabilityStatus('הלבנה', {}, {})).toBe('unverified')
+  })
+
+  it('3 — no_match when the service is known but no doctor is mapped to it (no guessing, escalate)', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    expect(getServiceDoctorAvailabilityStatus('הלבנה', empResponsibilities, { docA: [] })).toBe('no_match')
+  })
+
+  it('4 — fully_blocked when the mapped doctor exists but has zero open days (closed:true every day — a specialist coordinated manually, not "unavailable")', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = {
+      docA: [
+        { day: 'ראשון', open: '', close: '', closed: true },
+        { day: 'שני', open: '', close: '', closed: true },
+      ],
+    }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('fully_blocked')
+  })
+
+  it('5 — has_calendar when at least one mapped doctor has at least one open day', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = {
+      docA: [
+        { day: 'ראשון', open: '', close: '', closed: true },
+        { day: 'שני', open: '09:00', close: '17:00', closed: false },
+      ],
+    }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('has_calendar')
+  })
+
+  // (ביקורת קוד): unverified, לא has_calendar — יש שיוך שירות-רופא,
+  // אבל אין שום דרך לאמת שהיומן באמת פתוח (אין employee_schedules בכלל)
+  it('6 — unverified (not has_calendar!) when the doctor is mapped but has no schedule defined at all — cannot verify an open calendar', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, {})).toBe('unverified')
+  })
+
+  it('8 — unverified takes priority over fully_blocked when doctors are mixed: at least one qualified doctor has no schedule at all, and none of the ones with a schedule are open', () => {
+    const empResponsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+    const employeeSchedules = {
+      docA: [{ day: 'ראשון', open: '', close: '', closed: true }], // יש לוח, סגור לגמרי
+      // docB: אין לו/ה שום employee_schedules בכלל
+    }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('unverified')
+  })
+
+  it('9 — has_calendar takes priority over unverified when at least one qualified doctor is verified open, even if another has no schedule at all', () => {
+    const empResponsibilities = { docA: ['השתלות'], docB: ['השתלות'] }
+    const employeeSchedules = {
+      docA: [{ day: 'ראשון', open: '09:00', close: '17:00', closed: false }], // מאומת פתוח
+      // docB: אין לו/ה שום employee_schedules בכלל
+    }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('has_calendar')
+  })
+
+  it('7 — a known treatment alias (סתימה) still resolves against the configured category name (טיפולים משמרים), matching the existing SERVICE_SYNONYM_GROUPS behavior — not a raw string match', () => {
+    // matchServiceReason/resolveActiveService already fold "סתימה"/"עקירה" into
+    // the formal category "טיפולים משמרים" before this function ever runs —
+    // this test locks in that the resolved category is what must be passed in,
+    // and that it correctly finds the doctor mapped to that formal category
+    const empResponsibilities = { docA: ['טיפולים משמרים'] }
+    const employeeSchedules = { docA: [{ day: 'ראשון', open: '09:00', close: '17:00', closed: false }] }
+    expect(getServiceDoctorAvailabilityStatus('טיפולים משמרים', empResponsibilities, employeeSchedules)).toBe('has_calendar')
+  })
+
+  // (ביקורת קוד): closed:false לבד לא מספיק — שורה עם שעות חסרות/פסולות
+  // אינה הוכחה אמיתית ל"יומן פתוח". unverified, לא has_calendar
+  it('10 — unverified (not has_calendar!) when the only non-closed row is missing valid open/close times', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = { docA: [{ day: 'ראשון', open: '', close: '', closed: false }] }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('unverified')
+  })
+
+  it('11 — unverified (not has_calendar!) when the only non-closed row has an invalid day name', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = { docA: [{ day: 'יום-לא-קיים', open: '09:00', close: '17:00', closed: false }] }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('unverified')
+  })
+
+  it('12 — unverified (not has_calendar!) when the only non-closed row has close <= open (invalid range)', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = { docA: [{ day: 'ראשון', open: '17:00', close: '09:00', closed: false }] }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('unverified')
+  })
+
+  it('13 — fully_blocked is unaffected: an explicitly closed:true row is never reclassified as unverified just because it also lacks open/close times', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = { docA: [{ day: 'ראשון', open: '', close: '', closed: true }] }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('fully_blocked')
+  })
+
+  it('14 — has_calendar still wins when one row is malformed (unverified-leaning) but another row for the same doctor is genuinely verified open', () => {
+    const empResponsibilities = { docA: ['השתלות'] }
+    const employeeSchedules = { docA: [
+      { day: 'ראשון', open: '', close: '', closed: false }, // פגום, לא נחשב הוכחה לסגור או לפתוח
+      { day: 'שני', open: '09:00', close: '17:00', closed: false }, // מאומת פתוח
+    ] }
+    expect(getServiceDoctorAvailabilityStatus('השתלות', empResponsibilities, employeeSchedules)).toBe('has_calendar')
   })
 })

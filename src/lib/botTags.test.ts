@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, resolveActiveServiceAnchor } from './botTags'
+import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, resolveActiveServiceAnchor, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse } from './botTags'
 
 describe('parseBotTags', () => {
   it('parses a full response with all four tags and strips them from the visible text', () => {
@@ -275,6 +275,15 @@ describe('matchServiceReason — constrains free-text reasons to the business\'s
   it('recognizes common colloquial synonyms even without literal substring overlap', () => {
     expect(matchServiceReason('יישור שיניים', SERVICES)).toBe('אורתודנטיה')
     expect(matchServiceReason('רוצה לעשות שתלים', SERVICES)).toBe('השתלות')
+  })
+
+  // דרישה עסקית (שיוך שירות-רופא): טיפול מוכר כמו סתימה/עקירה חייב עדיין
+  // להשתייך לקטגוריה המוגדרת "טיפולים משמרים" — לא ליפול ל"אחר" ולהישאר
+  // בלי שיוך רופא/ה, גם שהמילה עצמה לא מופיעה בשם הקטגוריה הפורמלי
+  it('maps known treatment aliases (סתימה/עקירה) to the configured category "טיפולים משמרים"', () => {
+    const services = [{ name: 'טיפולים משמרים' }]
+    expect(matchServiceReason('יש לי סתימה שנפלה', services)).toBe('טיפולים משמרים')
+    expect(matchServiceReason('אני צריך עקירה', services)).toBe('טיפולים משמרים')
   })
 
   // קרה בפועל (יוסי, 19/08): "שיקום הפה" (עם ה' הידיעה) לא תאם מילולית
@@ -604,5 +613,103 @@ describe('buildSafeExactSlotResponse — deterministic single-slot response, bui
     const msg = buildSafeExactSlotResponse('2026-09-02', '14:00', null)
     expect(msg).toContain('יום רביעי, 02.09, בשעה 14:00')
     expect(msg).not.toContain('אצל ')
+  })
+})
+
+// ─── looksLikeLaterCallbackRequest / buildCallback* — דרישה עסקית 3 ─────────
+describe('looksLikeLaterCallbackRequest — code-level detection, not dependent on the model writing REMIND', () => {
+  it('detects common later-callback phrasings', () => {
+    expect(looksLikeLaterCallbackRequest('תחזרו אלי מאוחר יותר בבקשה')).toBe(true)
+    expect(looksLikeLaterCallbackRequest('אני בפגישה כרגע')).toBe(true)
+    expect(looksLikeLaterCallbackRequest('נדבר בשבוע הבא')).toBe(true)
+  })
+  it('does not trigger on an unrelated message', () => {
+    expect(looksLikeLaterCallbackRequest('אני רוצה לקבוע תור להלבנה')).toBe(false)
+    expect(looksLikeLaterCallbackRequest('')).toBe(false)
+  })
+
+  // דרישה עסקית 3 (ביקורת אחרונה): "אני אחזור אליכם" — הלקוח אומר שהוא/היא
+  // ייצור/תיצור קשר בעצמו/ה, לא בקשה שאנחנו נחזור אליו/ה. כיוון הפוך
+  // לגמרי מ"תחזרו אלי" — אסור להתבלבל ביניהם
+  it('does not misclassify "אני אחזור אליכם" (customer will contact the clinic) as a request for the clinic to call back', () => {
+    expect(looksLikeLaterCallbackRequest('אני אחזור אליכם מאוחר יותר')).toBe(false)
+    expect(looksLikeLaterCallbackRequest('בסדר, אני אתקשר אליכם')).toBe(false)
+  })
+
+  // (ביקורת קוד): "תחזרו אליי מאוחר יותר" מול "אני אחזור אליכם"/"אפנה
+  // מאוחר יותר" — כיוון הפוך לגמרי. "אפנה מאוחר יותר" הוסר מהרשימה כי
+  // משמעו שהלקוח/ה עצמו/ה יפנה/תפנה אלינו, לא בקשה שאנחנו נחזור אליו/ה
+  it('distinguishes a real callback request from the customer saying they will reach out themselves', () => {
+    expect(looksLikeLaterCallbackRequest('תחזרו אליי מאוחר יותר')).toBe(true)
+    expect(looksLikeLaterCallbackRequest('אני אחזור אליכם')).toBe(false)
+    expect(looksLikeLaterCallbackRequest('אפנה מאוחר יותר')).toBe(false)
+  })
+})
+
+describe('looksLikeCallbackCancellation — cancelling a pending callback request, not a fresh request', () => {
+  it('detects common cancellation phrasings', () => {
+    expect(looksLikeCallbackCancellation('לא משנה, תשכחו מזה')).toBe(true)
+    expect(looksLikeCallbackCancellation('אני אחזור אליכם')).toBe(true)
+    expect(looksLikeCallbackCancellation('בעצם לא צריך')).toBe(true)
+  })
+  it('does not trigger on an unrelated message', () => {
+    expect(looksLikeCallbackCancellation('אני רוצה תור להלבנה')).toBe(false)
+  })
+})
+
+describe('buildCallbackCancelledResponse', () => {
+  it('acknowledges without asking for a day/time again', () => {
+    const msg = buildCallbackCancelledResponse()
+    expect(msg).not.toContain('יום')
+    expect(msg).not.toContain('שעה')
+  })
+})
+
+describe('buildCallbackAskForTimeResponse — asks only for what is still missing', () => {
+  it('asks for both day and time when neither is known', () => {
+    const msg = buildCallbackAskForTimeResponse('both')
+    expect(msg).toContain('יום')
+    expect(msg).toContain('שעה')
+  })
+  // (ביקורת קוד): לא מבטיחים "נחזור אליך" לפני שבאמת נאסף יום/שעה — עדיין
+  // אין שום REMIND שמור באותו רגע
+  it('does not promise a callback before the day/time are even collected', () => {
+    const msg = buildCallbackAskForTimeResponse('both')
+    expect(msg).not.toContain('נחזור אליך בהקדם')
+  })
+  it('asks only for the day when the time is already known', () => {
+    const msg = buildCallbackAskForTimeResponse('date')
+    expect(msg).toContain('יום')
+  })
+  it('asks only for the time when the day is already known', () => {
+    const msg = buildCallbackAskForTimeResponse('time')
+    expect(msg).toContain('שעה')
+  })
+})
+
+describe('buildCallbackConfirmedResponse — deterministic confirmation once day+time are both known', () => {
+  it('includes the full day/date/time', () => {
+    const msg = buildCallbackConfirmedResponse('2026-09-02', '14:00')
+    expect(msg).toContain('יום רביעי, 02.09, בשעה 14:00')
+  })
+})
+
+// ─── buildHandoffToRepResponse — דרישה עסקית 4/6 ────────────────────────────
+describe('buildHandoffToRepResponse — deterministic, never claims unavailability', () => {
+  it('mentions handing off to the clinic team, never "no appointments"/"unavailable"', () => {
+    const msg = buildHandoffToRepResponse()
+    expect(msg).toContain('הועברה')
+    expect(msg).not.toContain('לא מצאתי')
+    expect(msg).not.toContain('לא זמין')
+  })
+})
+
+describe('buildHandoffUnconfirmedResponse — honest fallback when persistence could not be verified', () => {
+  it('never claims the request was transferred/scheduled', () => {
+    const msg = buildHandoffUnconfirmedResponse()
+    expect(msg).not.toContain('הועברה')
+    expect(msg).not.toContain('נקבע')
+    expect(msg).not.toContain('לא מצאתי')
+    expect(msg).not.toContain('לא זמין')
   })
 })
