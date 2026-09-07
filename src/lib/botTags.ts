@@ -4,6 +4,8 @@
 // הלוגיקה כאן הועברה החוצה מ-ai-respond/route.ts כדי שאפשר יהיה לבדוק
 // אותה בבדיקות אוטומטיות בלי לקרוא ל-OpenAI/Supabase בפועל.
 
+import { looksLikeSchedulingReply } from './botAppointments'
+
 export interface LeadAnalysis {
   name?: string | null
   reason?: string | null
@@ -372,6 +374,34 @@ const SCHEDULING_TOPIC_SHIFT_MARKERS = ['עולה', 'מחיר', 'עלות', 'א�
 export function looksLikeSchedulingTopicShift(text: string): boolean {
   if (!text) return false
   return SCHEDULING_TOPIC_SHIFT_MARKERS.some(m => text.includes(m))
+}
+
+// ─── שאלת תוכן/מידע — הרחבה ממוקדת של רשימת מעברי-הנושא ─────────────────────
+// (ביקורת קוד, root cause): botAskedAboutScheduling+!looksLikeSchedulingTopicShift
+// (STAGE 1A) היה רחב מדי — כל תגובה שלא זיהתה במפורש כמעבר-נושא (רשימת
+// SCHEDULING_TOPIC_SHIFT_MARKERS: מחיר/כתובת/רופא/שעות פעילות) נחשבה
+// "המשך בירור זמינות", כולל שאלות מידע אמיתיות שלא הופיעו ברשימה (למשל
+// שאלה על CT). קרה בפועל: "אני מתעניין בהשתלות. האם עושים אצלכם צילום
+// CT..." בתגובה לשאלת-תזמון קודמת של הבוט — לא בקשת תור/זמינות בכלל, אך
+// נסחפה לתוך הבדיקה ל-forced handoff (strict mode).
+//
+// התיקון: **לא** מעבר לדרישת-סימן-חיובי (זה נוסה וגרם רגרסיה אמיתית ל-3
+// בדיקות STAGE1A קיימות ומאושרות — "מה הכי קרוב?"/"אין לי העדפה"/"תבדוק
+// לי" הן תגובות המשך-זמינות עמומות לגיטימיות שאין בהן שום מילת-מפתח
+// חיובית, ואסור שיפסיקו להפעיל את הזרימה). במקום זה — **אותה גישה
+// בדיוק** כמו SCHEDULING_TOPIC_SHIFT_MARKERS הקיימת, רק מורחבת: עוד שני
+// דפוסי-תוכן ספציפיים שלא היו ברשימה: (1) אזכור CT/צילום/רנטגן, (2)
+// "יש לכם X?"/"אתם עושים X?" (שאלת "האם קיים שירות", לא בקשת תור) —
+// **חוץ מ**מקרה שבו אותה הודעה גם כן נראית כתשובת-תזמון אמיתית (יום/שעה/
+// אישור קצר, looksLikeSchedulingReply הקיימת) — כדי לא לפסול בטעות "יש
+// לכם תור מחר?" (עדיין בירור זמינות אמיתי, למרות ה"יש לכם")
+const CONTENT_QUESTION_MARKERS = ['CT', 'צילום', 'רנטגן']
+const OFFERING_INQUIRY_PATTERNS = ['יש לכם', 'אתם עושים', 'אתם מבצעים', 'עושים אצלכם', 'מבצעים אצלכם']
+export function looksLikeContentQuestion(text: string): boolean {
+  if (!text) return false
+  if (CONTENT_QUESTION_MARKERS.some(m => text.includes(m))) return true
+  if (looksLikeSchedulingReply(text)) return false // "יש לכם תור מחר?" — עדיין בירור זמינות אמיתי
+  return OFFERING_INQUIRY_PATTERNS.some(p => text.includes(p))
 }
 
 // כל השעות (HH:MM) המוזכרות בטקסט, לפי סדר הופעה — לצורך אימות שהתשובה

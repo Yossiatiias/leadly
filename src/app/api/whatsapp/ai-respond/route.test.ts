@@ -2505,3 +2505,102 @@ describe('strict_service_doctor_booking business setting', () => {
     expect(conv!.escalated_at).toBeFalsy()
   })
 })
+
+// ─── תיקון root-cause: שאלת מידע (CT) לא מופעלת כבירור זמינות ────────────────
+// (דרישה עסקית, תקלה בפועל): "אני מתעניין בהשתלות. האם עושים אצלכם צילום
+// CT..." בתגובה לשאלת-תזמון של הבוט נסחפה בטעות ל-forced handoff (strict
+// mode) — למרות שזו שאלת מידע גרידא, לא בקשת תור/בירור זמינות. פתרון:
+// looksLikeSchedulingIntentContinuation דורשת סימן חיובי אמיתי לכוונת
+// תזמון, לא רק "לא נראה כמו מעבר נושא מפורש"
+describe('root-cause fix: an information-only question does not trigger forced handoff, even mid-scheduling-context', () => {
+  // רופא/ה חסום/ה לגמרי + strict mode — אם ה-bug היה עדיין קיים, זו בדיוק
+  // הקומבינציה שהייתה גורמת ל-forced handoff. הבדיקה מוודאת שזה לא קורה
+  function seedBlockedSpecialistStrict() {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.strict_service_doctor_booking = true
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+    fakeDb.tables.businesses[0].settings.employee_schedules = {
+      docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+    }
+    fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+  }
+
+  it('a CT information question, in direct reply to the bot asking about scheduling preference, gets answered from the knowledge base — never handed off', async () => {
+    seedBlockedSpecialistStrict()
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני מתעניין בהשתלות', sender_type: 'contact', created_at: new Date(Date.now() - 20000).toISOString() },
+      { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'בשמחה! יש לך העדפה לתאריך או שעה?', sender_type: 'ai', created_at: new Date(Date.now() - 10000).toISOString() },
+    ])
+    openaiReply = 'צילום פנורמי מתבצע אצלנו במרפאה ללא עלות, כחלק מהאבחון. אם יידרש גם CT, ניתן הפניה חיצונית 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000',
+      messageText: 'היי, אני מתעניין בהשתלות. האם עושים אצלכם צילום CT או שאני צריך להגיע עם צילום?',
+    })
+
+    expect(openaiCalls.length).toBe(1) // המודל כן נקרא — לא נחסם מראש
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toBe(openaiReply) // התשובה של המודל נשלחה כמו שהיא, לא נדרסה
+    expect(sendCall!.body.message).not.toContain('הועברה')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeFalsy()
+  })
+
+  it('"יש לכם השתלות?" (a plain information question) is not handed off either', async () => {
+    seedBlockedSpecialistStrict()
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'בשמחה! יש לך העדפה לתאריך או שעה?', sender_type: 'ai' },
+    ])
+    openaiReply = 'כן, אנחנו מבצעים השתלות שיניים 😊 תרצה לשמוע עוד?'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'יש לכם השתלות?',
+    })
+
+    expect(openaiCalls.length).toBe(1)
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toBe(openaiReply)
+    expect(sendCall!.body.message).not.toContain('הועברה')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeFalsy()
+  })
+
+  it('"מתי יש תור להשתלות?" still triggers the real calendar check and hands off when the specialist is blocked (unaffected by the fix)', async () => {
+    seedBlockedSpecialistStrict()
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני מתעניין בהשתלות', sender_type: 'contact' },
+    ])
+    openaiReply = 'תודה! בואו נבדוק זמינות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש תור להשתלות?',
+    })
+
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+  })
+
+  it('a direct booking confirmation (model returns APPT) still cannot bypass the service/doctor check', async () => {
+    seedBlockedSpecialistStrict()
+    const tuesday = nextWeekday(2)
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה לקבוע תור להשתלות', sender_type: 'contact' },
+    ])
+    openaiReply = `בטח! קבענו ${tuesday.split('-').reverse().join('.')} בשעה 12:00 😊\nLEAD:{"reason":"השתלות"}\nAPPT:{"date":"${tuesday}","time":"12:00","service":"השתלות"}`
+
+    const res = await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה לקבוע תור להשתלות',
+    })
+    const json = await res.json()
+
+    expect(json.appointment).toBeUndefined()
+    expect(fakeDb.tables.appointments).toHaveLength(0)
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+  })
+})

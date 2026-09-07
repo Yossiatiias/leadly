@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, resolveActiveServiceAnchor, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse } from './botTags'
+import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeContentQuestion, resolveActiveServiceAnchor, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse } from './botTags'
 
 describe('parseBotTags', () => {
   it('parses a full response with all four tags and strips them from the visible text', () => {
@@ -497,6 +497,34 @@ describe('looksLikeSchedulingTopicShift — customer reply clearly moves to a di
     expect(looksLikeSchedulingTopicShift('אין לי העדפה')).toBe(false)
     expect(looksLikeSchedulingTopicShift('לא משנה לי מתי')).toBe(false)
     expect(looksLikeSchedulingTopicShift('תבדוק לי')).toBe(false)
+  })
+})
+
+// ─── looksLikeContentQuestion — root cause fix ──────────────────────────────
+// (ביקורת קוד): "לא נראה כמו מעבר-נושא" לבד לא הספיק — שאלת מידע אמיתית
+// (למשל על CT) שלא הופיעה ברשימת מעברי-הנושא הקצרה נסחפה בטעות כ"המשך
+// בירור זמינות". הרחבה ממוקדת של אותה רשימה — לא דרישת סימן חיובי (זה
+// נוסה וגרם רגרסיה לתגובות-המשך עמומות לגיטימיות, ר' STAGE1A/1B למטה)
+describe('looksLikeContentQuestion — extends the topic-shift exclusion list, does not require a positive scheduling signal', () => {
+  // (דרישה עסקית — התקלה בפועל): שאלת מידע על CT, בתגובה לשאלת-תזמון של
+  // הבוט, אינה בקשת תור/זמינות — אסור שתיסחף לבדיקה
+  it('flags a genuine information question about CT', () => {
+    expect(looksLikeContentQuestion('היי, אני מתעניין בהשתלות. האם עושים אצלכם צילום CT או שאני צריך להגיע עם צילום?')).toBe(true)
+  })
+  it('flags an "do you offer X" service-inquiry question', () => {
+    expect(looksLikeContentQuestion('יש לכם השתלות?')).toBe(true)
+    expect(looksLikeContentQuestion('אתם עושים הלבנת שיניים?')).toBe(true)
+  })
+  it('does not flag a genuine availability question phrased with "יש לכם"', () => {
+    expect(looksLikeContentQuestion('יש לכם תור מחר?')).toBe(false)
+  })
+  it('does not flag vague scheduling-continuation replies (must keep triggering the availability flow)', () => {
+    expect(looksLikeContentQuestion('מתי אפשר?')).toBe(false)
+    expect(looksLikeContentQuestion('מה הכי קרוב?')).toBe(false)
+    expect(looksLikeContentQuestion('אין לי העדפה')).toBe(false)
+    expect(looksLikeContentQuestion('תבדוק לי')).toBe(false)
+    expect(looksLikeContentQuestion('כן, מתאים')).toBe(false)
+    expect(looksLikeContentQuestion('מחר')).toBe(false)
   })
 })
 

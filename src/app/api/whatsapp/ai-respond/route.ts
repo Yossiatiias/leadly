@@ -12,7 +12,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeContentQuestion, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -699,8 +699,19 @@ async function handleAiRespond(
     // עוברת בבירור לנושא אחר (מחיר/מיקום/זהות רופא) נחשבת המשך לאותה
     // שיחת-תזמון. משתמש רק ב-msgs שכבר קיימים — אין state חדש
     const lastOutboundMessage = [...msgs].reverse().find(m => m.direction === 'outbound')?.content || ''
+    // (ביקורת קוד, root cause): "לא נראה כמו מעבר-נושא" לבד לא הספיק —
+    // קרה בפועל שהתגובה הייתה שאלת מידע אמיתית (על CT) שלא ברשימת
+    // מעברי-הנושא הקצרה (SCHEDULING_TOPIC_SHIFT_MARKERS), ונסחפה כ"המשך
+    // בירור זמינות". התיקון מרחיב את אותה רשימת החרגות בדיוק
+    // (looksLikeContentQuestion — CT/צילום/רנטגן, "יש לכם X?"), **לא**
+    // דורש סימן חיובי (זה נוסה וגרם רגרסיה לתגובות-המשך עמומות לגיטימיות
+    // כמו "מה הכי קרוב?"/"תבדוק לי", ר' botTags.ts). לא נוגעים ב-
+    // looksLikeAvailabilityInquiry/looksLikeSchedulingTopicShift עצמן,
+    // ולא בשום נקודת אכיפה אחרת (offer-grounding/APPT ישיר)
     const isAvailabilityContextContinuation =
-      botAskedAboutScheduling(lastOutboundMessage) && !looksLikeSchedulingTopicShift(combinedText)
+      botAskedAboutScheduling(lastOutboundMessage)
+      && !looksLikeSchedulingTopicShift(combinedText)
+      && !looksLikeContentQuestion(combinedText)
     if (looksLikeAvailabilityInquiry(combinedText) || isAvailabilityContextContinuation) {
       const requestedDate = resolveActiveRequestedDate(combinedText, msgs, israelNow)
       // אין עדיין תגית LEAD לתור הזה (טרם קרינו ל-LLM) — משתמשים רק
