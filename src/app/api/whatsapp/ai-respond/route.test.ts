@@ -2604,3 +2604,145 @@ describe('root-cause fix: an information-only question does not trigger forced h
     expect(conv!.escalated_at).toBeTruthy()
   })
 })
+
+// ─── שאלת CT בהודעת ההעברה — רק לטיפולים רלוונטי-הדמיה ──────────────────────
+// (דרישה עסקית): כשה-forced handoff מופעל (strict mode) לשירות רלוונטי
+// (השתלות/שיקום פה מלא/אבחון), ההודעה שואלת גם "האם יש לך CT או צילום?" —
+// אלא אם השיחה כבר מכילה תשובה ברורה. לא לשירותים אחרים
+describe('forced-handoff CT/imaging question — implants/full-mouth-rehab/diagnosis only, asked once', () => {
+  function seedBlockedImplantsSpecialistStrict() {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.strict_service_doctor_booking = true
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'השתלות', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['השתלות'] }
+    fakeDb.tables.businesses[0].settings.employee_schedules = {
+      docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+    }
+    fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר גבי סמל', business_id: 'biz1' }])
+  }
+
+  it('implants scheduling request with no prior imaging answer: immediate handoff, includes the CT question', async () => {
+    seedBlockedImplantsSpecialistStrict()
+    const tuesday = nextWeekday(2)
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה לקבוע תור להשתלות', sender_type: 'contact' },
+    ])
+    openaiReply = `בטח! קבענו ${tuesday.split('-').reverse().join('.')} בשעה 12:00 😊\nLEAD:{"reason":"השתלות"}\nAPPT:{"date":"${tuesday}","time":"12:00","service":"השתלות"}`
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה לקבוע תור להשתלות',
+    })
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    expect(sendCall!.body.message).toContain('האם יש לך CT או צילום?')
+  })
+
+  it('customer already said they have CT: handoff, does not repeat the imaging question', async () => {
+    seedBlockedImplantsSpecialistStrict()
+    const tuesday = nextWeekday(2)
+    fakeDb.seed('messages', [
+      { id: 'm0', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'יש לי CT מלפני חודשיים', sender_type: 'contact', created_at: new Date(Date.now() - 20000).toISOString() },
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה לקבוע תור להשתלות', sender_type: 'contact', created_at: new Date(Date.now() - 10000).toISOString() },
+    ])
+    openaiReply = `בטח! קבענו ${tuesday.split('-').reverse().join('.')} בשעה 12:00 😊\nLEAD:{"reason":"השתלות"}\nAPPT:{"date":"${tuesday}","time":"12:00","service":"השתלות"}`
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה לקבוע תור להשתלות',
+    })
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    expect(sendCall!.body.message).not.toContain('CT או צילום')
+  })
+
+  it('customer already said they do not have CT or an image: handoff, does not repeat the imaging question', async () => {
+    seedBlockedImplantsSpecialistStrict()
+    const tuesday = nextWeekday(2)
+    fakeDb.seed('messages', [
+      { id: 'm0', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אין לי צילום בכלל', sender_type: 'contact', created_at: new Date(Date.now() - 20000).toISOString() },
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה לקבוע תור להשתלות', sender_type: 'contact', created_at: new Date(Date.now() - 10000).toISOString() },
+    ])
+    openaiReply = `בטח! קבענו ${tuesday.split('-').reverse().join('.')} בשעה 12:00 😊\nLEAD:{"reason":"השתלות"}\nAPPT:{"date":"${tuesday}","time":"12:00","service":"השתלות"}`
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה לקבוע תור להשתלות',
+    })
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    expect(sendCall!.body.message).not.toContain('CT או צילום')
+  })
+
+  it('an unrelated specialist/service request gets a generic handoff, no CT/imaging question', async () => {
+    seedBaseline()
+    fakeDb.tables.businesses[0].settings.strict_service_doctor_booking = true
+    fakeDb.tables.businesses[0].settings.services = [{ name: 'אורתודנטיה', active: true, duration: '60' }]
+    fakeDb.tables.businesses[0].settings.employee_responsibilities = { docA: ['אורתודנטיה'] }
+    fakeDb.tables.businesses[0].settings.employee_schedules = {
+      docA: [{ day: 'שלישי', open: '', close: '', closed: true }],
+    }
+    fakeDb.seed('profiles', [{ id: 'docA', full_name: 'ד"ר דנה כהן', business_id: 'biz1' }])
+    const tuesday = nextWeekday(2)
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני רוצה לקבוע תור ליישור שיניים', sender_type: 'contact' },
+    ])
+    openaiReply = `בטח! קבענו ${tuesday.split('-').reverse().join('.')} בשעה 12:00 😊\nLEAD:{"reason":"אורתודנטיה"}\nAPPT:{"date":"${tuesday}","time":"12:00","service":"אורתודנטיה"}`
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'אני רוצה לקבוע תור ליישור שיניים',
+    })
+
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    expect(sendCall!.body.message).not.toContain('CT או צילום')
+  })
+
+  it('an information-only CT question still receives the factual answer and does not trigger forced handoff', async () => {
+    seedBlockedImplantsSpecialistStrict()
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני מתעניין בהשתלות', sender_type: 'contact', created_at: new Date(Date.now() - 20000).toISOString() },
+      { id: 'm2', conversation_id: 'conv1', business_id: 'biz1', direction: 'outbound', content: 'בשמחה! יש לך העדפה לתאריך או שעה?', sender_type: 'ai', created_at: new Date(Date.now() - 10000).toISOString() },
+    ])
+    openaiReply = 'צילום פנורמי מתבצע אצלנו במרפאה ללא עלות, כחלק מהאבחון. אם יידרש גם CT, ניתן הפניה חיצונית 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000',
+      messageText: 'האם עושים אצלכם צילום CT או שאני צריך להגיע עם צילום?',
+    })
+
+    expect(openaiCalls.length).toBe(1)
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toBe(openaiReply)
+    expect(sendCall!.body.message).not.toContain('הועברה')
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeFalsy()
+  })
+
+  it('a real implants availability request still activates strict service/doctor verification and never offers an automatic slot when specialists are blocked', async () => {
+    seedBlockedImplantsSpecialistStrict()
+    fakeDb.seed('messages', [
+      { id: 'm1', conversation_id: 'conv1', business_id: 'biz1', direction: 'inbound', content: 'אני מתעניין בהשתלות', sender_type: 'contact' },
+    ])
+    openaiReply = 'תודה! בואו נבדוק זמינות 😊'
+
+    await callAiRespond({
+      conversationId: 'conv1', businessId: 'biz1', senderPhone: '972500000000', messageText: 'מתי יש תור להשתלות?',
+    })
+
+    const sendCall = sentMessages.find(m => m.url.includes('sendMessage'))
+    expect(sendCall!.body.message).toContain('הועברה')
+    expect(sendCall!.body.message).not.toMatch(/\d{1,2}:\d{2}/)
+    expect(fakeDb.tables.appointments).toHaveLength(0)
+    const conv = fakeDb.tables.conversations.find((c: any) => c.id === 'conv1')
+    expect(conv!.escalated_at).toBeTruthy()
+  })
+})

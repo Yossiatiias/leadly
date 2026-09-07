@@ -12,7 +12,7 @@ import {
 import { clearDueReminderByConversation } from '@/lib/leadReminders'
 import { greenApiUrl as buildGreenApiUrl, cleanInstanceId } from '@/lib/greenApi'
 import { ensureLeadExists } from '@/lib/leads'
-import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeContentQuestion, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse, type LeadAnalysis } from '@/lib/botTags'
+import { parseBotTags, buildApptErrorMessage, buildApptConfirmationSummary, computeLeadUpdates, matchServiceReason, resolveActiveService, resolveActiveServiceAnchor, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, textMentionsWrongDoctor, textStatesWrongDate, israelDateOnly, NO_AVAILABILITY_MESSAGE, looksLikeAvailabilityInquiry, extractAllTimesInText, extractAllDateTimePairsInText, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeContentQuestion, isImagingRelevantService, conversationAlreadyAnsweredImagingQuestion, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse, type LeadAnalysis } from '@/lib/botTags'
 import { updateGenderNameState, buildGenderInstructionBlock, looksLikeFreshLeadOpener, type ConversationGenderState } from '@/lib/genderName'
 import { createOptimaAppointment, toOptimaConfig, resolveOptimaCardId } from '@/lib/optima'
 
@@ -128,7 +128,7 @@ async function sendAndPersistBotMessage(
 // (ביקורת קוד): לעולם לא אומרים ללקוח "הועבר"/"טופל" בלי שהאסקלציה עצמה
 // נשמרה בהצלחה ב-DB. משמש גם מ-handleAiRespond (הסלמה כפויה, fully_blocked/
 // no_match/unverified) וגם ממסלול ה-REMIND הדטרמיניסטי (כישלון שמירת תזכורת)
-async function escalateAndBuildResponse(conversationId: string, reason: string): Promise<string> {
+async function escalateAndBuildResponse(conversationId: string, reason: string, includeCtQuestion = false): Promise<string> {
   const { error } = await supabase.from('conversations').update({
     escalated_at: new Date().toISOString(),
     escalation_reason: reason,
@@ -138,7 +138,7 @@ async function escalateAndBuildResponse(conversationId: string, reason: string):
     return buildHandoffUnconfirmedResponse()
   }
   console.log('[ai-respond] flagged for human rep:', JSON.stringify({ conversationId, reason }))
-  return buildHandoffToRepResponse()
+  return buildHandoffToRepResponse(includeCtQuestion)
 }
 
 // ─── שליחת תשובה דטרמיניסטית ויציאה — עוקף לגמרי קריאה למודל/בירור טיפול ────
@@ -688,6 +688,10 @@ async function handleAiRespond(
     // עיגון הצעה חופשית) — הראשון שקובע אותו "מנצח" לשאר התור
     let forcedHandoffStatus: ServiceDoctorAvailabilityStatus | null = null
     let pendingForcedEscalationReason: string | null = null
+    // (דרישה עסקית — שאלת CT בהעברה): איזה שירות היה פעיל כשה-handoff נקבע
+    // — נדרש כדי לדעת אם זה טיפול רלוונטי-הדמיה (השתלות/שיקום פה מלא/אבחון
+    // קשור) לצורך שאלת "האם יש לך CT או צילום?" בהודעת ההעברה עצמה
+    let forcedHandoffService: string | null = null
 
     // ─── זיהוי הקשרי (STAGE 1A, יוסי 01/09) — ROOT CAUSE, לא עוד ביטוי ──────
     // קרה בפועל: הבוט שאל "יש לך העדפה לתאריך או שעה?", הלקוח ענה "מתי
@@ -726,7 +730,7 @@ async function handleAiRespond(
           business?.settings?.employee_responsibilities || {},
           business?.settings?.employee_schedules || {},
         )
-        if (shouldForceHandoff(inquiryStatus)) forcedHandoffStatus = inquiryStatus
+        if (shouldForceHandoff(inquiryStatus)) { forcedHandoffStatus = inquiryStatus; forcedHandoffService = inquiryService }
       }
       if (requestedDate && inquiryService && !forcedHandoffStatus) {
         const preferredDoctorIdForInquiry = extractCustomerRequestedDoctorId(msgs, profileMap, serviceAnchorIndex)
@@ -972,6 +976,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
       )
       if (shouldForceHandoff(apptStatus)) {
         forcedHandoffStatus = apptStatus
+        forcedHandoffService = serviceForStatusCheck
         apptData = null
       }
     }
@@ -1109,7 +1114,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
             business?.settings?.employee_responsibilities || {},
             business?.settings?.employee_schedules || {},
           )
-          if (shouldForceHandoff(offerStatus)) { forcedHandoffStatus = offerStatus; return true }
+          if (shouldForceHandoff(offerStatus)) { forcedHandoffStatus = offerStatus; forcedHandoffService = offerService; return true }
           return false
         })()) {
           // מומחה/ה בלי יומן פתוח, או בלי שיוך ודאי — נאכף למטה, לא כאן
@@ -1201,6 +1206,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     // נקבע דרך APPT ישיר (ולא רק דרך בירור זמינות/הצעה חופשית) — לא מבצעים
     // קביעה אוטומטית ללא שיוך ודאי + יומן פתוח מאומתים
     let forcedHandoffResponsePending = false
+    let forcedHandoffIncludeCtQuestion = false
     if (forcedHandoffStatus) {
       console.error('[ai-respond] FORCED HANDOFF — service maps to a doctor with no open calendar, or no clear doctor mapping; never showing hours or claiming unavailable, always handing off to a rep:', JSON.stringify({
         conversationId, forcedHandoffStatus,
@@ -1215,6 +1221,9 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
         : forcedHandoffStatus === 'unverified'
         ? 'לא ניתן לאמת יומן פתוח לשירות המבוקש (strict mode) — נדרשת בדיקה אנושית'
         : 'לא נמצא שיוך ודאי בין השירות המבוקש לרופא/ה — נדרשת בדיקה אנושית'
+      // (דרישה עסקית, שאלת CT): רק לטיפול רלוונטי-הדמיה, ורק אם השיחה עוד
+      // לא מכילה תשובה ברורה על החזקת CT/צילום — שאלה אחת בלבד, לא כפילות
+      forcedHandoffIncludeCtQuestion = isImagingRelevantService(forcedHandoffService) && !conversationAlreadyAnsweredImagingQuestion(msgs)
     }
 
     // ─── צור ליד אם לא קיים (לפני שמירת תור) ────────────────────────────
@@ -1245,7 +1254,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     // לפני שמסמנים escalated_at — אותו flow קיים בדיוק כמו הבלוק שלמעלה,
     // לא כתיבה עצמאית שעלולה "להיעלם" עבור נציגה שמסתכלת דרך מסך הלידים
     if (pendingForcedEscalationReason) {
-      const handoffMessage = await escalateAndBuildResponse(conversationId, pendingForcedEscalationReason)
+      const handoffMessage = await escalateAndBuildResponse(conversationId, pendingForcedEscalationReason, forcedHandoffIncludeCtQuestion)
       if (forcedHandoffResponsePending) aiResponse = handoffMessage
     }
 

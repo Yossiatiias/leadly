@@ -546,8 +546,39 @@ export function buildCallbackConfirmedResponse(dateISO: string, time: string): s
 // רק **אחרי** שהאסקלציה עצמה נשמרה בהצלחה ב-DB (ר' route.ts) — אחרת
 // buildHandoffUnconfirmedResponse למטה, כדי לא להבטיח ללקוח העברה שלא
 // באמת נרשמה
-export function buildHandoffToRepResponse(): string {
-  return 'תודה על הפנייה 🙏 הבקשה הועברה לצוות המרפאה, שיחזור אליך בהקדם לצורך תיאום.'
+// (דרישה עסקית, שאלת CT): כשמדובר בטיפול רלוונטי-הדמיה (השתלות/שיקום פה
+// מלא/אבחון קשור) והשיחה עוד לא מכילה תשובה ברורה — אותה הודעת העברה
+// גם שואלת "האם יש לך CT או צילום?", כדי שהצוות יגיע מוכן. שאלה אחת
+// בלבד בהודעה, לעולם לא כפילות
+export function buildHandoffToRepResponse(includeCtQuestion = false): string {
+  const base = 'תודה על הפנייה 🙏 הבקשה הועברה לצוות המרפאה, שיחזור אליך בהקדם לצורך תיאום.'
+  if (!includeCtQuestion) return base
+  return `${base} כדי שהצוות יוכל להגיע מוכן יותר לשיחה, האם יש לך CT או צילום?`
+}
+
+// ─── האם השירות הפעיל רלוונטי-הדמיה (השתלות/שיקום פה מלא/אבחון קשור) ────────
+// (דרישה עסקית): רק לטיפולים האלה שואלים על CT/צילום בהעברה לנציג — לא
+// להלבנה/שיננית/יישור/ציפויים/טיפולים משמרים רגילים. משתמש באותם כינויים
+// מוכרים כבר ב-SERVICE_SYNONYM_GROUPS (לא כפילות-הגדרה — 'שתל'/'שתלים'
+// וכו' כבר ידועים כמזהי "השתלות"; כאן זו רשימה נפרדת כי המטרה שונה
+// לגמרי — לא "לאיזה שירות מוגדר זה שייך", אלא "האם צילום רלוונטי")
+const IMAGING_RELEVANT_SERVICE_MARKERS = ['השתלות', 'שתלים', 'השתלה', 'שתל', 'שיקום פה מלא', 'שיקום הפה', 'שיקום פה', 'אבחון']
+export function isImagingRelevantService(service: string | null | undefined): boolean {
+  if (!service) return false
+  return IMAGING_RELEVANT_SERVICE_MARKERS.some(m => service.includes(m))
+}
+
+// ─── האם השיחה כבר מכילה תשובה ברורה על החזקת CT/צילום ──────────────────────
+// (דרישה עסקית): לא חוזרים על השאלה אם היא כבר נענתה — בין אם הלקוח אמר
+// שיש לו/ה, ובין אם אמר שאין. סורק את כל ההודעות הנכנסות בשיחה (לא רק
+// האחרונה) — התשובה יכולה להינתן בכל שלב, לא רק מיד אחרי שהבוט שאל
+const CT_POSSESSION_ANSWER_MARKERS = [
+  'יש לי CT', 'יש לי צילום', 'יש לי הדמיה', 'יש לי סריקה',
+  'אין לי CT', 'אין לי צילום', 'אין לי הדמיה', 'אין לי סריקה',
+  'בלי CT', 'בלי צילום', 'לא, אין לי', 'כן, יש לי',
+]
+export function conversationAlreadyAnsweredImagingQuestion(messages: { direction: string; content: string }[]): boolean {
+  return messages.some(m => m.direction === 'inbound' && CT_POSSESSION_ANSWER_MARKERS.some(marker => m.content.includes(marker)))
 }
 
 // ─── נפילה כנה כשלא הצלחנו לוודא שהעברה/תזכורת נשמרו בפועל ──────────────────

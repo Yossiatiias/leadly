@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeContentQuestion, resolveActiveServiceAnchor, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse } from './botTags'
+import { parseBotTags, buildApptErrorMessage, buildRolledForwardMessage, buildApptConfirmationSummary, textStatesWrongDate, textMentionsWrongDoctor, israelDateOnly, computeLeadUpdates, matchServiceReason, extractEscalationFromText, extractMentionedDoctorId, extractCustomerRequestedDoctorId, buildSafeSlotResponse, buildSafeExactSlotResponse, botAskedAboutScheduling, looksLikeSchedulingTopicShift, looksLikeContentQuestion, resolveActiveServiceAnchor, looksLikeLaterCallbackRequest, buildCallbackAskForTimeResponse, buildCallbackConfirmedResponse, buildHandoffToRepResponse, buildHandoffUnconfirmedResponse, looksLikeCallbackCancellation, buildCallbackCancelledResponse, isImagingRelevantService, conversationAlreadyAnsweredImagingQuestion } from './botTags'
 
 describe('parseBotTags', () => {
   it('parses a full response with all four tags and strips them from the visible text', () => {
@@ -729,6 +729,58 @@ describe('buildHandoffToRepResponse — deterministic, never claims unavailabili
     expect(msg).toContain('הועברה')
     expect(msg).not.toContain('לא מצאתי')
     expect(msg).not.toContain('לא זמין')
+  })
+  it('omits the CT question by default (backward compatible)', () => {
+    expect(buildHandoffToRepResponse()).not.toContain('CT')
+  })
+  // (דרישה עסקית — שאלת CT בהעברה): נוסח מדויק כפי שנדרש, שאלה אחת בלבד
+  it('includes exactly the required CT question, appended to the same handoff message, when asked to', () => {
+    const msg = buildHandoffToRepResponse(true)
+    expect(msg).toBe('תודה על הפנייה 🙏 הבקשה הועברה לצוות המרפאה, שיחזור אליך בהקדם לצורך תיאום. כדי שהצוות יוכל להגיע מוכן יותר לשיחה, האם יש לך CT או צילום?')
+    expect(msg.split('?').length - 1).toBe(1) // שאלה אחת בלבד
+  })
+})
+
+describe('isImagingRelevantService — implants / full-mouth rehab / relevant diagnosis only', () => {
+  it('flags implant-related services', () => {
+    expect(isImagingRelevantService('השתלות')).toBe(true)
+    expect(isImagingRelevantService('שתלים')).toBe(true)
+  })
+  it('flags full-mouth rehabilitation', () => {
+    expect(isImagingRelevantService('שיקום פה מלא')).toBe(true)
+  })
+  it('flags diagnosis', () => {
+    expect(isImagingRelevantService('אבחון')).toBe(true)
+  })
+  it('does not flag unrelated services', () => {
+    expect(isImagingRelevantService('הלבנה')).toBe(false)
+    expect(isImagingRelevantService('שיננית')).toBe(false)
+    expect(isImagingRelevantService('אורתודנטיה')).toBe(false)
+    expect(isImagingRelevantService('ציפויים')).toBe(false)
+    expect(isImagingRelevantService('טיפולים משמרים')).toBe(false)
+  })
+  it('handles null/undefined safely', () => {
+    expect(isImagingRelevantService(null)).toBe(false)
+    expect(isImagingRelevantService(undefined)).toBe(false)
+  })
+})
+
+describe('conversationAlreadyAnsweredImagingQuestion — do not repeat the CT question once answered', () => {
+  it('detects a positive answer ("יש לי CT")', () => {
+    const messages = [{ direction: 'inbound', content: 'יש לי CT מלפני חודש' }]
+    expect(conversationAlreadyAnsweredImagingQuestion(messages)).toBe(true)
+  })
+  it('detects a negative answer ("אין לי צילום")', () => {
+    const messages = [{ direction: 'inbound', content: 'אין לי צילום, אני צריך להביא' }]
+    expect(conversationAlreadyAnsweredImagingQuestion(messages)).toBe(true)
+  })
+  it('returns false when the conversation never addressed imaging possession', () => {
+    const messages = [{ direction: 'inbound', content: 'אני רוצה לקבוע תור להשתלות' }]
+    expect(conversationAlreadyAnsweredImagingQuestion(messages)).toBe(false)
+  })
+  it('only counts the customer\'s own messages, not the bot asking the question', () => {
+    const messages = [{ direction: 'outbound', content: 'האם יש לך CT או צילום?' }]
+    expect(conversationAlreadyAnsweredImagingQuestion(messages)).toBe(false)
   })
 })
 
