@@ -325,7 +325,7 @@ export type ServiceDoctorAvailabilityStatus = 'no_match' | 'unverified' | 'fully
 //   1) שירות משויך לרופא/ה עם יומן פתוח מאומת → has_calendar. ✅ אימות מלא —
 //      **היחיד** שמתיר קביעה/הצעה אוטומטית ב-strict mode (ר' route.ts).
 //   2) השירות קיים, אבל אין אף רופא/ה משויכ/ת אליו כלל (empResponsibilities
-//      לא ריק, אבל אין שורה מתאימה) → no_match. ✅ נחסם תמיד (גם בלי strict).
+//      לא ריק, אבל אין שורה מתאימה) → no_match.
 //   3) empResponsibilities **ריק/חסר לגמרי** עבור העסק (אין שום שיוך שירותים
 //      מוגדר, לאף שירות) → unverified. אין שום נתון לאמת מולו.
 //   4) יש רופא/ה משויכ/ת, אבל **אין לאף אחד/ת מהם/ן employee_schedules
@@ -333,20 +333,20 @@ export type ServiceDoctorAvailabilityStatus = 'no_match' | 'unverified' | 'fully
 //      יומן פתוח, גם אם אין שום סיבה לחשוב שהוא סגור.
 //   5) יש רופא/ה משויכ/ת, ולפחות אחד/ת מהם/ן יש employee_schedules מוגדר,
 //      אבל **כולם** (מי שיש להם לוח בכלל) closed בכל הימים → fully_blocked.
-//      ✅ נחסם תמיד (גם בלי strict) — זו המטרה המקורית של הפונקציה הזו.
 // עדיפות בין רופאים מרובים לאותו שירות: אם **לפחות אחד/ת** מהם/ן מאומת/ת
 // כפתוח/ה (מקרה 1) — מוחזר has_calendar (עדיפות עליונה, זמינות אמיתית
 // קיימת). אחרת, אם **לפחות אחד/ת** אין לו/ה לוח בכלל (מקרה 4) — unverified
 // (אי אפשר לשלול זמינות). רק אם **לכולם** יש לוח והם **כולם** סגורים —
 // fully_blocked (מקרה 5, וידאנו בפועל שאין אף אחד פתוח).
 //
-// ⚠️ שימו לב, שינוי התנהגות מבוקר: לפני הביקורת הזו, מקרים 3/4 הוחזרו
-// כ-has_calendar (permissive, זהה להתנהגות הפתוחה הקיימת עדיין ב-
-// hasQualifiedDoctorOnDate/findAvailableSlots — קוד ליבה שלא נגעתי בו).
-// עכשיו הם unverified: ב-route.ts, unverified מטופל כ-has_calendar בפועל
-// (לא חוסם) **אלא אם** business.settings.strict_service_doctor_booking===true
-// — כך שאין שינוי התנהגות בפועל לאף עסק קיים בלי הדגל (ר' route.ts,
-// forcedHandoffStatus + strictMode)
+// ⚠️ בידוד multi-tenant (ביקורת רביעית): שלושת המקרים 2/3/5 (no_match/
+// unverified/fully_blocked) כולם מוחזרים כאן בלי תלות בשום דגל — זו רק
+// פונקציית-סיווג טהורה. **האם** התוצאה בכלל משפיעה על ההתנהגות נקבע אך
+// ורק ב-route.ts (shouldForceHandoff), שגודר במלואו מאחורי business.
+// settings.strict_service_doctor_booking===true. בלי הדגל — אף אחד
+// מארבעת ה-status לא חוסם שום דבר, וההתנהגות הישנה (findAvailableSlots/
+// hasQualifiedDoctorOnDate/NO_AVAILABILITY_MESSAGE, שלא נגעתי בהם) ממשיכה
+// לרוץ בדיוק כמו לפני כל התכונה הזו, לכל עסק שלא הגדיר את הדגל
 const HEB_WEEKDAYS = new Set(['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'])
 
 function isValidHHMM(t: unknown): t is string {

@@ -376,14 +376,16 @@ async function handleAiRespond(
     // ─── strict_service_doctor_booking — הגדרה per-עסק, ברירת מחדל false ────
     // (דרישה עסקית): מערכת multi-tenant — אסור לשנות התנהגות גלובלית
     // לכל העסקים בלי החלטת תאימות מפורשת. ברירת המחדל (false/לא מוגדר)
-    // שומרת בדיוק על ההתנהגות הקיימת (unverified מטופל כמו has_calendar —
-    // לא חוסם). true (לדוגמה: שקד קליניק) מהדק: קביעה/הצעה אוטומטית
-        // מתאפשרת רק כשיש שיוך שירות-רופא ולוח פתוח שאומתו בפועל
-    // (has_calendar בלבד) — no_match/fully_blocked/unverified כולם חוסמים.
-    // אין שם עסק/רופא מקודד — זו הגדרה ב-DB (businesses.settings), לא בקוד
+    // שומרת בדיוק על ההתנהגות שהייתה לפני כל התכונה הזו: forcedHandoffStatus
+    // אף פעם לא נקבע, ה-flow הישן (findAvailableSlots/hasQualifiedDoctorOnDate/
+    // NO_AVAILABILITY_MESSAGE, שלא נגעתי בהם) ממשיך לרוץ בדיוק כמו קודם, לכל
+    // אחד משלושת no_match/unverified/fully_blocked. true (לדוגמה: שקד קליניק)
+    // מהדק: קביעה/הצעה אוטומטית מתאפשרת רק כשיש שיוך שירות-רופא ולוח פתוח
+    // שאומתו בפועל (has_calendar בלבד) — no_match/fully_blocked/unverified
+    // כולם חוסמים ומעבירים לנציג. אין שם עסק/רופא מקודד — הגדרה ב-DB בלבד
     const strictServiceDoctorBooking = business?.settings?.strict_service_doctor_booking === true
     const shouldForceHandoff = (status: ServiceDoctorAvailabilityStatus): boolean =>
-      status === 'no_match' || status === 'fully_blocked' || (status === 'unverified' && strictServiceDoctorBooking)
+      strictServiceDoctorBooking && status !== 'has_calendar'
 
     // Business exceptions (closed dates)
     const exceptions: {date: string; reason: string}[] = s.business_exceptions || []
@@ -499,18 +501,30 @@ async function handleAiRespond(
     // לפני קריאה למודל בכלל — את בירור הטיפול/הצעת התור באותה הודעה. state
     // נשמר על conversations כדי שהודעת המשך ("מחר ב-14:00", בלי שום מילת-
     // טריגר) עדיין תובן כשעת החזרה המבוקשת, לא כהמשך בירור טיפול/תור
-    // (ביקורת קוד — סדר deploy/migration): אם המיגרציה
-    // (pending_callback_migration.sql) עוד לא רצה, השאילתה הזו תיכשל
-    // (עמודות לא קיימות) — לא זורקים, אבל כן רושמים ללוג במפורש, כדי
-    // שהתנוונות שקטה של הפיצ'ר (הודעת המשך לא תזוהה כהשלמת REMIND) תהיה
-    // גלויה בלוגים ולא רק "משהו לא עובד" בלי עקבות
-    const { data: callbackRow, error: callbackReadError } = await supabase
-      .from('conversations')
-      .select('pending_callback_active, pending_callback_date, pending_callback_time')
-      .eq('id', conversationId)
-      .maybeSingle()
-    if (callbackReadError) {
-      console.error('[ai-respond] pending_callback columns read failed — migration likely not applied yet:', JSON.stringify(callbackReadError))
+    //
+    // ⚠️ בידוד multi-tenant (ביקורת רביעית): כל מנגנון ה-REMIND הדטרמיניסטי
+    // הזה גדור מאחורי business.settings.enforce_callback_reminders===true.
+    // בלי הדגל — אפילו לא קוראים את עמודות ה-pending_callback_* (אין תלות
+    // במיגרציה בכלל לעסק שלא הפעיל את זה), וההתנהגות הישנה (REMIND רק
+    // דרך תגית שהמודל כותב, ר' remindData למטה) ממשיכה לרוץ בדיוק כמו
+    // לפני כל התכונה הזו. אין שם עסק מקודד — הגדרה ב-DB בלבד
+    const enforceCallbackReminders = business?.settings?.enforce_callback_reminders === true
+    let callbackRow: { pending_callback_active?: boolean; pending_callback_date?: string | null; pending_callback_time?: string | null } | null = null
+    if (enforceCallbackReminders) {
+      // (ביקורת קוד — סדר deploy/migration): אם המיגרציה
+      // (pending_callback_migration.sql) עוד לא רצה, השאילתה הזו תיכשל
+      // (עמודות לא קיימות) — לא זורקים, אבל כן רושמים ללוג במפורש, כדי
+      // שהתנוונות שקטה של הפיצ'ר (הודעת המשך לא תזוהה כהשלמת REMIND) תהיה
+      // גלויה בלוגים ולא רק "משהו לא עובד" בלי עקבות
+      const { data, error: callbackReadError } = await supabase
+        .from('conversations')
+        .select('pending_callback_active, pending_callback_date, pending_callback_time')
+        .eq('id', conversationId)
+        .maybeSingle()
+      callbackRow = data
+      if (callbackReadError) {
+        console.error('[ai-respond] pending_callback columns read failed — migration likely not applied yet:', JSON.stringify(callbackReadError))
+      }
     }
     // (ביקורת קוד, migration types): pending_callback_time הוא TIME WITHOUT
     // TIME ZONE ב-DB — PostgREST מחזיר אותו כ-"HH:MM:SS" (עם שניות), לא
@@ -520,7 +534,7 @@ async function handleAiRespond(
       ? String(callbackRow.pending_callback_time).slice(0, 5)
       : null
 
-    if (callbackRow?.pending_callback_active || looksLikeLaterCallbackRequest(combinedText)) {
+    if (enforceCallbackReminders && (callbackRow?.pending_callback_active || looksLikeLaterCallbackRequest(combinedText))) {
       // ביטול מפורש תוך כדי המתנה ("לא משנה", "אני אחזור אליכם") — לא
       // ממשיכים לשאול יום/שעה בלי סוף. רלוונטי רק כשכבר ממתינים בפועל;
       // הודעה ראשונה שרק "נשמעת" כמו ביטול (בלי מצב ממתין) לא מגיעה
@@ -932,15 +946,11 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
     }
 
     // ─── אישור תור ישיר (APPT) לשירות ששייך למומחה/ה בלי יומן פתוח ─────────
-    // (דרישה עסקית 4): מכסה גם את המקרה שהמודל כתב APPT ישירות, בלי
-    // לעבור דרך "עיגון הצעה חופשית" למטה. בלי strict mode: מיושם רק על
-    // fully_blocked (עובדה בדוקה: יש רופא/ה משויכ/ת, אבל בלי אף יום פתוח
-    // בלוח) — לא על no_match/unverified: no_match דרך תגית APPT (ניסוח
-    // שירות לא מוכר) הוא מנגנון קיים ומכוון אחר (RELIABILITY FLAG למטה,
-    // אחרי השמירה בפועל) — לא נוגעים בו כאן כברירת מחדל, כדי לא לחסום תור
-    // על סמך ניסוח בלבד, רק על סמך עובדה מאומתת בלוח. ב-strict mode (ביקורת
-    // קוד): "רק has_calendar מתיר קביעה אוטומטית" — no_match/
-    // unverified חוסמים גם כאן, לא רק fully_blocked
+    // (דרישה עסקית 4): מכסה גם את המקרה שהמודל כתב APPT ישירות, בלי לעבור
+    // דרך "עיגון הצעה חופשית" למטה. גדור כולו מאחורי strict_service_doctor_
+    // booking (ר' shouldForceHandoff למעלה) — ללא הדגל, ברירת המחדל היא
+    // ה-RELIABILITY FLAG הקיים (למטה, אחרי השמירה בפועל), בדיוק כמו לפני
+    // כל התכונה הזו. עם הדגל: "רק has_calendar מתיר קביעה אוטומטית"
     if (apptData?.service && !forcedHandoffStatus) {
       const resolvedApptService = matchServiceReason(apptData.service, business?.settings?.services || [])
       const serviceForStatusCheck = (resolvedApptService && resolvedApptService !== 'אחר') ? resolvedApptService : apptData.service
@@ -949,9 +959,7 @@ ESCALATE:[סיבה קצרה — למשל "ביקש לדבר עם רופא שלא
         business?.settings?.employee_responsibilities || {},
         business?.settings?.employee_schedules || {},
       )
-      const forceHereApptCheck = apptStatus === 'fully_blocked'
-        || (strictServiceDoctorBooking && (apptStatus === 'no_match' || apptStatus === 'unverified'))
-      if (forceHereApptCheck) {
+      if (shouldForceHandoff(apptStatus)) {
         forcedHandoffStatus = apptStatus
         apptData = null
       }
