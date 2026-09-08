@@ -7,7 +7,7 @@ import {
   isNewLead, getDisplayName, getLeadNumber,
   type Lead, type LeadStatus, type LeadSource, type TreatmentType,
 } from '@/types'
-import { Search, X, ArrowUpDown, ListFilter, Trash2, Check, Pencil, MessageCircle, FileSpreadsheet, Calendar } from 'lucide-react'
+import { Search, X, ArrowUpDown, Filter, Columns3, Trash2, Check, Pencil, MessageCircle, FileSpreadsheet, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import * as XLSX from 'xlsx'
 import { QUICK_RANGES, quickRangeDates, dstr, type QuickRange } from '@/lib/quickDateRanges'
@@ -107,7 +107,8 @@ const COL_FILTERS: Record<string, { key: FilterKey; opts: string[]; labels: Reco
   source:         { key: 'source',         opts: ALL_SOURCES,  labels: SOURCE_LABELS as Record<string,string> },
 }
 
-/* ─── styles ─── */
+/* ─── styles ───
+   TH/TD — לא מאושר לשינוי, נשאר בדיוק כמו ב-production היום */
 const TH: React.CSSProperties = {
   textAlign: 'right', padding: '9px 11px', fontSize: '10px',
   fontWeight: 600, color: 'var(--fg-3)', letterSpacing: '0.05em',
@@ -149,6 +150,15 @@ export default function LeadsPage() {
   const [sortKey, setSortKey]     = useState<SortKey>('created_at')
   const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc')
   const [colDropdown, setColDropdown] = useState<{ col: string; x: number; y: number } | null>(null)
+  // פיצ'ר "הוספת עמודות" — הצגה/הסתרה ויזואלית בלבד דרך display:none inline
+  // (לא מוחק/משנה נתונים, לא נוגע בלוגיקת סינון/מיון/בחירה). מס' ושם פרטי
+  // נשארות תמיד קבועות
+  const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>({
+    last: true, phone: true, status: true, treat: true, source: true, ai: true, interaction: true, reminder: true, created: true,
+  })
+  const [colPickerOpen, setColPickerOpen] = useState(false)
+  function toggleCol(key: string) { setVisibleCols(v => ({ ...v, [key]: !v[key] })) }
+  function colStyle(key: string): React.CSSProperties | undefined { return visibleCols[key] ? undefined : { display: 'none' } }
   const [reminderFor, setReminderFor] = useState<Lead | null>(null)
   const [reminderVal, setReminderVal] = useState('')
   const [reminderReason, setReminderReason] = useState('')
@@ -330,6 +340,14 @@ export default function LeadsPage() {
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
   }, [colDropdown])
+
+  // Close "עמודות" picker on outside click
+  useEffect(() => {
+    if (!colPickerOpen) return
+    const handler = () => setColPickerOpen(false)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [colPickerOpen])
 
   // Close status-change dropdown on outside click
   useEffect(() => {
@@ -595,13 +613,13 @@ export default function LeadsPage() {
   }), [filtered, selected, analyzing, noAnswerLeads, escalatedLeads])
 
   /* ─── small helper: filterable TH ─── */
-  function FilterTH({ col, label, width }: { col: string; label: string; width?: string }) {
+  function FilterTH({ col, label, width, colKey }: { col: string; label: string; width?: string; colKey?: string }) {
     const isActive = !!(filters as any)[COL_FILTERS[col]?.key]
     return (
-      <th style={{ ...TH, width }} onClick={e => openColFilter(e, col)}>
+      <th style={{ ...TH, width, ...(colKey ? colStyle(colKey) : {}) }} onClick={e => openColFilter(e, col)}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
           {label}
-          <ListFilter size={10} style={{ color: isActive ? 'var(--brand)' : 'var(--fg-4)', flexShrink: 0 }} />
+          <Filter size={10} style={{ color: isActive ? 'var(--brand)' : 'var(--fg-4)', flexShrink: 0 }} />
         </span>
       </th>
     )
@@ -617,13 +635,56 @@ export default function LeadsPage() {
   )
 
   return (
-    <div className="leads-page-scroll" style={{ padding: '22px 26px', display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <div className="leads-page-scroll" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', height: '100vh', background: '#F7F8FB' }}>
+      {/* ─── UI pilot — scoped למסך "מאגר פונים" בלבד. leads-card, leads-input,
+          leads-chip-X, leads-segment-X הן מחלקות ייעודיות חדשות שלא קיימות
+          באף קובץ אחר — globals.css ו-Sidebar.tsx לא נגעו בהם, אין דרך
+          שישפיעו על מסך אחר. */}
+      <style>{`
+        .leads-card { background: #FFFFFF; border: 1px solid #E4E7ED; border-radius: 12px; box-shadow: none; }
+        .leads-toolbar { background: #FFFFFF; border: 1px solid #E4E7ED; border-radius: 10px; }
+        .leads-input.input-base { border: 1px solid #E4E7ED; border-radius: 8px; background: #F7F8FB; box-shadow: none; }
+        .leads-input.input-base:focus { border-color: var(--brand); background: #FFFFFF; }
+        .leads-segment-track { display: inline-flex; background: #F7F8FB; border: 1px solid #E4E7ED; border-radius: 8px; padding: 2px; gap: 2px; }
+        .leads-segment-btn { font-family: inherit; border: none; background: transparent; font-size: 12px; color: var(--fg-3); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
+        .leads-segment-btn.active { background: #FFFFFF; color: var(--brand); font-weight: 500; box-shadow: 0 1px 2px rgba(20,23,28,0.1); }
+        /* תגיות — מבנה הצבעים המקורי (bg/radius נשארים בדיוק כמו .status-*
+           הגלובלי, שממשיך לחול), רק color קצת יותר רווי + בלי מסגרת
+           (שינוי הרקע ב-20/100 נפסל ב"לא מאשר", הוחזר). במצב כהה
+           .status-* הגלובלי (כבר מותאם) ממשיך לשלוט */
+        html:not(.dark) .leads-chip-new            { color: #1D4FD1; border: none; }
+        html:not(.dark) .leads-chip-contacted      { color: #9C6507; border: none; }
+        html:not(.dark) .leads-chip-in_progress    { color: #46691C; border: none; }
+        html:not(.dark) .leads-chip-published      { color: #0A4D39; border: none; }
+        html:not(.dark) .leads-chip-no_show        { color: #8A3355; border: none; }
+        html:not(.dark) .leads-chip-arrived        { color: #0B6961; border: none; }
+        html:not(.dark) .leads-chip-quote_sent     { color: #5B1FBD; border: none; }
+        html:not(.dark) .leads-chip-quote_followup { color: #3730A3; border: none; }
+        html:not(.dark) .leads-chip-closed         { color: #085539; border: none; }
+        html:not(.dark) .leads-chip-lost           { color: #B32A1C; border: none; }
+        /* "הפסיק להגיב" — תג ויזואלי חדש, מבוסס על isNoAnswer (כבר מחושב
+           מהמערכת — הבוט שלח הודעה אחרונה, הלקוח לא הגיב מעל 6 שעות).
+           לא סטטוס DB חדש, לא נוגע בבוט/backend — רק תצוגה. בלי מסגרת */
+        .leads-chip-no-answer {
+          display: inline-flex; align-items: center; gap: 5px;
+          background: #FDF0E4; color: #B5651D; border: none;
+        }
+        html.dark .leads-chip-no-answer { background: rgba(217,119,6,.16); color: #FCD34D; border-color: rgba(217,119,6,.35); }
+        /* שורות לסירוגין — לבן/אפור-בהיר-מאוד. selected/urgent (rowBg
+           inline, data-tinted) גוברים תמיד */
+        .leads-zebra tbody tr:nth-child(even):not([data-tinted="1"]) { background: #FAFAFC; }
+        .leads-zebra tbody tr:nth-child(even):not([data-tinted="1"]):hover { background: #F2F3F6; }
+        html.dark .leads-card { background: var(--bg-surface); border-color: var(--border-subtle); }
+        html.dark .leads-toolbar { background: var(--bg-surface); border-color: var(--border-subtle); }
+        html.dark .leads-input.input-base { background: var(--bg-sunken); border-color: var(--border-default); }
+        html.dark .leads-zebra tbody tr:nth-child(even):not([data-tinted="1"]) { background: rgba(255,255,255,0.02); }
+      `}</style>
 
       {/* ─── Header ─── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--fg-1)', marginBottom: '3px' }}>מאגר פונים</h1>
-          <p style={{ fontSize: '12px', color: 'var(--fg-4)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#1C2130', marginBottom: '3px', letterSpacing: '-0.005em' }}>מאגר פונים</h1>
+          <p style={{ fontSize: '12.5px', color: 'var(--fg-3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>
               {filtered.length} מוצגים{leads.length !== filtered.length ? ` מתוך ${leads.length}` : ''}
               {selected.size > 0 && ` · ${selected.size} נבחרו`}
@@ -642,8 +703,8 @@ export default function LeadsPage() {
           <button onClick={exportExcel} disabled={filtered.length === 0}
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'var(--bg-sunken)', color: 'var(--fg-2)', fontWeight: 600,
-              padding: '9px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)',
+              background: '#FFFFFF', color: '#48505F', fontWeight: 500,
+              padding: '8px 15px', borderRadius: '9px', border: '1px solid #E4E7ED',
               fontSize: '13px', cursor: filtered.length === 0 ? 'default' : 'pointer',
               opacity: filtered.length === 0 ? 0.5 : 1, fontFamily: 'inherit',
             }}>
@@ -651,8 +712,8 @@ export default function LeadsPage() {
           </button>
           <Link href="/leads/trash" style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            background: 'var(--bg-sunken)', color: 'var(--fg-2)', fontWeight: 600,
-            padding: '9px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)',
+            background: '#FFFFFF', color: '#48505F', fontWeight: 500,
+            padding: '8px 15px', borderRadius: '9px', border: '1px solid #E4E7ED',
             fontSize: '13px', textDecoration: 'none', fontFamily: 'inherit',
           }}>
             <Trash2 size={14} /> סל מחזור
@@ -662,96 +723,136 @@ export default function LeadsPage() {
               </span>
             )}
           </Link>
+
+          {/* ─── פיצ'ר "הוספת עמודות" — checkbox להצגה/הסתרה בפועל של
+              עמודות (display:none inline, לא JSX conditional) — לא נוגע
+              בנתונים/סינון/מיון/בחירה. ניתן להרחיב עם עמודות נוספות בעתיד */}
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setColPickerOpen(o => !o)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                background: '#FFFFFF', color: '#48505F', fontWeight: 500,
+                padding: '8px 15px', borderRadius: '9px', border: '1px solid #E4E7ED',
+                fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+              <Columns3 size={14} /> עמודות
+            </button>
+            {colPickerOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20,
+                background: '#FFFFFF', border: '1px solid #E4E7ED', borderRadius: '10px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '8px', minWidth: '180px',
+              }}>
+                <div style={{ fontSize: '11px', color: 'var(--fg-4)', padding: '4px 8px 6px' }}>בחרו אילו עמודות להציג</div>
+                {[
+                  { key: 'last', label: 'שם משפחה' },
+                  { key: 'phone', label: 'טלפון' },
+                  { key: 'status', label: 'סטטוס' },
+                  { key: 'treat', label: 'סיבת פנייה' },
+                  { key: 'source', label: 'מקור' },
+                  { key: 'ai', label: 'סיכום AI' },
+                  { key: 'interaction', label: 'אינטראקציה אחרונה' },
+                  { key: 'reminder', label: 'תזכורת' },
+                  { key: 'created', label: 'נוצר' },
+                ].map(c => (
+                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--fg-2)', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={visibleCols[c.key]} onChange={() => toggleCol(c.key)} style={{ accentColor: 'var(--brand)' }} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Link href="/leads/new" style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            background: 'var(--brand)', color: 'white', fontWeight: 600,
-            padding: '9px 16px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
-            fontSize: '13px', boxShadow: '0 1px 4px rgba(43,107,232,0.25)',
+            background: 'var(--brand)', color: 'white', fontWeight: 500,
+            padding: '8px 15px', borderRadius: '9px', textDecoration: 'none',
+            fontSize: '13px', boxShadow: '0 2px 6px rgba(43,107,232,0.25)',
           }}>
             + ליד חדש
           </Link>
         </div>
       </div>
 
-      {/* ─── Search bar ─── */}
-      <div className="card" style={{ padding: '10px 14px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ flex: 1, position: 'relative' }}>
+      {/* ─── Search + filters — סרגל אחד מאוחד ─── */}
+      <div className="leads-toolbar" style={{ padding: '10px 14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 220px', maxWidth: '300px', position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-4)' }} />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="חיפוש לפי שם, טלפון, הערה..."
-            className="input-base" style={{ paddingRight: '34px' }} />
+            className="input-base leads-input" style={{ paddingRight: '34px' }} />
           {search && (
             <button onClick={() => setSearch('')} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-4)', display: 'flex' }}>
               <X size={13} />
             </button>
           )}
         </div>
-        {hasFilters && (
-          <button onClick={() => { setFilters({ status: '', source: '', treatment_type: '', assigned: '' }); clearDateRange() }}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: 'var(--radius-md)', padding: '7px 12px', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
-            <X size={11} /> נקה סינון ({Object.values(filters).filter(Boolean).length + (dateStart || dateEnd ? 1 : 0)})
-          </button>
-        )}
-        {selected.size > 0 && (
-          <button onClick={deleteSelected} disabled={deleting}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: 'var(--radius-md)', padding: '7px 12px', fontSize: '12px', cursor: deleting ? 'default' : 'pointer', fontFamily: 'inherit', fontWeight: 500, opacity: deleting ? 0.6 : 1 }}>
-            <Trash2 size={12} /> {deleting ? 'מוחק...' : `מחק (${selected.size})`}
-          </button>
-        )}
-      </div>
 
-      {/* ─── סינון לפי תאריך פנייה ─── */}
-      <div className="card" style={{ padding: '10px 14px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        {QUICK_RANGES.map(r => (
-          <button key={r.key} onClick={() => applyQuickRange(r.key)}
-            style={{
-              padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 500,
-              border: `1px solid ${activeQuickRange === r.key ? 'var(--brand)' : 'var(--border-default)'}`,
-              background: activeQuickRange === r.key ? 'var(--brand-soft)' : 'var(--bg-sunken)',
-              color: activeQuickRange === r.key ? 'var(--brand)' : 'var(--fg-2)',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}>{r.label}</button>
-        ))}
-        <span style={{ width: '1px', height: '20px', background: 'var(--border-subtle)', margin: '0 2px' }} />
+        <span style={{ width: '1px', height: '20px', background: '#E4E7ED' }} />
+
+        <div className="leads-segment-track">
+          {QUICK_RANGES.map(r => (
+            <button key={r.key} onClick={() => applyQuickRange(r.key)}
+              className={`leads-segment-btn${activeQuickRange === r.key ? ' active' : ''}`}>
+              {r.label}
+            </button>
+          ))}
+        </div>
         <label style={{ fontSize: '12px', color: 'var(--fg-4)' }}>מתאריך</label>
         <input type="date" value={dateStart}
           onChange={e => { setDateStart(e.target.value); setActiveQuickRange(null) }}
-          className="input-base" style={{ width: 'auto', padding: '5px 8px', fontSize: '12px' }} />
+          className="input-base leads-input" style={{ width: 'auto', padding: '5px 8px', fontSize: '12px' }} />
         <label style={{ fontSize: '12px', color: 'var(--fg-4)' }}>עד תאריך</label>
         <input type="date" value={dateEnd}
           onChange={e => { setDateEnd(e.target.value); setActiveQuickRange(null) }}
-          className="input-base" style={{ width: 'auto', padding: '5px 8px', fontSize: '12px' }} />
+          className="input-base leads-input" style={{ width: 'auto', padding: '5px 8px', fontSize: '12px' }} />
         {(dateStart || dateEnd) && (
           <button onClick={clearDateRange} style={{ display: 'flex', alignItems: 'center', color: 'var(--fg-4)', background: 'none', border: 'none', cursor: 'pointer' }}>
             <X size={13} />
           </button>
         )}
+
+        <div style={{ flex: 1 }} />
+
+        {hasFilters && (
+          <button onClick={() => { setFilters({ status: '', source: '', treatment_type: '', assigned: '' }); clearDateRange() }}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: '8px', padding: '6px 11px', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
+            <X size={11} /> נקה סינון ({Object.values(filters).filter(Boolean).length + (dateStart || dateEnd ? 1 : 0)})
+          </button>
+        )}
+        {selected.size > 0 && (
+          <button onClick={deleteSelected} disabled={deleting}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: '8px', padding: '6px 11px', fontSize: '12px', cursor: deleting ? 'default' : 'pointer', fontFamily: 'inherit', fontWeight: 500, opacity: deleting ? 0.6 : 1 }}>
+            <Trash2 size={12} /> {deleting ? 'מוחק...' : `מחק (${selected.size})`}
+          </button>
+        )}
       </div>
 
       {/* ─── Table — נפרסת על רוחב המסך, בלי גלילה לצדדים (מחשב בלבד) ─── */}
-      <div className="card leads-table-wrap" style={{ overflowX: 'hidden', overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <div className="leads-card leads-table-wrap" style={{ overflowX: 'hidden', overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
+        <table className="leads-zebra" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <tr style={{ borderBottom: '1px solid #E4E7ED' }}>
               <th style={{ ...TH, width: '32px', paddingRight: '10px' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
                   style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: 'var(--brand)' }} />
               </th>
               <th style={{ ...TH, width: '44px' }}>מס'</th>
               <th style={{ ...TH, width: '74px' }}>שם פרטי</th>
-              <th style={{ ...TH, width: '74px' }}>שם משפחה</th>
-              <th style={{ ...TH, width: '122px' }}>טלפון</th>
-              <FilterTH col="status"         label="סטטוס"      width="122px" />
-              <FilterTH col="treatment_type" label="סיבת פנייה" width="110px" />
-              <FilterTH col="source"         label="מקור"        width="68px" />
-              <th style={{ ...TH, width: '150px' }}>סיכום AI</th>
-              <th style={{ ...TH, width: '150px' }}>אינטראקציה אחרונה</th>
-              <th style={{ ...TH, width: '96px', cursor: 'pointer' }} onClick={() => toggleSort('next_followup')}>
+              <th style={{ ...TH, width: '74px', ...colStyle('last') }}>שם משפחה</th>
+              <th style={{ ...TH, width: '122px', ...colStyle('phone') }}>טלפון</th>
+              <FilterTH col="status"         label="סטטוס"      width="122px" colKey="status" />
+              <FilterTH col="treatment_type" label="סיבת פנייה" width="110px" colKey="treat" />
+              <FilterTH col="source"         label="מקור"        width="68px" colKey="source" />
+              <th style={{ ...TH, width: '150px', ...colStyle('ai') }}>סיכום AI</th>
+              <th style={{ ...TH, width: '150px', ...colStyle('interaction') }}>אינטראקציה אחרונה</th>
+              <th style={{ ...TH, width: '96px', cursor: 'pointer', ...colStyle('reminder') }} onClick={() => toggleSort('next_followup')}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                   תזכורת <ArrowUpDown size={10} style={{ color: sortKey === 'next_followup' ? 'var(--brand)' : 'var(--fg-4)' }} />
                 </span>
               </th>
-              <th style={{ ...TH, width: '76px', cursor: 'pointer' }} onClick={() => toggleSort('created_at')}>
+              <th style={{ ...TH, width: '76px', cursor: 'pointer', ...colStyle('created') }} onClick={() => toggleSort('created_at')}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                   נוצר <ArrowUpDown size={10} style={{ color: sortKey === 'created_at' ? 'var(--brand)' : 'var(--fg-4)' }} />
                 </span>
@@ -773,9 +874,10 @@ export default function LeadsPage() {
 
               return (
                 <tr key={lead.id}
+                  data-tinted={rowBg ? '1' : undefined}
                   onClick={() => { markOpened(lead.id); setOpenLeadId(lead.id) }}
                   style={{
-                    borderBottom: '1px solid var(--border-subtle)',
+                    borderBottom: '1px solid #EDEFF3',
                     background: rowBg,
                     borderRight: (isEscalated || isDue) ? '3px solid var(--danger)' : '3px solid transparent',
                     transition: 'background 0.1s', cursor: 'pointer',
@@ -791,28 +893,26 @@ export default function LeadsPage() {
 
                   {/* מס' */}
                   <td style={{ ...TD, paddingTop: '13px', overflow: 'hidden', width: '44px', maxWidth: '44px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fg-4)', fontVariantNumeric: 'tabular-nums' }}>{getLeadNumber(lead)}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#6B87C4', fontVariantNumeric: 'tabular-nums' }}>{getLeadNumber(lead)}</span>
                   </td>
 
                   {/* שם פרטי — width+overflow:hidden+textOverflow:ellipsis, כי זה שדה
                       טקסט חופשי (הוזן ע"י המשתמש) שיכול להיות ארוך במפתיע */}
                   <td style={{ ...TD, paddingTop: '12px', overflow: 'hidden', width: '74px', maxWidth: '74px' }}>
-                    <span style={{ color: 'var(--fg-1)', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                    <span style={{ color: '#1C2130', fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
                       {lead.first_name || lead.name || '—'}
                     </span>
                   </td>
 
                   {/* שם משפחה */}
-                  <td style={{ ...TD, paddingTop: '12px', fontSize: '13px', color: 'var(--fg-2)', overflow: 'hidden', width: '74px', maxWidth: '74px', textOverflow: 'ellipsis' }}>
+                  <td style={{ ...TD, paddingTop: '12px', fontSize: '13px', color: 'var(--fg-2)', overflow: 'hidden', width: '74px', maxWidth: '74px', textOverflow: 'ellipsis', ...colStyle('last') }}>
                     {lead.last_name || <span style={{ color: 'var(--fg-4)' }}>—</span>}
                   </td>
 
-                  {/* טלפון */}
-                  <td style={{ ...TD, paddingTop: '10px', overflow: 'hidden', width: '122px', maxWidth: '122px' }}>
+                  {/* טלפון — צבע ברנד + בלון השיחה מימין למספר (ב-RTL:
+                      קודם ב-DOM = יותר ימינה, לכן האייקון קודם לטקסט) */}
+                  <td style={{ ...TD, paddingTop: '10px', overflow: 'hidden', width: '122px', maxWidth: '122px', ...colStyle('phone') }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums', direction: 'ltr', display: 'inline-block', whiteSpace: 'nowrap' }}>
-                        {formatPhone(lead.phone || '')}
-                      </span>
                       {lead.phone && (
                         <Link href={`/conversations?lead_id=${lead.id}`}
                           onClick={e => e.stopPropagation()}
@@ -821,6 +921,9 @@ export default function LeadsPage() {
                           <MessageCircle size={11} />
                         </Link>
                       )}
+                      <span style={{ fontSize: '11px', color: 'var(--brand)', fontWeight: 500, fontVariantNumeric: 'tabular-nums', direction: 'ltr', display: 'inline-block', whiteSpace: 'nowrap' }}>
+                        {formatPhone(lead.phone || '')}
+                      </span>
                       {apptByLead[lead.id] && (
                         <Link href={`/appointments?date=${apptDateParam(apptByLead[lead.id].scheduled_at)}&highlight=${apptByLead[lead.id].id}`}
                           onClick={e => e.stopPropagation()}
@@ -838,7 +941,7 @@ export default function LeadsPage() {
                       ומחזיר לתצוגת הסטטוס האמיתי (ראה changeStatus/
                       clearEscalation). תזכורת/אין-מענה לא דורסים יותר —
                       רק ממתין לנציג, כי רק לו יש עכשיו נקודת-יציאה ברורה */}
-                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '122px', maxWidth: '122px' }}>
+                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '122px', maxWidth: '122px', ...colStyle('status') }}>
                     <span
                       onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setStatusDropdown(prev => prev?.leadId === lead.id ? null : { leadId: lead.id, x: r.left, y: r.bottom + 4 }) }}
                       title={[
@@ -852,8 +955,12 @@ export default function LeadsPage() {
                         <span className="reminder-badge" style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '92px' }}>
                           ממתין לנציג
                         </span>
+                      ) : isNoAnswer ? (
+                        <span className="leads-chip-no-answer" style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '92px' }}>
+                          הפסיק להגיב
+                        </span>
                       ) : (
-                        <span className={`status-${lead.status}`} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '92px' }}>
+                        <span className={`status-${lead.status} leads-chip-${lead.status}`} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '92px' }}>
                           {status.label}
                         </span>
                       )}
@@ -865,7 +972,7 @@ export default function LeadsPage() {
                       width+maxWidth מפורשים בנוסף ל-overflow:hidden — גילינו
                       בבדיקה בפועל ש-table-layout:fixed לבד לא תמיד עוצר תא
                       שהתוכן שלו "דוחף" רוחב, גם כשיש overflow:hidden */}
-                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '110px', maxWidth: '110px' }} onClick={e => e.stopPropagation()}>
+                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '110px', maxWidth: '110px', ...colStyle('treat') }} onClick={e => e.stopPropagation()}>
                     {editingTreatment === lead.id ? (
                       <select
                         autoFocus
@@ -888,7 +995,7 @@ export default function LeadsPage() {
                         onClick={() => startEditTreatment(lead)}
                         title={TREATMENT_LABELS[lead.treatment_type as TreatmentType] || lead.treatment_type}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
-                        <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 7px', borderRadius: '6px', background: tColor ? `${tColor}18` : 'var(--bg-hover)', color: tColor || 'var(--fg-3)', border: `1px solid ${tColor ? `${tColor}30` : 'var(--border-subtle)'}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '84px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: tColor ? `${tColor}14` : '#F1F2F5', color: tColor || 'var(--fg-3)', border: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '84px' }}>
                           {TREATMENT_LABELS[lead.treatment_type as TreatmentType] || lead.treatment_type}
                         </span>
                         <Pencil size={10} style={{ color: 'var(--fg-4)', flexShrink: 0 }} />
@@ -899,11 +1006,11 @@ export default function LeadsPage() {
                   </td>
 
                   {/* מקור */}
-                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '68px', maxWidth: '68px' }}>
+                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '68px', maxWidth: '68px', ...colStyle('source') }}>
                     {(() => {
                       const sColor = SOURCE_COLORS[lead.source]
                       return (
-                        <span title={SOURCE_LABELS[lead.source] || lead.source} style={{ display: 'inline-block', maxWidth: '54px', fontSize: '11px', fontWeight: 500, color: sColor || 'var(--fg-3)', background: sColor ? `${sColor}18` : 'var(--bg-sunken)', border: `1px solid ${sColor ? `${sColor}30` : 'var(--border-subtle)'}`, padding: '3px 6px', borderRadius: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span title={SOURCE_LABELS[lead.source] || lead.source} style={{ display: 'inline-block', maxWidth: '54px', fontSize: '11px', fontWeight: 500, color: sColor || 'var(--fg-3)', background: sColor ? `${sColor}14` : '#F1F2F5', border: 'none', padding: '3px 8px', borderRadius: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {SOURCE_LABELS[lead.source] || lead.source}
                         </span>
                       )
@@ -914,7 +1021,7 @@ export default function LeadsPage() {
                       maxHeight על הטקסט הפנימי: טקסט חופשי ארוך בלי רווחים
                       במקום הנכון (או במקרי-קצה של table-layout:fixed) יכול
                       "לדחוף" את התא הזה רחב יותר מהעמודה ולדרוס את השכנות */}
-                  <td style={{ ...TD, whiteSpace: 'normal', verticalAlign: 'top', overflow: 'hidden', width: '150px', maxWidth: '150px' }}>
+                  <td style={{ ...TD, whiteSpace: 'normal', verticalAlign: 'top', overflow: 'hidden', width: '150px', maxWidth: '150px', ...colStyle('ai') }}>
                     {isAnalyzing
                       ? <span style={{ fontSize: '11px', color: 'var(--fg-4)' }}>מנתח...</span>
                       : lead.ai_summary
@@ -925,7 +1032,7 @@ export default function LeadsPage() {
 
                   {/* אינטראקציה אחרונה — ידנית (lead_activities) או שיחת בוט (messages), הכי עדכנית מביניהן.
                       width+overflow:hidden+overflowWrap מפורשים — ראה הערה בעמודת "סיכום AI" */}
-                  <td style={{ ...TD, whiteSpace: 'normal', verticalAlign: 'top', overflow: 'hidden', width: '150px', maxWidth: '150px' }}>
+                  <td style={{ ...TD, whiteSpace: 'normal', verticalAlign: 'top', overflow: 'hidden', width: '150px', maxWidth: '150px', ...colStyle('interaction') }}>
                     {(() => {
                       const li = lastInteractions[lead.id]
                       if (!li) return <span style={{ color: 'var(--fg-4)', fontSize: '11px' }}>—</span>
@@ -951,7 +1058,7 @@ export default function LeadsPage() {
                   </td>
 
                   {/* תזכורת — לחיצה פותחת בחירת תאריך ושעה */}
-                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '96px', maxWidth: '96px' }} onClick={e => { e.stopPropagation(); openReminder(lead) }}>
+                  <td style={{ ...TD, paddingTop: '11px', overflow: 'hidden', width: '96px', maxWidth: '96px', ...colStyle('reminder') }} onClick={e => { e.stopPropagation(); openReminder(lead) }}>
                     {rem ? (
                       <span title="לחץ לעריכת התזכורת" style={{
                         fontSize: '10px', fontWeight: rem.due ? 700 : 500, padding: '3px 7px',
@@ -971,7 +1078,7 @@ export default function LeadsPage() {
                   </td>
 
                   {/* נוצר */}
-                  <td style={{ ...TD, overflow: 'hidden', width: '76px', maxWidth: '76px' }}>
+                  <td style={{ ...TD, overflow: 'hidden', width: '76px', maxWidth: '76px', ...colStyle('created') }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(lead.created_at)}</span>
                       <span style={{ fontSize: '10px', color: 'var(--fg-4)' }}>{fmtRelative(lead.updated_at || lead.created_at)}</span>
@@ -1044,8 +1151,12 @@ export default function LeadsPage() {
                 <span className="reminder-badge" style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px' }}>
                   ממתין לנציג
                 </span>
+              ) : isNoAnswer ? (
+                <span className="leads-chip-no-answer" style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500 }}>
+                  הפסיק להגיב
+                </span>
               ) : (
-                <span className={`status-${lead.status}`} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500 }}>
+                <span className={`status-${lead.status} leads-chip-${lead.status}`} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '20px', fontWeight: 500 }}>
                   {status.label}
                 </span>
               )}
@@ -1201,9 +1312,17 @@ export default function LeadsPage() {
           {dropdownMeta.opts.map(opt => (
             <button key={opt}
               onClick={() => { setFilters(f => ({ ...f, [dropdownMeta.key]: opt })); setColDropdown(null) }}
-              style={{ display: 'block', width: '100%', textAlign: 'right', padding: '7px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', background: filters[dropdownMeta.key] === opt ? 'var(--brand-soft)' : 'transparent', color: filters[dropdownMeta.key] === opt ? 'var(--brand)' : 'var(--fg-2)', fontWeight: filters[dropdownMeta.key] === opt ? 600 : 400 }}
+              style={{ display: 'flex', alignItems: 'center', width: '100%', textAlign: 'right', padding: '5px 8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', background: filters[dropdownMeta.key] === opt ? 'var(--brand-soft)' : 'transparent' }}
             >
-              {dropdownMeta.labels[opt]}
+              {dropdownMeta.key === 'status' ? (
+                <span className={`status-${opt} leads-chip-${opt}`} style={{ fontSize: '11px', fontWeight: 500, padding: '3px 9px', borderRadius: '20px' }}>
+                  {dropdownMeta.labels[opt]}
+                </span>
+              ) : (
+                <span style={{ color: filters[dropdownMeta.key] === opt ? 'var(--brand)' : 'var(--fg-2)', fontWeight: filters[dropdownMeta.key] === opt ? 600 : 400 }}>
+                  {dropdownMeta.labels[opt]}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1227,7 +1346,7 @@ export default function LeadsPage() {
                 onClick={() => changeStatus(statusDropdown.leadId, s as LeadStatus)}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'right', padding: '7px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', background: isCurrent ? 'var(--brand-soft)' : 'transparent', color: 'var(--fg-2)' }}
               >
-                <span className={`status-${s}`} style={{ padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>{cfg.label}</span>
+                <span className={`status-${s} leads-chip-${s}`} style={{ padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>{cfg.label}</span>
                 {isCurrent && <Check size={13} style={{ color: 'var(--brand)' }} />}
               </button>
             )
