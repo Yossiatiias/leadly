@@ -533,7 +533,14 @@ export default function ConversationsPage() {
               <p style={{ color: '#7AAEC4', fontSize: '13px' }}>אין שיחות</p>
             </div>
           ) : (
-            filteredConversations.map(conv => (
+            filteredConversations.map(conv => {
+              // "לא נפתחה" — אותו תנאי בדיוק שכבר קבע את ה-font-weight, רק
+              // ממוצה פעם אחת כדי שגם הרקע וגם הנקודה ישתמשו באותה הגדרה.
+              // לוגיקה לא השתנתה, רק חשיפה ויזואלית נוספת (נקודה + גוון רקע)
+              // כדי שהעין תתפוס את זה גם בסריקה מהירה, לא רק בעובי הטקסט
+              const isUnread = !(conv.last_opened_at && new Date(conv.last_opened_at) >= new Date(conv.last_activity_at || conv.updated_at))
+              const isSelected = selected?.id === conv.id
+              return (
               <div
                 key={conv.id}
                 onClick={() => openConversation(conv)}
@@ -541,7 +548,7 @@ export default function ConversationsPage() {
                   padding: '14px 16px',
                   cursor: 'pointer',
                   borderBottom: '1px solid var(--border-subtle)',
-                  background: selected?.id === conv.id ? 'var(--bg-hover)' : 'var(--bg-surface)',
+                  background: isSelected ? 'var(--bg-hover)' : isUnread ? 'var(--brand-soft)' : 'var(--bg-surface)',
                   transition: 'background 0.1s',
                 }}
               >
@@ -556,7 +563,7 @@ export default function ConversationsPage() {
                     </div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <p style={{ fontWeight: (conv.last_opened_at && new Date(conv.last_opened_at) >= new Date(conv.last_activity_at || conv.updated_at)) ? 400 : 700, color: 'var(--fg-1)', fontSize: '14px', margin: 0, whiteSpace: 'nowrap' }}>
+                        <p style={{ fontWeight: isUnread ? 700 : 400, color: 'var(--fg-1)', fontSize: '14px', margin: 0, whiteSpace: 'nowrap' }}>
                           {conv.contact_name || conv.contact_phone}
                         </p>
                         {conv.escalated_at && (
@@ -586,7 +593,12 @@ export default function ConversationsPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatConvListTime(conv.last_activity_at || conv.updated_at)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {isUnread && (
+                        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: 'var(--brand)', flexShrink: 0 }} />
+                      )}
+                      <span style={{ fontSize: '10px', color: isUnread ? 'var(--brand)' : 'var(--fg-3)', fontWeight: isUnread ? 600 : 400 }}>{formatConvListTime(conv.last_activity_at || conv.updated_at)}</span>
+                    </div>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       {conv.bot_enabled ? (
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
@@ -601,7 +613,8 @@ export default function ConversationsPage() {
                   </div>
                 </div>
               </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
