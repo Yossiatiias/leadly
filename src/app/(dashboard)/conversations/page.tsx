@@ -465,11 +465,27 @@ export default function ConversationsPage() {
     }
   }
 
+  // שעה לכל בועת הודעה בתוך שיחה פתוחה — תמיד HH:MM, לא שונה כאן
+  // (זה לא היה חלק מהבקשה, ונשאר בדיוק כמו שהיה)
   function formatTime(iso: string) {
     const d = new Date(iso)
     const now = new Date()
     const isToday = d.toDateString() === now.toDateString()
     if (isToday) return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })
+  }
+
+  // תאריך/שעה ברשימת השיחות — כמו בווטסאפ: היום → שעה, אתמול → "אתמול",
+  // השבוע האחרון → שם יום, מעבר לזה → תאריך. משווה לפי תחילת יום קלנדרי
+  // (לא חלון של 24 שעות מתגלגל), כדי ש"אתמול" יישאר "אתמול" גם ב-23:59
+  function formatConvListTime(iso: string) {
+    const d = new Date(iso)
+    const now = new Date()
+    const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+    const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000)
+    if (diffDays === 0) return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+    if (diffDays === 1) return 'אתמול'
+    if (diffDays > 1 && diffDays < 7) return d.toLocaleDateString('he-IL', { weekday: 'long' })
     return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })
   }
 
@@ -570,7 +586,7 @@ export default function ConversationsPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatTime(conv.last_activity_at || conv.updated_at)}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--fg-3)' }}>{formatConvListTime(conv.last_activity_at || conv.updated_at)}</span>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       {conv.bot_enabled ? (
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '99px', background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
